@@ -29,6 +29,9 @@ class LocalMangaDirOutput(
 	private val mutex = Mutex()
 
 	init {
+		// The readable Mihon-style manga title directory may not exist yet for a new download.
+		// Create it before ZipOutput tries to create Chapter.cbz.tmp inside it.
+		check(rootFile.exists() || rootFile.mkdirs()) { "Cannot create manga directory $rootFile" }
 		// Old DropSauce metadata/cover files can make a pre-existing Mihon-style folder take the indexed path.
 		// Remove them so the local parser discovers chapters directly from the CBZ files.
 		File(rootFile, ENTRY_NAME_INDEX).delete()
