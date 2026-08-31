@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.local.data.output
 
+import androidx.core.net.toUri
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.internal.closeQuietly
@@ -117,19 +118,46 @@ class LocalNovelDirOutput(
 	companion object {
 		private const val MAX_CHAPTER_FILENAME_LENGTH = 120
 
-		/** Remove whole chapter EPUBs whose embedded index advertises one of [ids]. */
-		suspend fun deleteChapters(root: File, ids: Set<Long>) {
-			root.listFiles { file -> file.isEpubFile }.orEmpty().forEach { file ->
-				val chapterIds = runCatching {
-					ZipFile(file).use { zip ->
-						val entry = zip.getEntry(ENTRY_NAME_INDEX) ?: return@use emptySet<Long>()
-						val index = MangaIndex(zip.getInputStream(entry).use { it.reader().readText() })
-						index.getMangaInfo()?.chapters?.mapTo(HashSet()) { it.id }.orEmpty()
-					}
-				}.getOrDefault(emptySet())
-				if (chapterIds.any { it in ids }) {
-					file.delete()
+		/**
+		 * Remove only the concrete EPUB that represents each selected chapter.
+		 *
+		 * A novel directory may contain `Chapter 1.epub` and `Chapter 1 (1).epub`. Both archives can
+		 * carry the same remote chapter id, so deleting every archive whose embedded index contains
+		 * that id removes both files. Prefer the exact file encoded in the selected local chapter URL;
+		 * for a remote id fallback, consume only one matching archive per requested id.
+		 */
+		suspend fun deleteChapters(root: File, manga: Manga, ids: Set<Long>) {
+			val remaining = ids.toMutableSet()
+			val rootCanonical = root.canonicalFile
+
+			manga.chapters.orEmpty().forEach { chapter ->
+				if (chapter.id !in remaining) return@forEach
+				val path = chapter.url.toUri().path ?: return@forEach
+				val chapterFile = File(path).canonicalFile
+				if (chapterFile.parentFile == rootCanonical && chapterFile.isEpubFile) {
+					if (chapterFile.delete()) remaining.remove(chapter.id)
 				}
+			}
+
+			if (remaining.isEmpty()) return
+
+			val files = root.listFiles { file -> file.isEpubFile }.orEmpty()
+			for (id in remaining.toList()) {
+				val victim = files.firstOrNull { file ->
+					val chapterIds = runCatching {
+						ZipFile(file).use { zip ->
+							val entry = zip.getEntry(ENTRY_NAME_INDEX) ?: return@use emptySet<Long>()
+							val index = MangaIndex(zip.getInputStream(entry).use { it.reader().readText() })
+							index.getMangaInfo()?.chapters?.mapTo(HashSet()) { it.id }.orEmpty()
+						}
+					}.getOrDefault(emptySet())
+					id in chapterIds
+				}
+				if (victim != null && victim.delete()) remaining.remove(id)
+			}
+
+			check(remaining.isEmpty()) {
+				"${remaining.size} of ${ids.size} chapters was not removed: not found"
 			}
 		}
 	}
