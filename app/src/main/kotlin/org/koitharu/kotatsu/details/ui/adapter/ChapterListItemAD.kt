@@ -3,6 +3,7 @@ package org.koitharu.kotatsu.details.ui.adapter
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
@@ -21,6 +22,7 @@ import com.google.android.material.R as materialR
 fun chapterListItemAD(
 	clickListener: OnListItemClickListener<ChapterListItem>,
 	onDownloadClick: (ChapterListItem) -> Unit,
+	onDeleteClick: (ChapterListItem) -> Unit,
 	accentColorProvider: () -> Int? = { null },
 ) = adapterDelegateViewBinding<ChapterListItem, ListModel, ItemChapterBinding>(
 	viewBinding = { inflater, parent -> ItemChapterBinding.inflate(inflater, parent, false) },
@@ -34,6 +36,22 @@ fun chapterListItemAD(
 	binding.imageButtonDownload.setOnClickListener {
 		if (!item.isDownloaded && !item.isDownloading) {
 			onDownloadClick(item)
+		}
+	}
+
+	binding.imageViewDownloaded.setOnClickListener { anchor ->
+		if (!item.isDownloaded) return@setOnClickListener
+		PopupMenu(context, anchor).apply {
+			menu.add(0, R.id.action_delete, 0, R.string.delete)
+			setOnMenuItemClickListener { menuItem ->
+				if (menuItem.itemId == R.id.action_delete) {
+					onDeleteClick(item)
+					true
+				} else {
+					false
+				}
+			}
+			show()
 		}
 	}
 
@@ -86,7 +104,6 @@ fun chapterListItemAD(
 			}
 		}
 		binding.imageViewBookmarked.isVisible = item.isBookmarked
-		// Bookmark indicator follows the cover accent (falls back to the theme primary).
 		binding.imageViewBookmarked.imageTintList = accentColorProvider()?.let { ColorStateList.valueOf(it) }
 			?: context.getThemeColorStateList(androidx.appcompat.R.attr.colorPrimary)
 		binding.imageViewDownloaded.isVisible = item.isDownloaded
