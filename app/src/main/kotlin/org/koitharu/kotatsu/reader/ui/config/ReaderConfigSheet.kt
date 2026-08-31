@@ -684,6 +684,17 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
                             iconSize = 24.dp,
                             shape = CircleShape,
                         )
+                        ToolGridCard(
+                            icon = R.drawable.ic_translate_noirero,
+                            label = stringResource(R.string.epub_translate),
+                            onClick = {
+                                dismiss()
+                                callback?.onTranslateClick()
+                            },
+                            modifier = Modifier.weight(1f).height(120.dp),
+                            iconSize = 24.dp,
+                            shape = CircleShape,
+                        )
                     }
                 }
                 if (publisherStyleEnabled) {
@@ -1778,6 +1789,8 @@ class ReaderConfigSheet : BaseAdaptiveSheet<SheetReaderConfigBinding>() {
         fun onScrollTimerClick(isLongClick: Boolean)
 
         fun onTextToSpeechClick()
+
+        fun onTranslateClick()
 
         fun onBookmarkClick()
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="epub_translate">Translate</string>
+    <string name="epub_translate_current_chapter">Translate current chapter</string>
+    <string name="epub_translate_show_original">Original / Restore original</string>
+    <string name="epub_translate_en_id">English → Indonesia</string>
+    <string name="epub_translate_ja_id">Japanese → Indonesia</string>
+    <string name="epub_translate_ja_en">Japanese → English</string>
+    <string name="epub_translate_ko_id">Korean → Indonesia</string>
+    <string name="epub_translate_ko_en">Korean → English</string>
+    <string name="epub_translate_zh_id">Chinese → Indonesia</string>
+    <string name="epub_translate_zh_en">Chinese → English</string>
+    <string name="epub_translate_google_note">On-device translation powered by Google ML Kit. The language model may be downloaded the first time.</string>
+    <string name="epub_translate_preparing">Preparing translation model…</string>
+    <string name="epub_translate_done">Chapter translated</string>
+    <string name="epub_translate_failed">Could not translate this chapter.</string>
+    <string name="epub_translate_model_failed">Could not download the translation model.</string>
+    <string name="epub_translate_already_original">This chapter is already showing the original text.</string>
+</resources>

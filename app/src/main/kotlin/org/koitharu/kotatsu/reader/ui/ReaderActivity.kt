@@ -692,6 +692,10 @@ class ReaderActivity :
         }
     }
 
+    override fun onTranslateClick() {
+        (readerManager.currentReader as? EpubReaderFragment)?.showTranslationDialog()
+    }
+
 	private fun openEpubSearch() {
 		(readerManager.currentReader as? EpubReaderFragment)?.showBookSearch()
 	}
