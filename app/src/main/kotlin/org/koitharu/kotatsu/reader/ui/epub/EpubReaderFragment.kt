@@ -450,9 +450,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			.addOnSuccessListener {
 				if (!isAdded || generation != translationGeneration) return@addOnSuccessListener
 				clearTranslationTimeout()
-				val chunks = splitTranslationText(original.toString())
+				val chunks = splitTranslationText(original)
 				updateTranslationStatus(getString(R.string.epub_translate_translating_progress, 0, chunks.size))
-				translateChunks(translator, chunks, 0, ArrayList(), generation) { translated, error ->
+				translateChunks(translator, original, chunks, 0, ArrayList(), generation) { translated, error ->
 					if (!isAdded || generation != translationGeneration) return@translateChunks
 					finishTranslationUi()
 					if (error != null || translated == null) {
@@ -539,78 +539,137 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		refreshReader(Locator(locator.chapter, mappedOffset))
 	}
 
-	private fun splitTranslationText(text: String, maxChars: Int = 2500): List<Pair<String, String>> {
-		if (text.isEmpty()) return listOf("" to "")
-		val result = ArrayList<Pair<String, String>>()
-		var cursor = 0
-		Regex("\\n+").findAll(text).forEach { match ->
-			appendTranslationParagraph(
-				result = result,
-				paragraph = text.substring(cursor, match.range.first),
-				separator = match.value,
-				maxChars = maxChars,
-			)
-			cursor = match.range.last + 1
-		}
-		appendTranslationParagraph(
-			result = result,
-			paragraph = text.substring(cursor),
-			separator = "",
-			maxChars = maxChars,
-		)
-		return result.ifEmpty { listOf(text to "") }
-	}
+	private data class EpubTranslationChunk(
+		val start: Int,
+		val end: Int,
+		val text: String,
+	)
 
-	private fun appendTranslationParagraph(
-		result: MutableList<Pair<String, String>>,
-		paragraph: String,
-		separator: String,
-		maxChars: Int,
-	) {
-		if (paragraph.isEmpty()) {
-			result += "" to separator
-			return
+	private data class EpubTranslatedChunk(
+		val source: EpubTranslationChunk,
+		val translatedText: String,
+	)
+
+	/**
+	 * Splits only translatable text. Newline runs stay untouched in the source Spanned,
+	 * so blank lines and paragraph boundaries are preserved exactly.
+	 */
+	private fun splitTranslationText(text: Spanned, maxChars: Int = 2500): List<EpubTranslationChunk> {
+		if (text.isEmpty()) return emptyList()
+		val plain = text.toString()
+		val result = ArrayList<EpubTranslationChunk>()
+
+		fun appendRange(start: Int, end: Int) {
+			var cursor = start
+			while (cursor < end) {
+				val next = (cursor + maxChars).coerceAtMost(end)
+				result += EpubTranslationChunk(
+					start = cursor,
+					end = next,
+					text = plain.substring(cursor, next),
+				)
+				cursor = next
+			}
 		}
-		val pieces = paragraph.chunked(maxChars)
-		pieces.forEachIndexed { index, piece ->
-			result += piece to if (index == pieces.lastIndex) separator else ""
+
+		var paragraphStart = 0
+		Regex("\\n+").findAll(plain).forEach { match ->
+			appendRange(paragraphStart, match.range.first)
+			paragraphStart = match.range.last + 1
 		}
+		appendRange(paragraphStart, plain.length)
+		return result
 	}
 
 	private fun translateChunks(
 		translator: Translator,
-		chunks: List<Pair<String, String>>,
+		original: Spanned,
+		chunks: List<EpubTranslationChunk>,
 		index: Int,
-		result: MutableList<String>,
+		result: MutableList<EpubTranslatedChunk>,
 		generation: Int,
-		onComplete: (String?, Throwable?) -> Unit,
+		onComplete: (Spanned?, Throwable?) -> Unit,
 	) {
 		if (generation != translationGeneration) return
 		if (index >= chunks.size) {
-			onComplete(result.joinToString(""), null)
+			onComplete(buildTranslatedSpanned(original, result), null)
 			return
 		}
-		val (sourceText, separator) = chunks[index]
-		if (sourceText.isBlank()) {
-			result += sourceText + separator
+
+		val chunk = chunks[index]
+		if (chunk.text.isBlank()) {
+			result += EpubTranslatedChunk(chunk, chunk.text)
 			if (isAdded) updateTranslationStatus(
 				getString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
 			)
-			translateChunks(translator, chunks, index + 1, result, generation, onComplete)
+			translateChunks(translator, original, chunks, index + 1, result, generation, onComplete)
 			return
 		}
-		translator.translate(sourceText)
+
+		translator.translate(chunk.text)
 			.addOnSuccessListener { translated ->
 				if (generation != translationGeneration) return@addOnSuccessListener
-				result += translated + separator
+				result += EpubTranslatedChunk(chunk, translated)
 				if (isAdded) updateTranslationStatus(
 					getString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
 				)
-				translateChunks(translator, chunks, index + 1, result, generation, onComplete)
+				translateChunks(translator, original, chunks, index + 1, result, generation, onComplete)
 			}
 			.addOnFailureListener { error ->
 				if (generation == translationGeneration) onComplete(null, error)
 			}
+	}
+
+	/**
+	 * Rebuilds the translated chapter and remaps every copyable source span.
+	 * Paragraph spacing, margins, line-height, alignment and inline formatting survive.
+	 */
+	private fun buildTranslatedSpanned(
+		original: Spanned,
+		translatedChunks: List<EpubTranslatedChunk>,
+	): Spanned {
+		if (translatedChunks.isEmpty()) return SpannedString(original)
+		val ordered = translatedChunks.sortedBy { it.source.start }
+		val plain = StringBuilder(original.toString())
+		ordered.asReversed().forEach { item ->
+			plain.replace(item.source.start, item.source.end, item.translatedText)
+		}
+
+		val output = SpannableStringBuilder(plain.toString())
+		original.getSpans(0, original.length, Any::class.java).forEach { span ->
+			if (span is NoCopySpan) return@forEach
+			val sourceStart = original.getSpanStart(span)
+			val sourceEnd = original.getSpanEnd(span)
+			if (sourceStart < 0 || sourceEnd < sourceStart) return@forEach
+			val mappedStart = mapTranslationOffset(sourceStart, ordered).coerceIn(0, output.length)
+			val mappedEnd = mapTranslationOffset(sourceEnd, ordered).coerceIn(mappedStart, output.length)
+			runCatching {
+				output.setSpan(span, mappedStart, mappedEnd, original.getSpanFlags(span))
+			}
+		}
+		return SpannedString(output)
+	}
+
+	private fun mapTranslationOffset(
+		offset: Int,
+		chunks: List<EpubTranslatedChunk>,
+	): Int {
+		var delta = 0
+		for (item in chunks) {
+			val source = item.source
+			if (offset < source.start) break
+			val sourceLength = source.end - source.start
+			val translatedLength = item.translatedText.length
+			if (offset <= source.end) {
+				val translatedStart = source.start + delta
+				if (sourceLength <= 0 || offset == source.start) return translatedStart
+				if (offset == source.end) return translatedStart + translatedLength
+				val relative = offset - source.start
+				return translatedStart + ((relative.toLong() * translatedLength) / sourceLength).toInt()
+			}
+			delta += translatedLength - sourceLength
+		}
+		return offset + delta
 	}
 
 	override fun onDestroyView() {
