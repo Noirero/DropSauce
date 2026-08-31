@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: 'New version name (e.g. 1.2.3) — release tag will be created as v<version>'
-        required: true
+        description: 'Optional stable version (e.g. 1.2.3). Leave empty for an automatic fork version.'
+        required: false
         type: string
 
 concurrency:
@@ -18,31 +18,9 @@ jobs:
     permissions:
       contents: write
     env:
-      # Optional: test the future runtime now
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-    - name: Validate version_name input
-      run: |
-        VERSION_NAME="${{ inputs.version_name }}"
-
-        # Reject branch-like names that must never be used as tags
-        RESERVED_NAMES="main master develop dev release"
-        for reserved in $RESERVED_NAMES; do
-          if [ "$VERSION_NAME" = "$reserved" ]; then
-            echo "::error::version_name '${VERSION_NAME}' is a reserved branch name and cannot be used as a version/tag."
-            exit 1
-          fi
-        done
-
-        # Require the version to match a semver-like pattern (no leading 'v'; release tag will be v<version>)
-        if ! echo "$VERSION_NAME" | grep -qE '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
-          echo "::error::version_name '${VERSION_NAME}' is invalid. Use a semver-like format such as '1.2.3' or '1.2.3-beta.1'. The release tag will be created as v${VERSION_NAME}."
-          exit 1
-        fi
-
-        echo "version_name '${VERSION_NAME}' is valid. Release tag will be: v${VERSION_NAME}"
-
     - name: Checkout code
       uses: actions/checkout@v5
       with:
@@ -58,68 +36,102 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Determine release version
+      id: version
+      shell: bash
+      run: |
+        set -euo pipefail
+        REQUESTED="${{ inputs.version_name }}"
+        BUILD_GRADLE="app/build.gradle"
+
+        if [ -n "$REQUESTED" ]; then
+          if ! echo "$REQUESTED" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Manual release versions must use three numeric components, for example 1.2.3."
+            exit 1
+          fi
+          VERSION_NAME="$REQUESTED"
+        else
+          BASE_VERSION=$(grep -E "versionName = '[0-9]+\.[0-9]+\.[0-9]+'" "$BUILD_GRADLE" | head -n1 | sed -E "s/.*versionName = '([0-9]+\.[0-9]+\.[0-9]+)'.*/\1/")
+          if [ -z "$BASE_VERSION" ]; then
+            echo "::error::Could not read a three-part numeric versionName from app/build.gradle."
+            exit 1
+          fi
+
+          IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$BASE_VERSION"
+          FORK_BUILD=$((GITHUB_RUN_NUMBER * 10 + GITHUB_RUN_ATTEMPT))
+          FORK_PATCH=$((BASE_PATCH * 100000 + FORK_BUILD))
+          VERSION_NAME="${BASE_MAJOR}.${BASE_MINOR}.${FORK_PATCH}"
+        fi
+
+        VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER * 10 + GITHUB_RUN_ATTEMPT))
+        if [ "$VERSION_CODE" -gt 2100000000 ]; then
+          echo "::error::Generated Android versionCode is too large."
+          exit 1
+        fi
+
+        echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+        echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+        echo "Release version: $VERSION_NAME (versionCode $VERSION_CODE)"
+
+    - name: Require stable release signing key
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        missing=0
+        for name in KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+          if [ -z "${!name:-}" ]; then
+            echo "::error::Missing required repository secret: $name"
+            missing=1
+          fi
+        done
+        if [ "$missing" -ne 0 ]; then
+          echo "::error::A permanent signing key is required so future APKs can update the installed fork."
+          exit 1
+        fi
+
     - name: Decode keystore
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       run: |
-        if [ -n "$KEYSTORE_BASE64" ]; then
-          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
-        else
-          echo "No keystore secret found, creating debug keystore"
-          keytool -genkey -v -keystore release.keystore -alias release \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass password -keypass password \
-            -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, S=Debug, C=US"
-        fi
+        set -euo pipefail
+        printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
 
-    - name: Update versionName and increment versionCode
+    - name: Apply build-only version
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.name }}
+        VERSION_CODE: ${{ steps.version.outputs.code }}
       run: |
-        VERSION_NAME="${{ inputs.version_name }}"
-        BUILD_GRADLE="app/build.gradle"
+        set -euo pipefail
+        python3 - <<'PY'
+        import os
+        import re
+        from pathlib import Path
 
-        sed -i -E "s/(versionName = ')[^']*(')/\1${VERSION_NAME}\2/" "$BUILD_GRADLE"
-        CURRENT_CODE=$(grep -E "versionCode = [0-9]+" "$BUILD_GRADLE" | head -n1 | sed -E "s/.*= ([0-9]+)/\1/")
-        NEXT_CODE=$((CURRENT_CODE + 1))
-        sed -i -E "s/versionCode = [0-9]+/versionCode = ${NEXT_CODE}/" "$BUILD_GRADLE"
+        path = Path('app/build.gradle')
+        text = path.read_text()
+        text, count_name = re.subn(r"versionName = '[^']+'", f"versionName = '{os.environ['VERSION_NAME']}'", text, count=1)
+        text, count_code = re.subn(r'versionCode = \d+', f"versionCode = {os.environ['VERSION_CODE']}", text, count=1)
+        if count_name != 1 or count_code != 1:
+            raise SystemExit('Could not update versionName/versionCode exactly once')
+        path.write_text(text)
+        PY
 
     - name: Build Release APK
+      env:
+        RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
       run: |
+        set -euo pipefail
         ./gradlew assembleRelease --no-daemon --stacktrace \
           -PRELEASE_STORE_FILE=../release.keystore \
-          -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD || 'password' }}" \
-          -PRELEASE_KEY_ALIAS="${{ secrets.RELEASE_KEY_ALIAS || 'release' }}" \
-          -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD || 'password' }}"
-
-    - name: Commit version updates
-      id: version_commit
-      run: |
-        BRANCH_NAME="${{ github.ref_name }}"
-
-        if git diff --quiet -- app/build.gradle; then
-          echo "No version changes to commit"
-          echo "commit_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add app/build.gradle
-        git commit -m "chore(release): set versionName ${{ inputs.version_name }} and bump versionCode"
-
-        # Use refs/heads/ explicitly to avoid ambiguity with any tag that shares the branch name
-        for attempt in 1 2 3; do
-          if git push origin "HEAD:refs/heads/$BRANCH_NAME"; then
-            break
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            echo "Failed to push version commit after 3 attempts"
-            exit 1
-          fi
-          git pull --rebase origin "refs/heads/$BRANCH_NAME"
-          sleep 2
-        done
-
-        echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" \
+          -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
+          -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
 
     - name: Find previous successful release workflow run
       id: previous_success
@@ -128,84 +140,92 @@ jobs:
         script: |
           const owner = context.repo.owner;
           const repo = context.repo.repo;
-          const workflowId = "release.yml";
-
           const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
             owner,
             repo,
-            workflow_id: workflowId,
+            workflow_id: "release.yml",
             status: "completed",
             per_page: 100,
           });
-
           const previous = runs.find((run) => run.conclusion === "success" && run.id !== context.runId);
           core.setOutput("sha", previous ? previous.head_sha : "");
 
-    - name: Generate Changelog
+    - name: Generate changelog
       id: changelog
+      shell: bash
       run: |
+        set -euo pipefail
         PREVIOUS_SUCCESS_SHA="${{ steps.previous_success.outputs.sha }}"
-        CURRENT_SHA="${{ steps.version_commit.outputs.commit_sha }}"
+        CURRENT_SHA="${{ github.sha }}"
 
         if [ -n "$PREVIOUS_SUCCESS_SHA" ]; then
           git fetch origin "$PREVIOUS_SUCCESS_SHA" 2>/dev/null || true
         fi
 
         if [ -n "$PREVIOUS_SUCCESS_SHA" ] && git cat-file -e "$PREVIOUS_SUCCESS_SHA" 2>/dev/null; then
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREVIOUS_SUCCESS_SHA..$CURRENT_SHA" --no-merges --invert-grep --grep='^chore(release): set versionName ')
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREVIOUS_SUCCESS_SHA..$CURRENT_SHA" --no-merges || true)
         else
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -n 20)
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -n 20 || true)
         fi
 
         if [ -z "$CHANGELOG" ]; then
-          CHANGELOG="- No changes since last successful release workflow run"
+          CHANGELOG="- No source changes since the previous successful release"
         fi
 
-        echo "changelog<<EOF" >> $GITHUB_OUTPUT
-        echo "$CHANGELOG" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        {
+          echo "changelog<<EOF"
+          echo "$CHANGELOG"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Collect Release APKs
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.name }}
       run: |
+        set -euo pipefail
         mkdir -p release
         shopt -s nullglob
         APK_FILES=(app/build/outputs/apk/release/*.apk)
         if [ ${#APK_FILES[@]} -eq 0 ]; then
-          echo "Error: No APK file found"
+          echo "::error::No release APK file found"
           exit 1
         fi
 
         for apk in "${APK_FILES[@]}"; do
           if [ ${#APK_FILES[@]} -eq 1 ]; then
-            target="release/DropSauce-v${{ inputs.version_name }}.apk"
+            target="release/DropSauce-Noirero-v${VERSION_NAME}.apk"
           else
             original_apk_name=$(basename "$apk" .apk)
-            target="release/DropSauce-v${{ inputs.version_name }}-${original_apk_name}.apk"
+            target="release/DropSauce-Noirero-v${VERSION_NAME}-${original_apk_name}.apk"
           fi
           cp "$apk" "$target"
         done
 
-    - name: Create Release
+    - name: Create GitHub Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION_NAME: ${{ steps.version.outputs.name }}
+        CHANGELOG: ${{ steps.changelog.outputs.changelog }}
       run: |
-        TAG="v${{ inputs.version_name }}"
+        set -euo pipefail
+        TAG="v${VERSION_NAME}"
         NOTES_FILE="release_notes.md"
 
-        cat > "$NOTES_FILE" <<'EOF'
-        ## DropSauce v${{ inputs.version_name }}
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "::error::Release $TAG already exists. Run the workflow again to generate a new automatic version."
+          exit 1
+        fi
 
-        ### Installation Instructions
-        1. Download and install the apk file first
-        2. go to the Explore menu> Manage and click the pen icon to add an extension repo
-        3. install and use the extensions, read, add items to the favorites and ENJOY!
-        If this is your first time using the app, I recommend uninstalling any extension you find when opening the app for the first time and then installing latest extensions from your preferred repository"
-
-        ### Changelog
-        ${{ steps.changelog.outputs.changelog }}
-        EOF
+        {
+          echo "## DropSauce Noirero v${VERSION_NAME}"
+          echo
+          echo "Automatic build of the Noirero fork."
+          echo
+          echo "### Changelog"
+          printf '%s\n' "$CHANGELOG"
+        } > "$NOTES_FILE"
 
         gh release create "$TAG" release/*.apk \
           --title "$TAG" \
-          --target "${{ steps.version_commit.outputs.commit_sha }}" \
+          --target "${{ github.sha }}" \
           --notes-file "$NOTES_FILE"
