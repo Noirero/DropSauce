@@ -1,0 +1,241 @@
+name: Apply EPUB translate tool
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-epub-translate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply EPUB translation tool
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"Expected block not found in {path}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          # ML Kit on-device translation dependency.
+          replace_once(
+              "app/build.gradle",
+              "\timplementation libs.play.services.auth\n",
+              "\timplementation libs.play.services.auth\n\timplementation 'com.google.mlkit:translate:17.0.3'\n",
+          )
+
+          # Add a Translate card to the EPUB Tools page and expose a callback.
+          config = "app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/config/ReaderConfigSheet.kt"
+          replace_once(
+              config,
+              '''                        ToolGridCard(\n                            icon = R.drawable.ic_voice_over,\n                            label = stringResource(R.string.text_to_speech),\n                            onClick = {\n                                dismiss()\n                                callback?.onTextToSpeechClick()\n                            },\n                            modifier = Modifier.weight(1f).height(120.dp),\n                            iconSize = 24.dp,\n                            shape = CircleShape,\n                        )\n''',
+              '''                        ToolGridCard(\n                            icon = R.drawable.ic_voice_over,\n                            label = stringResource(R.string.text_to_speech),\n                            onClick = {\n                                dismiss()\n                                callback?.onTextToSpeechClick()\n                            },\n                            modifier = Modifier.weight(1f).height(120.dp),\n                            iconSize = 24.dp,\n                            shape = CircleShape,\n                        )\n                        ToolGridCard(\n                            icon = R.drawable.ic_translate_noirero,\n                            label = stringResource(R.string.epub_translate),\n                            onClick = {\n                                dismiss()\n                                callback?.onTranslateClick()\n                            },\n                            modifier = Modifier.weight(1f).height(120.dp),\n                            iconSize = 24.dp,\n                            shape = CircleShape,\n                        )\n''',
+          )
+          replace_once(
+              config,
+              '''        fun onTextToSpeechClick()\n\n        fun onBookmarkClick()\n''',
+              '''        fun onTextToSpeechClick()\n\n        fun onTranslateClick()\n\n        fun onBookmarkClick()\n''',
+          )
+
+          # Forward the sheet callback to the active EPUB reader.
+          activity = "app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/ReaderActivity.kt"
+          replace_once(
+              activity,
+              '''    override fun onTextToSpeechClick() {\n        val reader = readerManager.currentReader as? EpubReaderFragment ?: return\n        settings.isReaderTtsFabVisible = true\n        viewBinding.timerControl.hide()\n        viewBinding.ttsControl.show()\n        if (!tts.isAttached) {\n            reader.startTts()\n        }\n    }\n\n''',
+              '''    override fun onTextToSpeechClick() {\n        val reader = readerManager.currentReader as? EpubReaderFragment ?: return\n        settings.isReaderTtsFabVisible = true\n        viewBinding.timerControl.hide()\n        viewBinding.ttsControl.show()\n        if (!tts.isAttached) {\n            reader.startTts()\n        }\n    }\n\n    override fun onTranslateClick() {\n        (readerManager.currentReader as? EpubReaderFragment)?.showTranslationDialog()\n    }\n\n''',
+          )
+
+          # Add translation implementation to the native EPUB reader.
+          epub = "app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/epub/EpubReaderFragment.kt"
+          replace_once(
+              epub,
+              '''import com.google.android.material.textfield.TextInputLayout\n''',
+              '''import com.google.android.material.textfield.TextInputLayout\nimport com.google.mlkit.common.model.DownloadConditions\nimport com.google.mlkit.nl.translate.TranslateLanguage\nimport com.google.mlkit.nl.translate.Translation\nimport com.google.mlkit.nl.translate.Translator\nimport com.google.mlkit.nl.translate.TranslatorOptions\n''',
+          )
+          replace_once(
+              epub,
+              '''\tprivate var isTtsPickMode = false\n\tprivate val ttsHighlightSpan = HighlightColorSpan(0)\n''',
+              '''\tprivate var isTtsPickMode = false\n\tprivate val ttsHighlightSpan = HighlightColorSpan(0)\n\tprivate val translationOriginals = HashMap<Long, Spanned>()\n\tprivate var activeTranslator: Translator? = null\n\tprivate var translationGeneration = 0\n''',
+          )
+          marker = '''\toverride fun onDestroyView() {\n'''
+          translation_code = r'''\tfun showTranslationDialog() {
+		if (chapters.isEmpty()) return
+		val labels = arrayOf(
+			getString(R.string.epub_translate_show_original),
+			getString(R.string.epub_translate_en_id),
+			getString(R.string.epub_translate_ja_id),
+			getString(R.string.epub_translate_ja_en),
+			getString(R.string.epub_translate_ko_id),
+			getString(R.string.epub_translate_ko_en),
+			getString(R.string.epub_translate_zh_id),
+			getString(R.string.epub_translate_zh_en),
+		)
+		MaterialAlertDialogBuilder(requireContext())
+			.setTitle(R.string.epub_translate_current_chapter)
+			.setItems(labels) { _, which ->
+				if (which == 0) {
+					restoreOriginalTranslation()
+				} else {
+					val pair = TRANSLATION_PAIRS[which - 1]
+					translateCurrentChapter(pair.first, pair.second)
+				}
+			}
+			.setNegativeButton(android.R.string.cancel, null)
+			.show()
+	}
+
+	private fun translateCurrentChapter(sourceLanguage: String, targetLanguage: String) {
+		val locator = currentLocator()
+		val chapter = chapters.getOrNull(locator.chapter) ?: return
+		val source = translationOriginals[chapter.id] ?: chapter.content ?: return
+		translationOriginals.putIfAbsent(chapter.id, SpannedString(source))
+
+		activeTranslator?.close()
+		val translator = Translation.getClient(
+			TranslatorOptions.Builder()
+				.setSourceLanguage(sourceLanguage)
+				.setTargetLanguage(targetLanguage)
+				.build(),
+		)
+		activeTranslator = translator
+		val generation = ++translationGeneration
+		setChapterLoading(true)
+		Toast.makeText(requireContext(), R.string.epub_translate_preparing, Toast.LENGTH_SHORT).show()
+		translator.downloadModelIfNeeded(DownloadConditions.Builder().build())
+			.addOnSuccessListener {
+				if (!isAdded || generation != translationGeneration) return@addOnSuccessListener
+				val chunks = splitTranslationText(source.toString())
+				translateChunks(translator, chunks, 0, ArrayList(), generation) { translated, error ->
+					if (!isAdded || generation != translationGeneration) return@translateChunks
+					setChapterLoading(false)
+					if (error != null || translated == null) {
+						Toast.makeText(requireContext(), R.string.epub_translate_failed, Toast.LENGTH_LONG).show()
+						return@translateChunks
+					}
+					val beforeLength = chapter.text.length.coerceAtLeast(1)
+					chapter.content = SpannedString(translated)
+					val mappedOffset = (translated.length * (locator.offset.toDouble() / beforeLength))
+						.toInt().coerceIn(0, translated.length)
+					refreshReader(Locator(locator.chapter, mappedOffset))
+					Toast.makeText(requireContext(), R.string.epub_translate_done, Toast.LENGTH_SHORT).show()
+				}
+			}
+			.addOnFailureListener {
+				if (!isAdded || generation != translationGeneration) return@addOnFailureListener
+				setChapterLoading(false)
+				Toast.makeText(requireContext(), R.string.epub_translate_model_failed, Toast.LENGTH_LONG).show()
+			}
+	}
+
+	private fun restoreOriginalTranslation() {
+		val locator = currentLocator()
+		val chapter = chapters.getOrNull(locator.chapter) ?: return
+		val original = translationOriginals.remove(chapter.id) ?: run {
+			Toast.makeText(requireContext(), R.string.epub_translate_already_original, Toast.LENGTH_SHORT).show()
+			return
+		}
+		translationGeneration++
+		activeTranslator?.close()
+		activeTranslator = null
+		val beforeLength = chapter.text.length.coerceAtLeast(1)
+		chapter.content = original
+		val mappedOffset = (original.length * (locator.offset.toDouble() / beforeLength))
+			.toInt().coerceIn(0, original.length)
+		refreshReader(Locator(locator.chapter, mappedOffset))
+	}
+
+	private fun splitTranslationText(text: String, maxChars: Int = 2500): List<String> {
+		if (text.length <= maxChars) return listOf(text)
+		val result = ArrayList<String>()
+		val current = StringBuilder()
+		text.split('\n').forEach { paragraph ->
+			if (paragraph.length > maxChars) {
+				if (current.isNotEmpty()) {
+					result += current.toString()
+					current.clear()
+				}
+				paragraph.chunked(maxChars).forEach(result::add)
+				return@forEach
+			}
+			val extra = paragraph.length + if (current.isEmpty()) 0 else 1
+			if (current.length + extra > maxChars && current.isNotEmpty()) {
+				result += current.toString()
+				current.clear()
+			}
+			if (current.isNotEmpty()) current.append('\n')
+			current.append(paragraph)
+		}
+		if (current.isNotEmpty()) result += current.toString()
+		return result.ifEmpty { listOf(text) }
+	}
+
+	private fun translateChunks(
+		translator: Translator,
+		chunks: List<String>,
+		index: Int,
+		result: MutableList<String>,
+		generation: Int,
+		onComplete: (String?, Throwable?) -> Unit,
+	) {
+		if (generation != translationGeneration) return
+		if (index >= chunks.size) {
+			onComplete(result.joinToString("\n"), null)
+			return
+		}
+		translator.translate(chunks[index])
+			.addOnSuccessListener { translated ->
+				if (generation != translationGeneration) return@addOnSuccessListener
+				result += translated
+				translateChunks(translator, chunks, index + 1, result, generation, onComplete)
+			}
+			.addOnFailureListener { error ->
+				if (generation == translationGeneration) onComplete(null, error)
+			}
+	}
+
+'''
+          # Convert literal backslash-t sequences from raw string to tabs, keeping Kotlin escapes intact.
+          translation_code = translation_code.replace('\\t', '\t')
+          replace_once(epub, marker, translation_code + marker)
+          replace_once(
+              epub,
+              '''\t\tcolorAnimator?.cancel()\n\t\tcolorAnimator = null\n''',
+              '''\t\tcolorAnimator?.cancel()\n\t\tcolorAnimator = null\n\t\ttranslationGeneration++\n\t\tactiveTranslator?.close()\n\t\tactiveTranslator = null\n\t\ttranslationOriginals.clear()\n''',
+          )
+          replace_once(
+              epub,
+              '''\t\tprivate const val EPUB_MODE_SCROLL = "scroll"\n''',
+              '''\t\tprivate val TRANSLATION_PAIRS = listOf(\n\t\t\tTranslateLanguage.ENGLISH to TranslateLanguage.INDONESIAN,\n\t\t\tTranslateLanguage.JAPANESE to TranslateLanguage.INDONESIAN,\n\t\t\tTranslateLanguage.JAPANESE to TranslateLanguage.ENGLISH,\n\t\t\tTranslateLanguage.KOREAN to TranslateLanguage.INDONESIAN,\n\t\t\tTranslateLanguage.KOREAN to TranslateLanguage.ENGLISH,\n\t\t\tTranslateLanguage.CHINESE to TranslateLanguage.INDONESIAN,\n\t\t\tTranslateLanguage.CHINESE to TranslateLanguage.ENGLISH,\n\t\t)\n\n\t\tprivate const val EPUB_MODE_SCROLL = "scroll"\n''',
+          )
+
+          Path("app/src/main/res/values/strings_noirero_translate.xml").write_text('''<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="epub_translate">Translate</string>\n    <string name="epub_translate_current_chapter">Translate current chapter</string>\n    <string name="epub_translate_show_original">Original / Restore original</string>\n    <string name="epub_translate_en_id">English → Indonesia</string>\n    <string name="epub_translate_ja_id">Japanese → Indonesia</string>\n    <string name="epub_translate_ja_en">Japanese → English</string>\n    <string name="epub_translate_ko_id">Korean → Indonesia</string>\n    <string name="epub_translate_ko_en">Korean → English</string>\n    <string name="epub_translate_zh_id">Chinese → Indonesia</string>\n    <string name="epub_translate_zh_en">Chinese → English</string>\n    <string name="epub_translate_preparing">Preparing translation model…</string>\n    <string name="epub_translate_done">Chapter translated</string>\n    <string name="epub_translate_failed">Could not translate this chapter.</string>\n    <string name="epub_translate_model_failed">Could not download the translation model.</string>\n    <string name="epub_translate_already_original">This chapter is already showing the original text.</string>\n</resources>\n''')
+
+          Path("app/src/main/res/drawable/ic_translate_noirero.xml").write_text('''<?xml version="1.0" encoding="utf-8"?>\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n    android:width="24dp"\n    android:height="24dp"\n    android:viewportWidth="24"\n    android:viewportHeight="24">\n    <path\n        android:fillColor="@android:color/white"\n        android:pathData="M12.87,15.07l-2.54,-2.51 0.03,-0.03c1.74,-1.94 2.98,-4.17 3.71,-6.53L17,6L17,4h-7L10,2L8,2v2L1,4v1.99h11.17C11.5,7.92 10.44,9.75 9,11.35 8.07,10.32 7.3,9.19 6.69,8L4.69,8c0.73,1.63 1.73,3.17 2.98,4.56l-5.09,5.02L4,19l5,-5 3.11,3.11 0.76,-2.04zM18.5,10h-2L12,22h2l1.12,-3h4.75L21,22h2l-4.5,-12zM15.88,17l1.62,-4.33L19.12,17h-3.24z" />\n</vector>\n''')
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle \
+            app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/config/ReaderConfigSheet.kt \
+            app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/ReaderActivity.kt \
+            app/src/main/kotlin/org/koitharu/kotatsu/reader/ui/epub/EpubReaderFragment.kt \
+            app/src/main/res/values/strings_noirero_translate.xml \
+            app/src/main/res/drawable/ic_translate_noirero.xml
+          git commit -m "Add EPUB on-device translation tool" || exit 0
+          git push
