@@ -19,7 +19,6 @@ enum class ColorScheme(
 	FROG(R.style.ThemeOverlay_Kotatsu_Mion, R.string.theme_name_mion),
 	BLUEBERRY(R.style.ThemeOverlay_Kotatsu_Rikka, R.string.theme_name_rikka),
 	SAKURA(R.style.ThemeOverlay_Kotatsu_Sakura, R.string.theme_name_sakura),
-	AEMEATH(R.style.ThemeOverlay_Kotatsu_Aemeath, R.string.theme_name_aemeath),
 	MAMIMI(R.style.ThemeOverlay_Kotatsu_Mamimi, R.string.theme_name_mamimi),
 	KANADE(R.style.ThemeOverlay_Kotatsu_Kanade, R.string.theme_name_kanade),
 	ITSUKA(R.style.ThemeOverlay_Kotatsu_Itsuka, R.string.theme_name_itsuka),
