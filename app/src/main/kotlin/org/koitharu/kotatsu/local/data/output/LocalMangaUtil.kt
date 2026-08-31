@@ -19,7 +19,7 @@ class LocalMangaUtil(
 		if (file.isDirectory) {
 			val isNovelDirectory = file.listFiles { child -> child.isEpubFile }?.isNotEmpty() == true
 			if (isNovelDirectory) {
-				LocalNovelDirOutput.deleteChapters(file, ids)
+				LocalNovelDirOutput.deleteChapters(file, manga, ids)
 			} else {
 				LocalMangaDirOutput(file, manga).use { output ->
 					output.deleteChapters(ids)
