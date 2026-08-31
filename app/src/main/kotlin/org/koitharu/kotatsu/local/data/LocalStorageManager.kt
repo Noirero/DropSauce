@@ -146,6 +146,9 @@ class LocalStorageManager @Inject constructor(
 	private fun getConfiguredStorageDirs(): MutableSet<File> {
 		val set = getAvailableStorageDirs()
 		set.addAll(settings.userSpecifiedMangaDirectories)
+		// Keep an already selected custom download target configured even for users
+		// who selected it before custom targets were mirrored into the directory list.
+		settings.mangaStorageDir?.let(set::add)
 		return set
 	}
 
