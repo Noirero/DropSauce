@@ -32,7 +32,7 @@ fun chapterListItemAD(
 	itemView.isFocusableInTouchMode = false
 
 	binding.imageButtonDownload.setOnClickListener {
-		if (!item.isDownloaded) {
+		if (!item.isDownloaded && !item.isDownloading) {
 			onDownloadClick(item)
 		}
 	}
@@ -90,7 +90,7 @@ fun chapterListItemAD(
 		binding.imageViewBookmarked.imageTintList = accentColorProvider()?.let { ColorStateList.valueOf(it) }
 			?: context.getThemeColorStateList(androidx.appcompat.R.attr.colorPrimary)
 		binding.imageViewDownloaded.isVisible = item.isDownloaded
-		binding.imageButtonDownload.isVisible = !item.isDownloaded
+		binding.progressBarDownload.isVisible = item.isDownloading && !item.isDownloaded
+		binding.imageButtonDownload.isVisible = !item.isDownloaded && !item.isDownloading
 	}
 }
-
