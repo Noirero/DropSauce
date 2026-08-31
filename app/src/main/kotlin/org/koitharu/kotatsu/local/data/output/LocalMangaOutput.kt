@@ -79,7 +79,7 @@ sealed class LocalMangaOutput(
 			// Novels deliberately start using the new /00.Novel/source/title/chapter.epub layout even
 			// when an older whole-book title.epub still exists at the legacy root.
 			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat)
-				?: if (!isNovel) getImpl(root, manga, onlyIfExists = true, format = targetFormat) else null
+				?: (if (!isNovel) getImpl(root, manga, onlyIfExists = true, format = targetFormat) else null)
 				?: run {
 					check(sourceRoot.exists() || sourceRoot.mkdirs()) {
 						"Cannot create source directory $sourceRoot"
