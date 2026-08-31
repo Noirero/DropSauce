@@ -44,8 +44,14 @@ class MangaDirectorySelectViewModel @Inject constructor(
 				throw AccessDeniedException(dir)
 			}
 			if (dir !in storageManager.getApplicationStorageDirs()) {
+				// A custom download target must also be a configured manga directory.
+				// Otherwise the downloads work, but the directory disappears from the
+				// Manga directories screen and local downloads are not scanned there.
+				settings.userSpecifiedMangaDirectories += dir
 				settings.mangaStorageDir = dir
 				storageManager.setDirIsNoMedia(dir)
+			} else {
+				settings.mangaStorageDir = dir
 			}
 			onDismissDialog.call(Unit)
 		}
