@@ -539,34 +539,47 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		refreshReader(Locator(locator.chapter, mappedOffset))
 	}
 
-	private fun splitTranslationText(text: String, maxChars: Int = 2500): List<String> {
-		if (text.length <= maxChars) return listOf(text)
-		val result = ArrayList<String>()
-		val current = StringBuilder()
-		text.split('\n').forEach { paragraph ->
-			if (paragraph.length > maxChars) {
-				if (current.isNotEmpty()) {
-					result += current.toString()
-					current.clear()
-				}
-				paragraph.chunked(maxChars).forEach(result::add)
-				return@forEach
-			}
-			val extra = paragraph.length + if (current.isEmpty()) 0 else 1
-			if (current.length + extra > maxChars && current.isNotEmpty()) {
-				result += current.toString()
-				current.clear()
-			}
-			if (current.isNotEmpty()) current.append('\n')
-			current.append(paragraph)
+	private fun splitTranslationText(text: String, maxChars: Int = 2500): List<Pair<String, String>> {
+		if (text.isEmpty()) return listOf("" to "")
+		val result = ArrayList<Pair<String, String>>()
+		var cursor = 0
+		Regex("\\n+").findAll(text).forEach { match ->
+			appendTranslationParagraph(
+				result = result,
+				paragraph = text.substring(cursor, match.range.first),
+				separator = match.value,
+				maxChars = maxChars,
+			)
+			cursor = match.range.last + 1
 		}
-		if (current.isNotEmpty()) result += current.toString()
-		return result.ifEmpty { listOf(text) }
+		appendTranslationParagraph(
+			result = result,
+			paragraph = text.substring(cursor),
+			separator = "",
+			maxChars = maxChars,
+		)
+		return result.ifEmpty { listOf(text to "") }
+	}
+
+	private fun appendTranslationParagraph(
+		result: MutableList<Pair<String, String>>,
+		paragraph: String,
+		separator: String,
+		maxChars: Int,
+	) {
+		if (paragraph.isEmpty()) {
+			result += "" to separator
+			return
+		}
+		val pieces = paragraph.chunked(maxChars)
+		pieces.forEachIndexed { index, piece ->
+			result += piece to if (index == pieces.lastIndex) separator else ""
+		}
 	}
 
 	private fun translateChunks(
 		translator: Translator,
-		chunks: List<String>,
+		chunks: List<Pair<String, String>>,
 		index: Int,
 		result: MutableList<String>,
 		generation: Int,
@@ -574,14 +587,25 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 	) {
 		if (generation != translationGeneration) return
 		if (index >= chunks.size) {
-			onComplete(result.joinToString("\n"), null)
+			onComplete(result.joinToString(""), null)
 			return
 		}
-		translator.translate(chunks[index])
+		val (sourceText, separator) = chunks[index]
+		if (sourceText.isBlank()) {
+			result += sourceText + separator
+			if (isAdded) updateTranslationStatus(
+				getString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
+			)
+			translateChunks(translator, chunks, index + 1, result, generation, onComplete)
+			return
+		}
+		translator.translate(sourceText)
 			.addOnSuccessListener { translated ->
 				if (generation != translationGeneration) return@addOnSuccessListener
-				result += translated
-				if (isAdded) updateTranslationStatus(getString(R.string.epub_translate_translating_progress, index + 1, chunks.size))
+				result += translated + separator
+				if (isAdded) updateTranslationStatus(
+					getString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
+				)
 				translateChunks(translator, chunks, index + 1, result, generation, onComplete)
 			}
 			.addOnFailureListener { error ->
