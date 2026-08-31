@@ -12,8 +12,12 @@
     <string name="epub_translate_zh_en">Chinese → English</string>
     <string name="epub_translate_google_note">On-device translation powered by Google ML Kit. The language model may be downloaded the first time.</string>
     <string name="epub_translate_preparing">Preparing translation model…</string>
+    <string name="epub_translate_downloading_model">Checking/downloading translation model %1$s → %2$s…\nThis is only required the first time.</string>
+    <string name="epub_translate_translating_progress">Translating chapter… %1$d / %2$d</string>
+    <string name="epub_translate_model_timeout">Translation model download timed out. Check your internet connection, Private DNS/VPN, and try again.</string>
     <string name="epub_translate_done">Chapter translated</string>
     <string name="epub_translate_failed">Could not translate this chapter.</string>
     <string name="epub_translate_model_failed">Could not download the translation model.</string>
+    <string name="epub_translate_model_failed_detail">Could not download the translation model: %1$s</string>
     <string name="epub_translate_already_original">This chapter is already showing the original text.</string>
 </resources>

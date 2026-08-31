@@ -198,6 +198,8 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 	private val translationOriginals = HashMap<Long, Spanned>()
 	private var activeTranslator: Translator? = null
 	private var translationGeneration = 0
+	private var translationStatusDialog: androidx.appcompat.app.AlertDialog? = null
+	private var translationTimeoutRunnable: Runnable? = null
 
 	private val rebuildRunnable = Runnable {
 		val locator = reflowLocator
@@ -424,7 +426,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		val original = translationOriginals[chapter.id] ?: chapter.content ?: return
 		translationOriginals.putIfAbsent(chapter.id, SpannedString(original))
 
-		activeTranslator?.close()
+		cancelActiveTranslation(incrementGeneration = false)
 		val translator = Translation.getClient(
 			TranslatorOptions.Builder()
 				.setSourceLanguage(sourceLanguage)
@@ -434,14 +436,25 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		activeTranslator = translator
 		val generation = ++translationGeneration
 		setChapterLoading(true)
-		Toast.makeText(requireContext(), R.string.epub_translate_preparing, Toast.LENGTH_SHORT).show()
+		showTranslationStatusDialog(generation, sourceLanguage, targetLanguage)
+
+		val timeout = Runnable {
+			if (!isAdded || generation != translationGeneration) return@Runnable
+			cancelActiveTranslation(incrementGeneration = true)
+			Toast.makeText(requireContext(), R.string.epub_translate_model_timeout, Toast.LENGTH_LONG).show()
+		}
+		translationTimeoutRunnable = timeout
+		viewBinding?.root?.postDelayed(timeout, TRANSLATION_MODEL_TIMEOUT_MS)
+
 		translator.downloadModelIfNeeded(DownloadConditions.Builder().build())
 			.addOnSuccessListener {
 				if (!isAdded || generation != translationGeneration) return@addOnSuccessListener
+				clearTranslationTimeout()
 				val chunks = splitTranslationText(original.toString())
+				updateTranslationStatus(getString(R.string.epub_translate_translating_progress, 0, chunks.size))
 				translateChunks(translator, chunks, 0, ArrayList(), generation) { translated, error ->
 					if (!isAdded || generation != translationGeneration) return@translateChunks
-					setChapterLoading(false)
+					finishTranslationUi()
 					if (error != null || translated == null) {
 						Toast.makeText(requireContext(), R.string.epub_translate_failed, Toast.LENGTH_LONG).show()
 						return@translateChunks
@@ -454,11 +467,59 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 					Toast.makeText(requireContext(), R.string.epub_translate_done, Toast.LENGTH_SHORT).show()
 				}
 			}
-			.addOnFailureListener {
+			.addOnFailureListener { error ->
 				if (!isAdded || generation != translationGeneration) return@addOnFailureListener
-				setChapterLoading(false)
-				Toast.makeText(requireContext(), R.string.epub_translate_model_failed, Toast.LENGTH_LONG).show()
+				finishTranslationUi()
+				val detail = error.localizedMessage?.takeIf { it.isNotBlank() }
+				val message = if (detail == null) {
+					getString(R.string.epub_translate_model_failed)
+				} else {
+					getString(R.string.epub_translate_model_failed_detail, detail)
+				}
+				Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
 			}
+	}
+
+	private fun showTranslationStatusDialog(generation: Int, sourceLanguage: String, targetLanguage: String) {
+		translationStatusDialog?.dismiss()
+		translationStatusDialog = MaterialAlertDialogBuilder(requireContext())
+			.setTitle(R.string.epub_translate_current_chapter)
+			.setMessage(
+				getString(
+					R.string.epub_translate_downloading_model,
+					sourceLanguage.uppercase(),
+					targetLanguage.uppercase(),
+				),
+			)
+			.setNegativeButton(android.R.string.cancel) { _, _ ->
+				if (generation == translationGeneration) cancelActiveTranslation(incrementGeneration = true)
+			}
+			.setCancelable(false)
+			.show()
+	}
+
+	private fun updateTranslationStatus(message: String) {
+		translationStatusDialog?.setMessage(message)
+	}
+
+	private fun clearTranslationTimeout() {
+		translationTimeoutRunnable?.let { viewBinding?.root?.removeCallbacks(it) }
+		translationTimeoutRunnable = null
+	}
+
+	private fun finishTranslationUi() {
+		clearTranslationTimeout()
+		setChapterLoading(false)
+		translationStatusDialog?.dismiss()
+		translationStatusDialog = null
+	}
+
+	private fun cancelActiveTranslation(incrementGeneration: Boolean) {
+		if (incrementGeneration) translationGeneration++
+		clearTranslationTimeout()
+		activeTranslator?.close()
+		activeTranslator = null
+		finishTranslationUi()
 	}
 
 	private fun restoreOriginalTranslation() {
@@ -520,6 +581,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 			.addOnSuccessListener { translated ->
 				if (generation != translationGeneration) return@addOnSuccessListener
 				result += translated
+				if (isAdded) updateTranslationStatus(getString(R.string.epub_translate_translating_progress, index + 1, chunks.size))
 				translateChunks(translator, chunks, index + 1, result, generation, onComplete)
 			}
 			.addOnFailureListener { error ->
@@ -537,6 +599,9 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		colorAnimator?.cancel()
 		colorAnimator = null
 		translationGeneration++
+		clearTranslationTimeout()
+		translationStatusDialog?.dismiss()
+		translationStatusDialog = null
 		activeTranslator?.close()
 		activeTranslator = null
 		translationOriginals.clear()
@@ -2042,6 +2107,7 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 	}
 
 	companion object {
+		private const val TRANSLATION_MODEL_TIMEOUT_MS = 120_000L
 		private val TRANSLATION_PAIRS = listOf(
 			TranslateLanguage.ENGLISH to TranslateLanguage.INDONESIAN,
 			TranslateLanguage.JAPANESE to TranslateLanguage.INDONESIAN,
