@@ -12,8 +12,6 @@ import org.koitharu.kotatsu.core.util.MimeTypes
 import org.koitharu.kotatsu.core.util.ext.MimeType
 import org.koitharu.kotatsu.core.util.ext.deleteAwait
 import org.koitharu.kotatsu.core.util.ext.takeIfReadable
-import org.koitharu.kotatsu.core.util.ext.toFileNameSafe
-import org.koitharu.kotatsu.core.zip.ZipOutput
 import org.koitharu.kotatsu.local.data.MangaIndex
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -146,7 +144,7 @@ class LocalMangaDirOutput(
 		}
 		val baseName = chapter.value.title
 			?.nullIfEmpty()
-			?.toFileNameSafe()
+			?.let(::readableChapterFileName)
 			?.take(MAX_CHAPTER_FILENAME_LENGTH)
 			?: "Chapter ${chapter.index + 1}"
 		var i = 0
@@ -157,6 +155,17 @@ class LocalMangaDirOutput(
 			}
 			i++
 		}
+	}
+
+	private fun readableChapterFileName(value: String): String {
+		return value
+			.replace('|', '_')
+			.replace(Regex("[\\/:*?\"<>]"), "_")
+			.replace(Regex("\\s+"), " ")
+			.replace(Regex("\\s*_\\s*"), " _ ")
+			.trim()
+			.trimEnd('.', ' ')
+			.ifEmpty { "Chapter" }
 	}
 
 	private suspend fun flushIndex() = runInterruptible(Dispatchers.IO) {
