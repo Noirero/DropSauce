@@ -13,6 +13,7 @@ import org.koitharu.kotatsu.list.ui.model.ListModel
 class ChaptersAdapter(
 	onItemClickListener: OnListItemClickListener<ChapterListItem>,
 	onDownloadClick: (ChapterListItem) -> Unit,
+	onDeleteClick: (ChapterListItem) -> Unit,
 	accentColorProvider: () -> Int? = { null },
 ) : BaseListAdapter<ListModel>(), FastScroller.SectionIndexer {
 
@@ -20,7 +21,10 @@ class ChaptersAdapter(
 
 	init {
 		addDelegate(ListItemType.HEADER, listHeaderAD(null))
-		addDelegate(ListItemType.CHAPTER_LIST, chapterListItemAD(onItemClickListener, onDownloadClick, accentColorProvider))
+		addDelegate(
+			ListItemType.CHAPTER_LIST,
+			chapterListItemAD(onItemClickListener, onDownloadClick, onDeleteClick, accentColorProvider),
+		)
 		addDelegate(ListItemType.CHAPTER_GRID, chapterGridItemAD(onItemClickListener, accentColorProvider))
 		addDelegate(ListItemType.MISSING_CHAPTERS, missingChaptersAD())
 	}
