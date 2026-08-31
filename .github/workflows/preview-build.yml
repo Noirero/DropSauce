@@ -1,28 +1,25 @@
-name: Preview Build
+name: Beta Build
 
-# Builds a standalone "preview" APK on manual dispatch.
-# The preview variant is a non-debuggable build with none of the debug-only tooling
-# (no LeakCanary/StrictMode/debug settings/ACRA-debug) and its own applicationId suffix, so it
-# installs alongside the store build. R8/resource shrinking is intentionally OFF so the APK
-# installs cleanly when sideloaded. It's signed with the debug keystore (no secrets needed).
-#
-# The APK is published as a workflow artifact (zipped by GitHub) for anyone who prefers the Actions tab.
-# The SHA-256/SHA-1/MD5 hashes are printed to the run summary.
+# Builds a standalone beta APK from the beta branch.
+# It reuses the preview variant because that variant already has a separate applicationId suffix,
+# so the APK can be installed alongside DropSauce Noirero main without replacing it.
+# R8/resource shrinking is intentionally OFF for this test build.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - beta
 
 permissions:
   contents: read
 
-# Only keep the latest preview build per branch/ref running.
 concurrency:
-  group: preview-build-${{ github.ref }}
+  group: beta-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  preview:
-    name: Build preview APK
-    if: github.actor == github.repository_owner
+  beta:
+    name: Build beta APK
     runs-on: ubuntu-latest
 
     steps:
@@ -56,7 +53,7 @@ jobs:
           echo "::error::JitPack artifact for kotatsu-parsers:${PARSERS_VERSION} not available after 10 attempts"
           exit 1
 
-      - name: Build preview APK
+      - name: Build beta APK
         run: ./gradlew :app:assemblePreview --no-daemon --stacktrace
 
       - name: Collect APK and compute checksums
@@ -65,12 +62,12 @@ jobs:
           set -euo pipefail
           APK=$(find app/build/outputs/apk/preview -name '*.apk' | head -n1)
           if [ -z "$APK" ]; then
-            echo "::error::No preview APK found under app/build/outputs/apk/preview"
+            echo "::error::No beta APK found under app/build/outputs/apk/preview"
             exit 1
           fi
           SHORT_SHA=$(git rev-parse --short HEAD)
           SAFE_REF=$(echo "${GITHUB_REF_NAME}" | tr '/ ' '__')
-          DEST="DropSauce-preview-${SAFE_REF}-${SHORT_SHA}.apk"
+          DEST="DropSauce-Noirero-Beta-${SAFE_REF}-${SHORT_SHA}.apk"
           cp "$APK" "$DEST"
 
           SHA256=$(sha256sum "$DEST" | awk '{print $1}')
@@ -80,10 +77,11 @@ jobs:
 
           echo "apk_name=${DEST}" >> "$GITHUB_OUTPUT"
 
-          # Write release details to the run summary.
           {
-            echo "**Preview build of \`${GITHUB_REF_NAME}\`** — non-debuggable, no dev tooling, installs"
-            echo "as a separate app (\`org.haziffe.dropsauce.preview\`, \"DropSauce Preview\")."
+            echo "**Beta build of \`${GITHUB_REF_NAME}\`**"
+            echo ""
+            echo "This APK uses the preview applicationId suffix and can be installed alongside DropSauce Noirero main."
+            echo "App name: \`DropSauce Noirero Beta\`"
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
@@ -96,7 +94,7 @@ jobs:
             echo "| MD5 | \`${MD5}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload preview APK as a workflow artifact
+      - name: Upload beta APK as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.apk_name }}
