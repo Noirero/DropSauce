@@ -24,10 +24,12 @@ class LocalNovelDirOutput(
 ) : LocalMangaOutput(rootFile) {
 
 	private val outputs = HashMap<MangaChapter, LocalNovelEpubOutput>()
-	private val fileNames = HashMap<Long, String>()
+	private val fileNames = HashMap<MangaChapter, String>()
 	private val mutex = Mutex()
 
 	init {
+		// Just like manga CBZ folders, the title directory must exist before the first temporary
+		// chapter archive is created. This also lets an existing Mihon-style folder be adopted.
 		check(rootFile.exists() || rootFile.mkdirs()) { "Cannot create novel directory $rootFile" }
 	}
 
@@ -46,8 +48,8 @@ class LocalNovelDirOutput(
 		val output = outputs.getOrPut(chapter.value) {
 			LocalNovelEpubOutput(File(rootFile, chapterFileName(chapter)), manga)
 		}
-		// A novel chapter is represented by one HTML page. Keep the original chapter index so the
-		// embedded index maps back to the remote chapter id correctly.
+		// A novel chapter is represented by one HTML page. The embedded metadata may retain the
+		// source id for compatibility, but finding/reusing the chapter file never depends on that id.
 		output.addPage(chapter, file, pageNumber, type)
 	}
 
@@ -80,15 +82,21 @@ class LocalNovelDirOutput(
 	}
 
 	private fun chapterFileName(chapter: IndexedValue<MangaChapter>): String {
-		fileNames[chapter.value.id]?.let { return it }
+		fileNames[chapter.value]?.let { return it }
 		val baseName = readableChapterFileName(
 			chapter.value.title?.takeIf { it.isNotBlank() } ?: "Chapter ${chapter.index + 1}",
 		).take(MAX_CHAPTER_FILENAME_LENGTH)
+
+		// The deterministic file name is the chapter identity for sidecar-free downloads. Do not open
+		// an existing EPUB merely to compare its embedded source/chapter id: offline files copied from
+		// another install can have different generated ids while still being the exact chapter we need.
+		// Reserving names only within this active download also preserves the normal (1), (2) fallback
+		// when two chapters genuinely have the same visible title.
 		var i = 0
 		while (true) {
 			val name = (if (i == 0) baseName else "$baseName ($i)") + ".epub"
-			if (!File(rootFile, name).exists() && name !in fileNames.values) {
-				fileNames[chapter.value.id] = name
+			if (name !in fileNames.values) {
+				fileNames[chapter.value] = name
 				return name
 			}
 			i++
