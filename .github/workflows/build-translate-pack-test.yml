@@ -1,0 +1,29 @@
+name: Build Translate Pack Test
+
+on:
+  push:
+    branches: [translate-pack-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Build separately installable test APK
+        run: ./gradlew assembleTestpack
+      - name: Show APK size
+        run: ls -lh app/build/outputs/apk/testpack/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropsauce-noirero-translate-pack-test
+          path: app/build/outputs/apk/testpack/*.apk
+          if-no-files-found: error
