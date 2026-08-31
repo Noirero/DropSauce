@@ -68,4 +68,15 @@
 		app:srcCompat="@drawable/ic_storage"
 		app:tint="?colorOnSurfaceVariant" />
 
+	<ImageButton
+		android:id="@+id/imageButton_download"
+		android:layout_width="48dp"
+		android:layout_height="48dp"
+		android:layout_marginEnd="4dp"
+		android:background="?attr/selectableItemBackgroundBorderless"
+		android:contentDescription="@string/save"
+		android:padding="12dp"
+		app:srcCompat="@drawable/ic_save"
+		app:tint="?colorOnSurfaceVariant" />
+
 </LinearLayout>
