@@ -8,10 +8,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.internal.closeQuietly
 import org.koitharu.kotatsu.core.model.isLocal
-import org.koitharu.kotatsu.core.util.MimeTypes
 import org.koitharu.kotatsu.core.util.ext.MimeType
 import org.koitharu.kotatsu.core.util.ext.deleteAwait
-import org.koitharu.kotatsu.core.util.ext.takeIfReadable
 import org.koitharu.kotatsu.core.zip.ZipOutput
 import org.koitharu.kotatsu.local.data.MangaIndex
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
@@ -26,10 +24,19 @@ class LocalMangaDirOutput(
 ) : LocalMangaOutput(rootFile) {
 
 	private val chaptersOutput = HashMap<MangaChapter, ZipOutput>()
-	private val index = MangaIndex(File(rootFile, ENTRY_NAME_INDEX).takeIfReadable()?.readText())
+	// Keep metadata only in memory while downloading. Mihon-style chapter folders should contain CBZ files only.
+	private val index = MangaIndex(null)
 	private val mutex = Mutex()
 
 	init {
+		// Old DropSauce metadata/cover files can make a pre-existing Mihon-style folder take the indexed path.
+		// Remove them so the local parser discovers chapters directly from the CBZ files.
+		File(rootFile, ENTRY_NAME_INDEX).delete()
+		rootFile.listFiles()?.forEach { file ->
+			if (file.isFile && file.name.substringBeforeLast('.', file.name).equals("cover", ignoreCase = true)) {
+				file.delete()
+			}
+		}
 		if (!manga.isLocal) {
 			index.setMangaInfo(manga)
 		}
@@ -37,19 +44,8 @@ class LocalMangaDirOutput(
 
 	override suspend fun mergeWithExisting() = Unit
 
-	override suspend fun addCover(file: File, type: MimeType?) = mutex.withLock {
-		val name = buildString {
-			append("cover")
-			MimeTypes.getExtension(type)?.let { ext ->
-				append('.')
-				append(ext)
-			}
-		}
-		runInterruptible(Dispatchers.IO) {
-			file.copyTo(File(rootFile, name), overwrite = true)
-		}
-		index.setCoverEntry(name)
-		flushIndex()
+	override suspend fun addCover(file: File, type: MimeType?) {
+		// Intentionally do not copy cover files into the manga download directory.
 	}
 
 	override suspend fun addPage(chapter: IndexedValue<MangaChapter>, file: File, pageNumber: Int, type: MimeType?) =
@@ -58,10 +54,8 @@ class LocalMangaDirOutput(
 				ZipOutput(File(rootFile, chapterFileName(chapter) + SUFFIX_TMP))
 			}
 			val name = buildString {
-				// Each chapter has its own CBZ, so encoded branch/chapter prefixes are unnecessary.
-				// Start at 1 to match common Mihon/imported archives: 1.webp, 2.webp, 3.webp, ...
 				append(pageNumber + 1)
-				MimeTypes.getExtension(type)?.let { ext ->
+				org.koitharu.kotatsu.core.util.MimeTypes.getExtension(type)?.let { ext ->
 					append('.')
 					append(ext)
 				}
@@ -75,12 +69,10 @@ class LocalMangaDirOutput(
 	override suspend fun flushChapter(chapter: MangaChapter): Boolean = mutex.withLock {
 		val output = chaptersOutput.remove(chapter) ?: return@withLock false
 		output.flushAndFinish()
-		flushIndex()
 		true
 	}
 
 	override suspend fun finish() = mutex.withLock {
-		flushIndex()
 		for (output in chaptersOutput.values) {
 			output.flushAndFinish()
 		}
@@ -171,12 +163,7 @@ class LocalMangaDirOutput(
 			.ifEmpty { "Chapter" }
 	}
 
-	private suspend fun flushIndex() = runInterruptible(Dispatchers.IO) {
-		File(rootFile, ENTRY_NAME_INDEX).writeText(index.toString())
-	}
-
 	companion object {
-
 		private const val MAX_CHAPTER_FILENAME_LENGTH = 96
 	}
 }
