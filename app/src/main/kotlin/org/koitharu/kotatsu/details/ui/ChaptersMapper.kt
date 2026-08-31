@@ -9,6 +9,7 @@ import org.koitharu.kotatsu.details.ui.model.toListItem
 import org.koitharu.kotatsu.list.ui.model.ListHeader
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MissingChapters
+import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.util.mapToSet
 
 fun MangaDetails.mapChapters(
@@ -39,7 +40,10 @@ fun MangaDetails.mapChapters(
 	var isUnread = currentChapterId !in ids
 	if (!isDownloadedOnly || local?.manga?.chapters == null) {
 		for (chapter in remoteChapters) {
-			val local = localMap?.remove(chapter.id)
+			// CBZ-only downloads intentionally have no index.json. Their locally parsed chapter IDs are
+			// therefore not guaranteed to equal the remote source IDs. Match by ID first, then by the
+			// chapter's visible identity so an existing "Chapter 1.cbz" is still recognised as downloaded.
+			val local = localMap?.remove(chapter.id) ?: localMap?.findAndRemoveEquivalent(chapter)
 			val isCurrent = chapter.id == currentChapterId
 			result += (local ?: chapter).toListItem(
 				isCurrent = isCurrent,
@@ -72,6 +76,29 @@ fun MangaDetails.mapChapters(
 	}
 	return result
 }
+
+private fun MutableMap<Long, MangaChapter>.findAndRemoveEquivalent(remote: MangaChapter): MangaChapter? {
+	val entry = entries.firstOrNull { (_, local) -> local.isEquivalentDownloadOf(remote) } ?: return null
+	remove(entry.key)
+	return entry.value
+}
+
+private fun MangaChapter.isEquivalentDownloadOf(other: MangaChapter): Boolean {
+	// Chapter numbers are the most stable cross-parser identity. Keep volume in the comparison when
+	// both sides expose one so chapter 1 of two different volumes cannot be merged accidentally.
+	if (number >= 0f && other.number >= 0f && kotlin.math.abs(number - other.number) < 0.0001f) {
+		if (volume <= 0 || other.volume <= 0 || volume == other.volume) return true
+	}
+	val thisTitle = title.normalizedChapterTitle()
+	val otherTitle = other.title.normalizedChapterTitle()
+	return thisTitle.isNotEmpty() && thisTitle == otherTitle
+}
+
+private fun String?.normalizedChapterTitle(): String = this
+	.orEmpty()
+	.lowercase()
+	.replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+	.trim()
 
 fun List<ChapterListItem>.withVolumeHeaders(
 	context: Context,
