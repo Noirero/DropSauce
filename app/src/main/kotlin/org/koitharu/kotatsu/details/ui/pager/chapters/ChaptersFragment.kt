@@ -77,7 +77,14 @@ class ChaptersFragment :
 	override fun onViewBindingCreated(binding: FragmentChaptersBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
 		applyDetailsSheetBackground(binding)
-		chaptersAdapter = ChaptersAdapter(this)
+		chaptersAdapter = ChaptersAdapter(
+			onItemClickListener = this,
+			onDownloadClick = { item ->
+				router.askForDownloadOverMeteredNetwork { allowMeteredNetwork ->
+					viewModel.download(setOf(item.chapter.id), allowMeteredNetwork)
+				}
+			},
+		)
 		selectionController = ListSelectionController(
 			appCompatDelegate = checkNotNull(findAppCompatDelegate()),
 			decoration = ChaptersSelectionDecoration(binding.root.context),
