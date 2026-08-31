@@ -228,6 +228,7 @@ class MangaIndex(source: String?) {
 				MangaIndex(text)
 			} else {
 				null
+			}
 		}.onFailure { e ->
 			e.printStackTraceDebug()
 		}.getOrNull()
