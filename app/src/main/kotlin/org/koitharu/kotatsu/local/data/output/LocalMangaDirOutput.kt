@@ -59,7 +59,9 @@ class LocalMangaDirOutput(
 				ZipOutput(File(rootFile, chapterFileName(chapter) + SUFFIX_TMP))
 			}
 			val name = buildString {
-				append(FILENAME_PATTERN.format(chapter.value.branch.hashCode(), chapter.index + 1, pageNumber))
+				// Each chapter has its own CBZ, so encoded branch/chapter prefixes are unnecessary.
+				// Start at 1 to match common Mihon/imported archives: 1.webp, 2.webp, 3.webp, ...
+				append(pageNumber + 1)
 				MimeTypes.getExtension(type)?.let { ext ->
 					append('.')
 					append(ext)
@@ -142,19 +144,14 @@ class LocalMangaDirOutput(
 		index.getChapterFileName(chapter.value.id)?.let {
 			return it
 		}
-		val baseName = buildString {
-			append(chapter.index)
-			chapter.value.title?.nullIfEmpty()?.let {
-				append('_')
-				append(it.toFileNameSafe())
-			}
-			if (length > 32) {
-				deleteRange(31, lastIndex)
-			}
-		}
+		val baseName = chapter.value.title
+			?.nullIfEmpty()
+			?.toFileNameSafe()
+			?.take(MAX_CHAPTER_FILENAME_LENGTH)
+			?: "Chapter ${chapter.index + 1}"
 		var i = 0
 		while (true) {
-			val name = (if (i == 0) baseName else baseName + "_$i") + ".cbz"
+			val name = (if (i == 0) baseName else "$baseName ($i)") + ".cbz"
 			if (!File(rootFile, name).exists()) {
 				return name
 			}
@@ -168,6 +165,6 @@ class LocalMangaDirOutput(
 
 	companion object {
 
-		private const val FILENAME_PATTERN = "%08d_%04d%04d"
+		private const val MAX_CHAPTER_FILENAME_LENGTH = 96
 	}
 }
