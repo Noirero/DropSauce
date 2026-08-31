@@ -36,6 +36,9 @@ data class ChapterListItem(
 			return field
 		}
 
+	val isDownloading: Boolean
+		get() = hasFlag(FLAG_DOWNLOADING)
+
 	val isCurrent: Boolean
 		get() = hasFlag(FLAG_CURRENT)
 
@@ -67,6 +70,15 @@ data class ChapterListItem(
 		return chapter.getLocalizedTitle(resources).also {
 			cachedTitle = it
 		}
+	}
+
+	fun withDownloading(value: Boolean): ChapterListItem {
+		val updatedFlags = if (value) {
+			(flags.toInt() or FLAG_DOWNLOADING.toInt()).toByte()
+		} else {
+			(flags.toInt() and FLAG_DOWNLOADING.toInt().inv()).toByte()
+		}
+		return if (updatedFlags == flags) this else copy(flags = updatedFlags)
 	}
 
 	private fun buildDescription(): String {
@@ -106,6 +118,7 @@ data class ChapterListItem(
 
 	companion object {
 
+		const val FLAG_DOWNLOADING: Byte = 1
 		const val FLAG_UNREAD: Byte = 2
 		const val FLAG_CURRENT: Byte = 4
 		const val FLAG_NEW: Byte = 8
