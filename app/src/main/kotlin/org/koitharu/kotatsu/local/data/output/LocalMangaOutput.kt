@@ -10,7 +10,6 @@ import org.koitharu.kotatsu.core.model.unwrap
 import org.koitharu.kotatsu.core.prefs.DownloadFormat
 import org.koitharu.kotatsu.core.util.ext.MimeType
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
-import org.koitharu.kotatsu.core.util.ext.toFileNameSafe
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -65,6 +64,8 @@ sealed class LocalMangaOutput(
 		const val SOURCE_DIR_MARKER = ".dropsauce-source"
 		const val SUFFIX_TMP = ".tmp"
 		private val mutex = Mutex()
+		private val invalidFileNameChars = Regex("[\\\\/:*?\"<>]")
+		private val repeatedWhitespace = Regex("\\s+")
 
 		suspend fun getOrCreate(
 			root: File,
@@ -104,24 +105,24 @@ sealed class LocalMangaOutput(
 				}
 		}
 
-		/**
-		 * Returns the Mihon-compatible source directory, e.g. `MangaDex (EN)`.
-		 * Non-Mihon sources keep their existing root layout.
-		 */
+		/** Returns a readable Mihon-style source directory, e.g. `Doujindesu (ID)`. */
 		fun getSourceDirectory(root: File, manga: Manga): File {
 			val source = manga.source.unwrap()
 			if (source !is MihonMangaSource) {
 				return root
 			}
-			val sourceName = buildString {
-				append(source.displayName)
-				source.language.trim().takeIf { it.isNotEmpty() }?.let { language ->
-					append(" (")
-					append(language.uppercase(Locale.ROOT))
-					append(')')
-				}
-			}.toFileNameSafe()
-			return File(root, sourceName)
+			val language = source.language.trim().uppercase(Locale.ROOT)
+			// Mihon source display names may already carry a generated suffix such as `_ID_` or `_EN_`.
+			// Strip it before adding the human-readable language suffix.
+			val displayName = source.displayName
+				.replace(Regex("[_\\s]+${Regex.escape(language)}[_\\s]*$", RegexOption.IGNORE_CASE), "")
+				.trim(' ', '_')
+			val sourceName = if (language.isNotEmpty()) {
+				"$displayName ($language)"
+			} else {
+				displayName
+			}
+			return File(root, sourceName.toReadableFileName())
 		}
 
 		private suspend fun getImpl(
@@ -132,7 +133,7 @@ sealed class LocalMangaOutput(
 		): LocalMangaOutput? {
 			mutex.withLock {
 				var i = 0
-				val baseName = manga.title.toFileNameSafe()
+				val baseName = manga.title.toReadableFileName()
 				// A novel's chapters are prose, so it downloads into an epub instead of a cbz.
 				val isNovel = manga.source.isNovelSource
 				while (true) {
@@ -178,6 +179,15 @@ sealed class LocalMangaOutput(
 					}
 				}
 			}
+		}
+
+		private fun String.toReadableFileName(): String {
+			return replace("|", " _ ")
+				.replace(invalidFileNameChars, "_")
+				.replace(repeatedWhitespace, " ")
+				.trim()
+				.trimEnd('.')
+				.ifEmpty { "Untitled" }
 		}
 
 		private suspend fun canWriteTo(file: File, manga: Manga): Boolean {
