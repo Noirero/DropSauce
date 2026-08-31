@@ -20,6 +20,7 @@ import com.google.android.material.R as materialR
 
 fun chapterListItemAD(
 	clickListener: OnListItemClickListener<ChapterListItem>,
+	onDownloadClick: (ChapterListItem) -> Unit,
 	accentColorProvider: () -> Int? = { null },
 ) = adapterDelegateViewBinding<ChapterListItem, ListModel, ItemChapterBinding>(
 	viewBinding = { inflater, parent -> ItemChapterBinding.inflate(inflater, parent, false) },
@@ -29,6 +30,12 @@ fun chapterListItemAD(
 	AdapterDelegateClickListenerAdapter(this, clickListener).attach(itemView)
 	itemView.isFocusable = false
 	itemView.isFocusableInTouchMode = false
+
+	binding.imageButtonDownload.setOnClickListener {
+		if (!item.isDownloaded) {
+			onDownloadClick(item)
+		}
+	}
 
 	bind {
 		binding.textViewTitle.text = item.getTitle(context.resources)
@@ -83,6 +90,7 @@ fun chapterListItemAD(
 		binding.imageViewBookmarked.imageTintList = accentColorProvider()?.let { ColorStateList.valueOf(it) }
 			?: context.getThemeColorStateList(androidx.appcompat.R.attr.colorPrimary)
 		binding.imageViewDownloaded.isVisible = item.isDownloaded
+		binding.imageButtonDownload.isVisible = !item.isDownloaded
 	}
 }
 
