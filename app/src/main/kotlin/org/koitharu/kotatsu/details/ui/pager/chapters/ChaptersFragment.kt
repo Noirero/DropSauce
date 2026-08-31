@@ -44,6 +44,7 @@ import org.koitharu.kotatsu.details.ui.withVolumeHeaders
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.ui.adapter.TypedListSpacingDecoration
 import org.koitharu.kotatsu.list.ui.model.ListModel
+import org.koitharu.kotatsu.local.ui.LocalChaptersRemoveService
 import org.koitharu.kotatsu.reader.ui.ReaderNavigationCallback
 import org.koitharu.kotatsu.reader.ui.ReaderState
 import org.koitharu.kotatsu.reader.ui.showChapterJumpDialog
@@ -61,8 +62,6 @@ class ChaptersFragment :
 	private var chaptersAdapter: ChaptersAdapter? = null
 	private var selectionController: ListSelectionController? = null
 
-	// When the user toggles "reverse list" we keep the scrollbar where it was instead of letting the
-	// RecyclerView follow the (now relocated) anchor item all the way to the bottom of the list.
 	private var isInitialReverseValue = true
 	private var pendingReverseScroll: Pair<Int, Int>? = null
 
@@ -83,6 +82,10 @@ class ChaptersFragment :
 				router.askForDownloadOverMeteredNetwork { allowMeteredNetwork ->
 					viewModel.download(setOf(item.chapter.id), allowMeteredNetwork)
 				}
+			},
+			onDeleteClick = { item ->
+				val manga = viewModel.getMangaOrNull() ?: return@ChaptersAdapter
+				LocalChaptersRemoveService.start(requireContext(), manga, setOf(item.chapter.id))
 			},
 		)
 		selectionController = ListSelectionController(
@@ -111,7 +114,6 @@ class ChaptersFragment :
 		binding.chipsFilter.onChipClickListener = this
 		viewModel.isLoading.observe(viewLifecycleOwner, this::onLoadingStateChanged)
 		viewModel.isChaptersReversed.observe(viewLifecycleOwner) {
-			// Skip the initial value; only react to actual toggles.
 			if (isInitialReverseValue) {
 				isInitialReverseValue = false
 			} else {
@@ -244,8 +246,6 @@ class ChaptersFragment :
 			}
 
 			reverseScroll != null -> {
-				// Reverse toggled: restore the previous scrollbar position rather than chasing the
-				// anchor item, which the diff moves to the opposite end of the list.
 				pendingReverseScroll = null
 				adapter.setItems(
 					list,
