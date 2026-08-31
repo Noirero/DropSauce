@@ -20,7 +20,7 @@ android {
 	namespace = 'org.koitharu.kotatsu'
 
 	defaultConfig {
-		applicationId = 'org.haziffe.dropsauce'
+		applicationId = 'org.noirero.dropsauce'
 		minSdk = 26
 		targetSdk = 37
 		versionCode = 71
@@ -71,9 +71,9 @@ android {
 	}
 	packaging {
 		resources {
-			//noinspection GrDeprecatedAPIUsage
+			//noinspection UseTomlInstead
 			exclude 'META-INF/README.md'
-			//noinspection GrDeprecatedAPIUsage
+			//noinspection UseTomlInstead
 			exclude 'META-INF/NOTICE.md'
 		}
 		jniLibs {
@@ -253,7 +253,7 @@ dependencies {
 
 
 	testImplementation libs.junit
-	testImplementation libs.kotlinx.coroutines.test
+	implementation libs.kotlinx.coroutines.test
 
 	androidTestImplementation libs.androidx.runner
 	androidTestImplementation libs.androidx.junit
