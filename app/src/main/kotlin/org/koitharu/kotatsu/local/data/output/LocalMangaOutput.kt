@@ -56,6 +56,7 @@ sealed class LocalMangaOutput(
 
 		const val ENTRY_NAME_INDEX = "index.json"
 		const val SOURCE_DIR_MARKER = ".dropsauce-source"
+		const val DOWNLOADS_DIR_NAME = "downloads"
 		const val NOVEL_DIR_NAME = "00.Novel"
 		const val SUFFIX_TMP = ".tmp"
 		private val mutex = Mutex()
@@ -73,13 +74,12 @@ sealed class LocalMangaOutput(
 				format
 			}
 			val isNovel = manga.source.isNovelSource
-			val contentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
+			val downloadsRoot = File(root, DOWNLOADS_DIR_NAME)
+			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
 			val sourceRoot = getSourceDirectory(contentRoot, manga)
 
-			// Novels deliberately start using the new /00.Novel/source/title/chapter.epub layout even
-			// when an older whole-book title.epub still exists at the legacy root.
 			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat)
-				?: (if (!isNovel) getImpl(root, manga, onlyIfExists = true, format = targetFormat) else null)
+				?: findLegacy(root, manga, targetFormat)
 				?: run {
 					check(sourceRoot.exists() || sourceRoot.mkdirs()) {
 						"Cannot create source directory $sourceRoot"
@@ -93,16 +93,19 @@ sealed class LocalMangaOutput(
 
 		suspend fun get(root: File, manga: Manga): LocalMangaOutput? = withContext(Dispatchers.IO) {
 			val isNovel = manga.source.isNovelSource
-			val contentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
+			val downloadsRoot = File(root, DOWNLOADS_DIR_NAME)
+			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
 			val sourceRoot = getSourceDirectory(contentRoot, manga)
 			getImpl(sourceRoot, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
-				?: if (sourceRoot != root) {
-					// Keep old whole-book EPUB downloads discoverable while all new novel downloads
-					// are written into 00.Novel.
-					getImpl(root, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
-				} else {
-					null
-				}
+				?: findLegacy(root, manga, DownloadFormat.AUTOMATIC)
+		}
+
+		private suspend fun findLegacy(root: File, manga: Manga, format: DownloadFormat): LocalMangaOutput? {
+			val isNovel = manga.source.isNovelSource
+			val legacyContentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
+			val legacySourceRoot = getSourceDirectory(legacyContentRoot, manga)
+			return getImpl(legacySourceRoot, manga, onlyIfExists = true, format = format)
+				?: if (legacySourceRoot != root) getImpl(root, manga, onlyIfExists = true, format = format) else null
 		}
 
 		/** Returns a readable source directory, e.g. `Doujindesu (ID)` or `KDT Novels (JP)`. */
@@ -149,7 +152,6 @@ sealed class LocalMangaOutput(
 								}
 							}
 
-							// Legacy whole-book EPUBs remain readable and resumable when looked up at the old root.
 							epub.isFile -> if (canWriteTo(epub, manga)) {
 								LocalNovelEpubOutput(epub, manga)
 							} else {
