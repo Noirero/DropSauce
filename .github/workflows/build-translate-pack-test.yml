@@ -19,11 +19,11 @@ jobs:
           java-version: '17'
           cache: gradle
       - name: Build separately installable test APK
-        run: ./gradlew assembleTestpack
+        run: ./gradlew assembleExperiment
       - name: Show APK size
-        run: ls -lh app/build/outputs/apk/testpack/*.apk
+        run: ls -lh app/build/outputs/apk/experiment/*.apk
       - uses: actions/upload-artifact@v4
         with:
           name: dropsauce-noirero-translate-pack-test
-          path: app/build/outputs/apk/testpack/*.apk
+          path: app/build/outputs/apk/experiment/*.apk
           if-no-files-found: error
