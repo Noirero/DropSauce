@@ -23,3 +23,5 @@ jobs:
           cache: gradle
       - name: Compile release Kotlin
         run: ./gradlew compileReleaseKotlin --no-daemon --stacktrace
+
+# Updated to verify the latest source state.
