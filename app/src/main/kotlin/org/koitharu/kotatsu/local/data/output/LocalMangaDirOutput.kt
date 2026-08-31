@@ -107,8 +107,20 @@ class LocalMangaDirOutput(
 			}
 			val chapterFile = index.getChapterFileName(chapter.value.id)?.let {
 				File(rootFile, it)
-			} ?: chapter.value.url.toUri().toFile()
-			chapterFile.deleteAwait()
+			} ?: chapter.value.url.toUri().fragment
+				?.takeIf { it.isNotBlank() }
+				?.let { File(rootFile, it) }
+				?: chapter.value.url.toUri().toFile()
+
+			// A sidecar-free manga chapter URL is `file:///Manga#Chapter.cbz`. Calling toFile() on
+			// that URL returns the manga directory and used to delete every downloaded chapter.
+			// Only allow the exact child artifact that belongs to the selected chapter.
+			val rootCanonical = rootFile.canonicalFile
+			val chapterCanonical = chapterFile.canonicalFile
+			check(chapterCanonical.parentFile == rootCanonical) {
+				"Refusing to delete non-chapter path: $chapterCanonical"
+			}
+			chapterCanonical.deleteAwait()
 			index.removeChapter(chapter.value.id)
 		}
 		check(victimsIds.isEmpty()) {
