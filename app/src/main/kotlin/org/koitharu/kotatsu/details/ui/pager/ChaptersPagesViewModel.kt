@@ -368,8 +368,7 @@ abstract class ChaptersPagesViewModel(
 				}
 			}
 
-		override val isInitialized: Boolean
-		get() = cached != null
+		override fun isInitialized(): Boolean = cached != null
 
 		private fun getViewModelClass(activity: Activity) = when (activity) {
 			is ReaderActivity -> ReaderViewModel::class.java
