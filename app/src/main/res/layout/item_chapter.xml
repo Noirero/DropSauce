@@ -61,12 +61,12 @@
 
 	<ImageView
 		android:id="@+id/imageView_downloaded"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:layout_marginEnd="?android:listPreferredItemPaddingEnd"
+		android:layout_width="24dp"
+		android:layout_height="24dp"
+		android:layout_marginEnd="16dp"
 		android:contentDescription="@string/downloaded"
-		app:srcCompat="@drawable/ic_storage"
-		app:tint="?colorOnSurfaceVariant" />
+		app:srcCompat="@drawable/ic_download_done"
+		app:tint="?colorPrimary" />
 
 	<ImageButton
 		android:id="@+id/imageButton_download"
