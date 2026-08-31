@@ -35,7 +35,6 @@ class MangaDirectoriesViewModel @Inject constructor(
 
     fun onCustomDirectoryPicked(uri: Uri) {
         launchLoadingJob(Dispatchers.Default) {
-            loadingJob?.cancelAndJoin()
             storageManager.takePermissions(uri)
             val dir = storageManager.resolveUri(uri)
             if (!dir.canRead()) {
@@ -65,6 +64,9 @@ class MangaDirectoriesViewModel @Inject constructor(
             val configuredCustomDirs = LinkedHashSet(settings.userSpecifiedMangaDirectories)
             settings.mangaStorageDir?.let(configuredCustomDirs::add)
             val customDirs = configuredCustomDirs - applicationDirs
+
+            // Build every row independently. A storage-stat failure on one location must not
+            // prevent all configured directories from being shown in the settings screen.
             items.value = buildList(applicationDirs.size + customDirs.size) {
                 applicationDirs.mapTo(this) { dir ->
                     dir.toDirectoryModel(
@@ -86,12 +88,16 @@ class MangaDirectoriesViewModel @Inject constructor(
         isDefault: Boolean,
         isAppPrivate: Boolean,
     ) = DirectoryConfigModel(
-        title = storageManager.getDirectoryDisplayName(this, isFullPath = false),
+        title = runCatching {
+            storageManager.getDirectoryDisplayName(this, isFullPath = false)
+        }.getOrElse {
+            name.ifBlank { absolutePath }
+        },
         path = this,
         isDefault = isDefault,
-        isAccessible = isReadable() && isWriteable(),
+        isAccessible = runCatching { isReadable() && isWriteable() }.getOrDefault(false),
         isAppPrivate = isAppPrivate,
-        size = computeSize(),
-        available = StatFs(this.absolutePath).availableBytes,
+        size = runCatching { computeSize() }.getOrDefault(0L),
+        available = runCatching { StatFs(absolutePath).availableBytes }.getOrDefault(freeSpace.coerceAtLeast(0L)),
     )
 }
