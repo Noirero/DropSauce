@@ -150,10 +150,6 @@ class LocalMangaRepository @Inject constructor(
 	}.onFailure { it.printStackTraceDebug() }.getOrNull()
 
 	suspend fun findSavedManga(remoteManga: Manga, withDetails: Boolean = true): LocalManga? = runCatchingCancellable {
-		// Mihon-style CBZ folders intentionally have no index.json, so their locally generated IDs
-		// are not guaranteed to match the remote source. Resolve the deterministic download path first:
-		// downloads/<source (LANG)>/<manga title> and parse whatever valid local manga is there.
-		// This makes already-downloaded chapters usable with Wi-Fi/mobile data completely disabled.
 		for (dir in storageManager.getReadableDirs()) {
 			val output = LocalMangaOutput.get(dir, remoteManga) ?: continue
 			try {
@@ -165,8 +161,6 @@ class LocalMangaRepository @Inject constructor(
 			}
 		}
 
-		// Keep the old ID/index path as a compatibility fallback for legacy downloads that still
-		// contain DropSauce metadata.
 		localMangaIndex.get(remoteManga.id, withDetails)?.let { cached -> return@runCatchingCancellable cached }
 		LocalMangaParser.find(storageManager.getReadableDirs(), remoteManga)?.let { return it.getManga(withDetails) }
 		val files = getAllFiles()
@@ -203,6 +197,7 @@ class LocalMangaRepository @Inject constructor(
 			dirs.forEach { dir ->
 				dir.withChildren { children ->
 					children.forEach { child -> if (filter.accept(child)) child.deleteRecursively() }
+				}
 			}
 		}
 		return true
@@ -248,15 +243,19 @@ class LocalMangaRepository @Inject constructor(
 					}
 					else -> result.add(child)
 				}
+			}
 		}
 	}
 
 	private fun scanNovelRoot(novelRoot: File, result: MutableList<File>) {
 		novelRoot.withChildren { novelSources ->
 			novelSources.filterNot { it.isHidden || it.shouldSkip() }.forEach { sourceDir ->
-				if (sourceDir.isDirectory) sourceDir.withChildren { novels ->
-					novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+				if (sourceDir.isDirectory) {
+					sourceDir.withChildren { novels ->
+						novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+					}
 				}
+			}
 		}
 	}
 
