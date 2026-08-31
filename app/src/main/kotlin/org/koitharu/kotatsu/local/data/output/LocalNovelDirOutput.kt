@@ -1,0 +1,128 @@
+package org.koitharu.kotatsu.local.data.output
+
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import okhttp3.internal.closeQuietly
+import org.koitharu.kotatsu.core.util.ext.MimeType
+import org.koitharu.kotatsu.local.data.MangaIndex
+import org.koitharu.kotatsu.local.data.isEpubFile
+import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.model.MangaChapter
+import java.io.File
+import java.util.zip.ZipFile
+
+/**
+ * Stores a downloaded web novel as one EPUB per chapter:
+ * Novel title/Chapter title.epub
+ *
+ * Each EPUB remains a valid standalone book and keeps DropSauce's index inside the archive, so no
+ * index.json or cover.jpg sidecar is needed in the novel directory.
+ */
+class LocalNovelDirOutput(
+	rootFile: File,
+	private val manga: Manga,
+) : LocalMangaOutput(rootFile) {
+
+	private val outputs = HashMap<MangaChapter, LocalNovelEpubOutput>()
+	private val fileNames = HashMap<Long, String>()
+	private val mutex = Mutex()
+
+	init {
+		check(rootFile.exists() || rootFile.mkdirs()) { "Cannot create novel directory $rootFile" }
+	}
+
+	override suspend fun mergeWithExisting() = Unit
+
+	override suspend fun addCover(file: File, type: MimeType?) {
+		// Deliberately keep the folder clean: every visible file is a chapter EPUB.
+	}
+
+	override suspend fun addPage(
+		chapter: IndexedValue<MangaChapter>,
+		file: File,
+		pageNumber: Int,
+		type: MimeType?,
+	) = mutex.withLock {
+		val output = outputs.getOrPut(chapter.value) {
+			LocalNovelEpubOutput(File(rootFile, chapterFileName(chapter)), manga)
+		}
+		// A novel chapter is represented by one HTML page. Keep the original chapter index so the
+		// embedded index maps back to the remote chapter id correctly.
+		output.addPage(chapter, file, pageNumber, type)
+	}
+
+	override suspend fun flushChapter(chapter: MangaChapter): Boolean = mutex.withLock {
+		val output = outputs.remove(chapter) ?: return@withLock false
+		output.finish()
+		output.close()
+		true
+	}
+
+	override suspend fun finish() = mutex.withLock {
+		outputs.values.forEach { output ->
+			output.finish()
+			output.close()
+		}
+		outputs.clear()
+	}
+
+	override suspend fun cleanup() = mutex.withLock {
+		outputs.values.forEach { output ->
+			output.cleanup()
+			output.closeQuietly()
+		}
+		outputs.clear()
+	}
+
+	override fun close() {
+		outputs.values.forEach { it.closeQuietly() }
+		outputs.clear()
+	}
+
+	private fun chapterFileName(chapter: IndexedValue<MangaChapter>): String {
+		fileNames[chapter.value.id]?.let { return it }
+		val baseName = readableChapterFileName(
+			chapter.value.title?.takeIf { it.isNotBlank() } ?: "Chapter ${chapter.index + 1}",
+		).take(MAX_CHAPTER_FILENAME_LENGTH)
+		var i = 0
+		while (true) {
+			val name = (if (i == 0) baseName else "$baseName ($i)") + ".epub"
+			if (!File(rootFile, name).exists() && name !in fileNames.values) {
+				fileNames[chapter.value.id] = name
+				return name
+			}
+			i++
+		}
+	}
+
+	private fun readableChapterFileName(value: String): String {
+		return value
+			.replace('|', '_')
+			.replace(Regex("[\\/:*?\"<>]"), "_")
+			.replace(Regex("\\s+"), " ")
+			.replace(Regex("\\s*_\\s*"), " _ ")
+			.trim()
+			.trimEnd('.', ' ')
+			.ifEmpty { "Chapter" }
+	}
+
+	companion object {
+		private const val MAX_CHAPTER_FILENAME_LENGTH = 120
+
+		/** Remove whole chapter EPUBs whose embedded index advertises one of [ids]. */
+		suspend fun deleteChapters(root: File, ids: Set<Long>) {
+			root.listFiles { file -> file.isEpubFile }.orEmpty().forEach { file ->
+				val chapterIds = runCatching {
+					ZipFile(file).use { zip ->
+						val entry = zip.getEntry(ENTRY_NAME_INDEX) ?: return@use emptySet<Long>()
+						val index = MangaIndex(zip.getInputStream(entry).use { it.reader().readText() })
+						index.getMangaInfo()?.chapters?.mapTo(HashSet()) { it.id }.orEmpty()
+					}
+				}.getOrDefault(emptySet())
+				if (chapterIds.any { it in ids }) {
+					file.delete()
+				}
+			}
+		}
+	}
+}
