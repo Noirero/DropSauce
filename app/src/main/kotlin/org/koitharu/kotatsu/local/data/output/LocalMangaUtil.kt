@@ -17,9 +17,14 @@ class LocalMangaUtil(
 	suspend fun deleteChapters(ids: Set<Long>) {
 		val file = manga.url.toUri().toFile()
 		if (file.isDirectory) {
-			LocalMangaDirOutput(file, manga).use { output ->
-				output.deleteChapters(ids)
-				output.finish()
+			val isNovelDirectory = file.listFiles { child -> child.isEpubFile }?.isNotEmpty() == true
+			if (isNovelDirectory) {
+				LocalNovelDirOutput.deleteChapters(file, ids)
+			} else {
+				LocalMangaDirOutput(file, manga).use { output ->
+					output.deleteChapters(ids)
+					output.finish()
+				}
 			}
 		} else if (file.isEpubFile) {
 			LocalNovelEpubOutput.filterChapters(file, ids)
