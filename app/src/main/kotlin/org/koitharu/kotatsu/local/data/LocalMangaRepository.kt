@@ -92,54 +92,35 @@ class LocalMangaRepository @Inject constructor(
 	)
 
 	override suspend fun getList(offset: Int, order: SortOrder?, filter: MangaListFilter?): List<Manga> {
-		if (offset > 0) {
-			return emptyList()
-		}
+		if (offset > 0) return emptyList()
 		val list = getRawList()
-		if (settings.isNsfwContentDisabled) {
-			list.removeAll { it.manga.isNsfw() }
-		}
+		if (settings.isNsfwContentDisabled) list.removeAll { it.manga.isNsfw() }
 		if (filter != null) {
 			val query = filter.query
-			if (!query.isNullOrEmpty()) {
-				list.retainAll { x -> x.isMatchesQuery(query) }
-			}
-			if (filter.tags.isNotEmpty()) {
-				list.retainAll { x -> x.containsTags(filter.tags.mapToSet { it.title }) }
-			}
-			if (filter.tagsExclude.isNotEmpty()) {
-				list.removeAll { x -> x.containsAnyTag(filter.tagsExclude.mapToSet { it.title }) }
-			}
+			if (!query.isNullOrEmpty()) list.retainAll { x -> x.isMatchesQuery(query) }
+			if (filter.tags.isNotEmpty()) list.retainAll { x -> x.containsTags(filter.tags.mapToSet { it.title }) }
+			if (filter.tagsExclude.isNotEmpty()) list.removeAll { x -> x.containsAnyTag(filter.tagsExclude.mapToSet { it.title }) }
 			filter.contentRating.singleOrNull()?.let { contentRating ->
 				val isNsfw = contentRating == ContentRating.ADULT
 				list.retainAll { x -> x.manga.isNsfw() == isNsfw }
 			}
-			if (!query.isNullOrEmpty() && order == SortOrder.RELEVANCE) {
-				list.sortBy { it.manga.title.levenshteinDistance(query) }
-			}
+			if (!query.isNullOrEmpty() && order == SortOrder.RELEVANCE) list.sortBy { it.manga.title.levenshteinDistance(query) }
 		}
 		when (order) {
 			SortOrder.ALPHABETICAL -> list.sortWith(compareBy(AlphanumComparator()) { x -> x.manga.title })
 			SortOrder.RATING -> list.sortByDescending { it.manga.rating }
-			SortOrder.NEWEST,
-			SortOrder.UPDATED -> list.sortWith(compareBy({ -it.createdAt }, { it.manga.id }))
-
+			SortOrder.NEWEST, SortOrder.UPDATED -> list.sortWith(compareBy({ -it.createdAt }, { it.manga.id }))
 			else -> Unit
 		}
 		return list.unwrap()
 	}
 
 	override suspend fun getDetails(manga: Manga): Manga = when {
-		!manga.isLocal -> requireNotNull(findSavedManga(manga, withDetails = true)?.manga) {
-			"Manga is not local or saved"
-		}
-
+		!manga.isLocal -> requireNotNull(findSavedManga(manga, withDetails = true)?.manga) { "Manga is not local or saved" }
 		else -> LocalMangaParser(manga.url.toUri()).getManga(withDetails = true).manga
 	}
 
-	override suspend fun getPages(chapter: MangaChapter): List<MangaPage> {
-		return LocalMangaParser(chapter.url.toUri()).getPages(chapter)
-	}
+	override suspend fun getPages(chapter: MangaChapter): List<MangaPage> = LocalMangaParser(chapter.url.toUri()).getPages(chapter)
 
 	suspend fun delete(manga: Manga): Boolean {
 		val file = manga.url.toUri().toFile()
@@ -160,35 +141,17 @@ class LocalMangaRepository @Inject constructor(
 		localStorageChanges.emit(LocalManga(updated))
 	}
 
-	suspend fun getRemoteManga(localManga: Manga): Manga? {
-		return runCatchingCancellable {
-			LocalMangaParser(localManga.url.toUri()).getMangaInfo()?.takeUnless { it.isLocal }
-		}.onFailure {
-			it.printStackTraceDebug()
-		}.getOrNull()
-	}
+	suspend fun getRemoteManga(localManga: Manga): Manga? = runCatchingCancellable {
+		LocalMangaParser(localManga.url.toUri()).getMangaInfo()?.takeUnless { it.isLocal }
+	}.onFailure { it.printStackTraceDebug() }.getOrNull()
 
-	/**
-	 * Index-only lookup of a downloaded copy. Unlike [findSavedManga] this never falls back to
-	 * scanning storage, so it costs a single indexed query when nothing is downloaded and is cheap
-	 * enough to run before showing anything.
-	 */
 	suspend fun findSavedMangaIndexed(remoteManga: Manga): LocalManga? = runCatchingCancellable {
 		localMangaIndex.get(remoteManga.id, withDetails = true)
-	}.onFailure {
-		it.printStackTraceDebug()
-	}.getOrNull()
+	}.onFailure { it.printStackTraceDebug() }.getOrNull()
 
 	suspend fun findSavedManga(remoteManga: Manga, withDetails: Boolean = true): LocalManga? = runCatchingCancellable {
-		// very fast path
-		localMangaIndex.get(remoteManga.id, withDetails)?.let { cached ->
-			return@runCatchingCancellable cached
-		}
-		// fast path
-		LocalMangaParser.find(storageManager.getReadableDirs(), remoteManga)?.let {
-			return it.getManga(withDetails)
-		}
-		// slow path
+		localMangaIndex.get(remoteManga.id, withDetails)?.let { cached -> return@runCatchingCancellable cached }
+		LocalMangaParser.find(storageManager.getReadableDirs(), remoteManga)?.let { return it.getManga(withDetails) }
 		val files = getAllFiles()
 		return channelFlow {
 			for (file in files) {
@@ -196,22 +159,14 @@ class LocalMangaRepository @Inject constructor(
 					val mangaInput = LocalMangaParser.getOrNull(file)
 					runCatchingCancellable {
 						val mangaInfo = mangaInput?.getMangaInfo()
-						if (mangaInfo != null && mangaInfo.id == remoteManga.id) {
-							send(mangaInput)
-						}
-					}.onFailure {
-						it.printStackTraceDebug()
-					}
+						if (mangaInfo != null && mangaInfo.id == remoteManga.id) send(mangaInput)
+					}.onFailure { it.printStackTraceDebug() }
 				}
 			}
 		}.firstOrNull()?.getManga(withDetails)
 	}.onSuccess { x: LocalManga? ->
-		if (x != null) {
-			localMangaIndex.put(x)
-		}
-	}.onFailure {
-		it.printStackTraceDebug()
-	}.getOrNull()
+		if (x != null) localMangaIndex.put(x)
+	}.onFailure { it.printStackTraceDebug() }.getOrNull()
 
 	override suspend fun getPageUrl(page: MangaPage) = page.url
 
@@ -219,29 +174,18 @@ class LocalMangaRepository @Inject constructor(
 
 	suspend fun getOutputDir(manga: Manga, fallback: File?): File? {
 		val defaultDir = fallback?.takeIfWriteable() ?: storageManager.getDefaultWriteableDir()
-		if (defaultDir != null && LocalMangaOutput.get(defaultDir, manga) != null) {
-			return defaultDir
-		}
-		return storageManager.getWriteableDirs()
-			.firstOrNull {
-				LocalMangaOutput.get(it, manga) != null
-			} ?: defaultDir
+		if (defaultDir != null && LocalMangaOutput.get(defaultDir, manga) != null) return defaultDir
+		return storageManager.getWriteableDirs().firstOrNull { LocalMangaOutput.get(it, manga) != null } ?: defaultDir
 	}
 
 	suspend fun cleanup(): Boolean {
-		if (lock.isNotEmpty()) {
-			return false
-		}
+		if (lock.isNotEmpty()) return false
 		val dirs = storageManager.getWriteableDirs()
 		runInterruptible(Dispatchers.IO) {
 			val filter = TempFileFilter()
 			dirs.forEach { dir ->
 				dir.withChildren { children ->
-					children.forEach { child ->
-						if (filter.accept(child)) {
-							child.deleteRecursively()
-						}
-					}
+					children.forEach { child -> if (filter.accept(child)) child.deleteRecursively() }
 				}
 			}
 		}
@@ -253,13 +197,9 @@ class LocalMangaRepository @Inject constructor(
 		val dispatcher = Dispatchers.IO.limitedParallelism(MAX_PARALLELISM)
 		for (file in files) {
 			launch(dispatcher) {
-				runCatchingCancellable {
-					LocalMangaParser.getOrNull(file)?.getManga(withDetails = false)
-				}.onFailure { e ->
-					e.printStackTraceDebug()
-				}.onSuccess { m ->
-					if (m != null) send(m)
-				}
+				runCatchingCancellable { LocalMangaParser.getOrNull(file)?.getManga(withDetails = false) }
+					.onFailure { e -> e.printStackTraceDebug() }
+					.onSuccess { m -> if (m != null) send(m) }
 			}
 		}
 	}
@@ -272,14 +212,26 @@ class LocalMangaRepository @Inject constructor(
 			dir.withChildren { children ->
 				val result = ArrayList<File>()
 				children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
-					if (child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile) {
-						child.withChildren { sourceChildren ->
-							sourceChildren
-								.filterNot { it.isHidden || it.shouldSkip() }
-								.forEach(result::add)
+					when {
+						child.isDirectory && child.name == LocalMangaOutput.NOVEL_DIR_NAME -> {
+							child.withChildren { novelSources ->
+								novelSources.filterNot { it.isHidden || it.shouldSkip() }.forEach { sourceDir ->
+									if (sourceDir.isDirectory) {
+										sourceDir.withChildren { novels ->
+											novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+										}
+									}
+								}
+							}
 						}
-					} else {
-						result.add(child)
+
+						child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile -> {
+							child.withChildren { sourceChildren ->
+								sourceChildren.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+							}
+						}
+
+						else -> result.add(child)
 					}
 				}
 				result
