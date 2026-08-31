@@ -157,9 +157,14 @@ sealed class LocalMangaOutput(
 					}
 					return when {
 						dir.isDirectory -> {
-							if (canWriteTo(dir, manga)) {
+							// Reuse a same-named folder when it already belongs to this manga, or when it is
+							// an unmanaged/imported folder without DropSauce's index.json. This lets an
+							// existing Mihon-style `abc/` receive new chapters instead of creating `abc_1/`.
+							if (canWriteTo(dir, manga) || canAdoptDirectory(dir)) {
 								LocalMangaDirOutput(dir, manga)
 							} else {
+								// A DropSauce-managed directory belonging to a different manga is kept separate
+								// to avoid mixing two incompatible index.json files.
 								continue
 							}
 						}
@@ -192,6 +197,10 @@ sealed class LocalMangaOutput(
 				.trim()
 				.trimEnd('.')
 				.ifEmpty { "Untitled" }
+		}
+
+		private fun canAdoptDirectory(dir: File): Boolean {
+			return !File(dir, ENTRY_NAME_INDEX).exists()
 		}
 
 		private suspend fun canWriteTo(file: File, manga: Manga): Boolean {
