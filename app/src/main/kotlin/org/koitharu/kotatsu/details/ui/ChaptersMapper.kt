@@ -42,7 +42,7 @@ fun MangaDetails.mapChapters(
 		for (chapter in remoteChapters) {
 			// CBZ-only downloads intentionally have no index.json. Their locally parsed chapter IDs are
 			// therefore not guaranteed to equal the remote source IDs. Match by ID first, then by the
-			// chapter's visible identity so an existing "Chapter 1.cbz" is still recognised as downloaded.
+			// chapter's visible/download-file identity so an existing CBZ is recognised as downloaded.
 			val local = localMap?.remove(chapter.id) ?: localMap?.findAndRemoveEquivalent(chapter)
 			val isCurrent = chapter.id == currentChapterId
 			result += (local ?: chapter).toListItem(
@@ -89,9 +89,27 @@ private fun MangaChapter.isEquivalentDownloadOf(other: MangaChapter): Boolean {
 	if (number >= 0f && other.number >= 0f && kotlin.math.abs(number - other.number) < 0.0001f) {
 		if (volume <= 0 || other.volume <= 0 || volume == other.volume) return true
 	}
+
 	val thisTitle = title.normalizedChapterTitle()
 	val otherTitle = other.title.normalizedChapterTitle()
-	return thisTitle.isNotEmpty() && thisTitle == otherTitle
+	if (thisTitle.isNotEmpty() && thisTitle == otherTitle) return true
+
+	// Downloads whose remote title is only "Chapter" are saved using the scanlator/group name,
+	// e.g. "nounanka, nounanka sedai_Chapter.cbz". Without index.json the local parser derives its
+	// title from that filename, so compare against the exact generated visible identity as well.
+	val thisDownloadTitle = generatedDownloadTitle().normalizedChapterTitle()
+	val otherDownloadTitle = other.generatedDownloadTitle().normalizedChapterTitle()
+	return thisDownloadTitle.isNotEmpty() && thisDownloadTitle == otherDownloadTitle
+}
+
+private fun MangaChapter.generatedDownloadTitle(): String {
+	val rawTitle = title?.trim().orEmpty()
+	val group = scanlator?.trim().orEmpty()
+	return when {
+		rawTitle.isEmpty() && group.isNotEmpty() -> "${group}_Chapter"
+		rawTitle.equals("Chapter", ignoreCase = true) && group.isNotEmpty() -> "${group}_Chapter"
+		else -> rawTitle
+	}
 }
 
 private fun String?.normalizedChapterTitle(): String = this
