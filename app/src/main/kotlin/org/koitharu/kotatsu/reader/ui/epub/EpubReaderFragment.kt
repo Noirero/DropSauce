@@ -404,7 +404,6 @@ class EpubReaderFragment : BaseReaderFragment<FragmentReaderEpubBinding>() {
 		)
 		MaterialAlertDialogBuilder(requireContext())
 			.setTitle(R.string.epub_translate_current_chapter)
-			.setMessage(R.string.epub_translate_online_note)
 			.setItems(labels) { _, which ->
 				when {
 					which == 0 -> restoreOriginalTranslation()
