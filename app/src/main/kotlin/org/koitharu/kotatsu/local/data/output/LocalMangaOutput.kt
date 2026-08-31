@@ -35,13 +35,6 @@ sealed class LocalMangaOutput(
 
 	abstract suspend fun cleanup()
 
-	/**
-	 * Puts the freshly written [temp] archive in place of [rootFile]. The previous download is only
-	 * dropped once the new one is actually in place: deleting first and ignoring the rename result
-	 * meant a failed rename left nothing on disk at all, so the book opened empty afterwards.
-	 *
-	 * The backup keeps the `.tmp` suffix so the usual temp sweep collects it if we die mid-swap.
-	 */
 	protected suspend fun replaceRootFile(temp: File) = withContext(Dispatchers.IO) {
 		val backup = File(rootFile.path + ".bak" + SUFFIX_TMP)
 		backup.delete()
@@ -63,9 +56,10 @@ sealed class LocalMangaOutput(
 
 		const val ENTRY_NAME_INDEX = "index.json"
 		const val SOURCE_DIR_MARKER = ".dropsauce-source"
+		const val NOVEL_DIR_NAME = "00.Novel"
 		const val SUFFIX_TMP = ".tmp"
 		private val mutex = Mutex()
-		private val invalidFileNameChars = Regex("[\\\\/:*?\"<>]")
+		private val invalidFileNameChars = Regex("[\\/:*?\"<>]")
 		private val repeatedWhitespace = Regex("\\s+")
 
 		suspend fun getOrCreate(
@@ -73,23 +67,24 @@ sealed class LocalMangaOutput(
 			manga: Manga,
 			format: DownloadFormat,
 		): LocalMangaOutput = withContext(Dispatchers.IO) {
-			// Mihon keeps each chapter as its own download under the manga directory. Use that layout
-			// for Automatic as well; an explicit Single CBZ preference is still respected.
 			val targetFormat = if (format == DownloadFormat.AUTOMATIC) {
 				DownloadFormat.MULTIPLE_CBZ
 			} else {
 				format
 			}
-			val sourceRoot = getSourceDirectory(root, manga)
-			// Keep writing an existing legacy download in its old location rather than splitting one
-			// title across two folders. New downloads use the Mihon-style source directory.
+			val isNovel = manga.source.isNovelSource
+			val contentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
+			val sourceRoot = getSourceDirectory(contentRoot, manga)
+
+			// Novels deliberately start using the new /00.Novel/source/title/chapter.epub layout even
+			// when an older whole-book title.epub still exists at the legacy root.
 			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat)
-				?: getImpl(root, manga, onlyIfExists = true, format = targetFormat)
+				?: if (!isNovel) getImpl(root, manga, onlyIfExists = true, format = targetFormat) else null
 				?: run {
-					if (sourceRoot != root) {
-						check(sourceRoot.exists() || sourceRoot.mkdirs()) {
-							"Cannot create source directory $sourceRoot"
-						}
+					check(sourceRoot.exists() || sourceRoot.mkdirs()) {
+						"Cannot create source directory $sourceRoot"
+					}
+					if (sourceRoot != contentRoot) {
 						File(sourceRoot, SOURCE_DIR_MARKER).createNewFile()
 					}
 					checkNotNull(getImpl(sourceRoot, manga, onlyIfExists = false, format = targetFormat))
@@ -97,24 +92,26 @@ sealed class LocalMangaOutput(
 		}
 
 		suspend fun get(root: File, manga: Manga): LocalMangaOutput? = withContext(Dispatchers.IO) {
-			val sourceRoot = getSourceDirectory(root, manga)
+			val isNovel = manga.source.isNovelSource
+			val contentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
+			val sourceRoot = getSourceDirectory(contentRoot, manga)
 			getImpl(sourceRoot, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
 				?: if (sourceRoot != root) {
+					// Keep old whole-book EPUB downloads discoverable while all new novel downloads
+					// are written into 00.Novel.
 					getImpl(root, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
 				} else {
 					null
 				}
 		}
 
-		/** Returns a readable Mihon-style source directory, e.g. `Doujindesu (ID)`. */
+		/** Returns a readable source directory, e.g. `Doujindesu (ID)` or `KDT Novels (JP)`. */
 		fun getSourceDirectory(root: File, manga: Manga): File {
 			val source = manga.source.unwrap()
 			if (source !is MihonMangaSource) {
 				return root
 			}
 			val language = source.language.trim().uppercase(Locale.ROOT)
-			// Mihon source display names may already carry a generated suffix such as `_ID_` or `_EN_`.
-			// Strip it before adding the human-readable language suffix.
 			val displayName = source.displayName
 				.replace(Regex("[_\\s]+${Regex.escape(language)}[_\\s]*$", RegexOption.IGNORE_CASE), "")
 				.trim(' ', '_')
@@ -135,7 +132,6 @@ sealed class LocalMangaOutput(
 			mutex.withLock {
 				var i = 0
 				val baseName = manga.title.toReadableFileName()
-				// A novel's chapters are prose, so it downloads into an epub instead of a cbz.
 				val isNovel = manga.source.isNovelSource
 				while (true) {
 					val fileName = if (i == 0) baseName else baseName + "_$i"
@@ -145,6 +141,15 @@ sealed class LocalMangaOutput(
 					i++
 					if (isNovel) {
 						return when {
+							dir.isDirectory -> {
+								if (canWriteTo(dir, manga) || canAdoptDirectory(dir)) {
+									LocalNovelDirOutput(dir, manga)
+								} else {
+									continue
+								}
+							}
+
+							// Legacy whole-book EPUBs remain readable and resumable when looked up at the old root.
 							epub.isFile -> if (canWriteTo(epub, manga)) {
 								LocalNovelEpubOutput(epub, manga)
 							} else {
@@ -152,19 +157,14 @@ sealed class LocalMangaOutput(
 							}
 
 							onlyIfExists -> null
-							else -> LocalNovelEpubOutput(epub, manga)
+							else -> LocalNovelDirOutput(dir, manga)
 						}
 					}
 					return when {
 						dir.isDirectory -> {
-							// Reuse a same-named folder when it already belongs to this manga, or when it is
-							// an unmanaged/imported folder without DropSauce's index.json. This lets an
-							// existing Mihon-style `abc/` receive new chapters instead of creating `abc_1/`.
 							if (canWriteTo(dir, manga) || canAdoptDirectory(dir)) {
 								LocalMangaDirOutput(dir, manga)
 							} else {
-								// A DropSauce-managed directory belonging to a different manga is kept separate
-								// to avoid mixing two incompatible index.json files.
 								continue
 							}
 						}
@@ -188,8 +188,6 @@ sealed class LocalMangaOutput(
 		}
 
 		private fun String.toReadableFileName(): String {
-			// Normalize to composed Unicode so titles are kept exactly as displayed where possible,
-			// e.g. `yokubō` stays `yokubō` instead of losing the macron-bearing character.
 			return Normalizer.normalize(this, Normalizer.Form.NFC)
 				.replace("|", " _ ")
 				.replace(invalidFileNameChars, "_")
