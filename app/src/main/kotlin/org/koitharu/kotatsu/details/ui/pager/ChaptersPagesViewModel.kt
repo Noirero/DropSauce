@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -134,6 +135,31 @@ abstract class ChaptersPagesViewModel(
 		}
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Lazily, emptyList())
 
+	private val activeChapterDownloads = combine(
+		mangaDetails.map { it?.id }.distinctUntilChanged(),
+		downloadScheduler.observeWorks(),
+	) { mangaId, works -> mangaId to works }
+		.mapLatest { (mangaId, works) ->
+			if (mangaId == null) {
+				return@mapLatest ActiveChapterDownloads()
+			}
+			var isAll = false
+			val ids = mutableSetOf<Long>()
+			for (work in works) {
+				if (work.state.isFinished) continue
+				val task = downloadScheduler.getTask(work.id) ?: continue
+				if (task.mangaId != mangaId) continue
+				val chapterIds = task.chaptersIds
+				if (chapterIds == null) {
+					isAll = true
+				} else {
+					chapterIds.forEach(ids::add)
+				}
+			}
+			ActiveChapterDownloads(isAll = isAll, chapterIds = ids)
+		}
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, ActiveChapterDownloads())
+
 	val chapters = combine(
 		combine(
 			mangaDetails,
@@ -155,8 +181,13 @@ abstract class ChaptersPagesViewModel(
 		},
 		isChaptersReversed,
 		chaptersQuery,
-	) { list, reversed, query ->
-		(if (reversed) list.asReversed() else list).filterSearch(query)
+		activeChapterDownloads,
+	) { list, reversed, query, activeDownloads ->
+		(if (reversed) list.asReversed() else list)
+			.filterSearch(query)
+			.map { item ->
+				item.withDownloading(!item.isDownloaded && activeDownloads.contains(item.chapter.id))
+			}
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val quickFilter = combine(
@@ -215,32 +246,27 @@ abstract class ChaptersPagesViewModel(
 
 	fun requireManga() = mangaDetails.requireValue().toManga()
 
-	/**
-	 * How a chapter tap should be handled relative to the saved reading progress:
-	 * [ChapterOpenMode.NORMAL] — open as usual (progress moves along),
-	 * [ChapterOpenMode.ASK] — the user is jumping away from their progress, ask peek vs move.
-	 */
 	open suspend fun getChapterOpenMode(chapterId: Long): ChapterOpenMode {
 		if (!settings.isChapterJumpDialogEnabled) {
-			return ChapterOpenMode.NORMAL // user opted out — every open moves progress
+			return ChapterOpenMode.NORMAL
 		}
 		val details = mangaDetails.value ?: return ChapterOpenMode.NORMAL
 		val manga = details.toManga()
 		val history = runCatchingCancellable {
 			historyRepository.getOne(manga)
-		}.getOrNull() ?: return ChapterOpenMode.NORMAL // first open — no progress to protect
+		}.getOrNull() ?: return ChapterOpenMode.NORMAL
 		if (chapterId == history.chapterId) {
-			return ChapterOpenMode.NORMAL // resuming the current chapter
+			return ChapterOpenMode.NORMAL
 		}
 		if (interactor.observeIncognitoMode(flowOf(manga)).first() == TriStateOption.ENABLED) {
-			return ChapterOpenMode.NORMAL // nothing will be saved anyway
+			return ChapterOpenMode.NORMAL
 		}
 		val chapters = details.chapters.values.firstOrNull { list -> list.any { it.id == chapterId } }
 			?: return ChapterOpenMode.NORMAL
 		val currentIndex = chapters.indexOfFirst { it.id == history.chapterId }
 		val targetIndex = chapters.indexOfFirst { it.id == chapterId }
 		return if (currentIndex >= 0 && targetIndex == currentIndex + 1) {
-			ChapterOpenMode.NORMAL // the next chapter — normal reading flow
+			ChapterOpenMode.NORMAL
 		} else {
 			ChapterOpenMode.ASK
 		}
@@ -327,7 +353,7 @@ abstract class ChaptersPagesViewModel(
 		private var cached: ChaptersPagesViewModel? = null
 
 		override val value: ChaptersPagesViewModel
-			get() {
+		get() {
 				val viewModel = cached
 				return if (viewModel == null) {
 					val activity = fragment.requireActivity()
@@ -342,7 +368,8 @@ abstract class ChaptersPagesViewModel(
 				}
 			}
 
-		override fun isInitialized(): Boolean = cached != null
+		override val isInitialized: Boolean
+		get() = cached != null
 
 		private fun getViewModelClass(activity: Activity) = when (activity) {
 			is ReaderActivity -> ReaderViewModel::class.java
@@ -354,4 +381,11 @@ abstract class ChaptersPagesViewModel(
 	enum class ChapterOpenMode {
 		NORMAL, ASK
 	}
+}
+
+private data class ActiveChapterDownloads(
+	val isAll: Boolean = false,
+	val chapterIds: Set<Long> = emptySet(),
+) {
+	fun contains(chapterId: Long): Boolean = isAll || chapterId in chapterIds
 }
