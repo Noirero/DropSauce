@@ -61,7 +61,7 @@ android {
 				signingConfig signingConfigs.release
 			}
 		}
-		testpack {
+		experiment {
 			initWith release
 			applicationIdSuffix = '.test'
 			versionNameSuffix = '-translate-pack-test'
@@ -89,9 +89,9 @@ android {
 	sourceSets {
 		preview.kotlin.srcDirs += 'src/release/kotlin'
 		preview.res.srcDirs += 'src/release/res'
-		testpack.kotlin.srcDirs += 'src/release/kotlin'
-		testpack.res.srcDirs += 'src/release/res'
-		testpack.res.srcDirs += 'src/testpack/res'
+		experiment.kotlin.srcDirs += 'src/release/kotlin'
+		experiment.res.srcDirs += 'src/release/res'
+		experiment.res.srcDirs += 'src/testpack/res'
 	}
 	compileOptions {
 		coreLibraryDesugaringEnabled = true
