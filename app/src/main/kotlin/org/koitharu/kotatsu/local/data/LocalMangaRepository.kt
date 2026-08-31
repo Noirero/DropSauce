@@ -112,7 +112,7 @@ class LocalMangaRepository @Inject constructor(
 			}
 			filter.contentRating.singleOrNull()?.let { contentRating ->
 				val isNsfw = contentRating == ContentRating.ADULT
-				list.retainAll { it.manga.isNsfw() == isNsfw }
+				list.retainAll { x -> x.manga.isNsfw() == isNsfw }
 			}
 			if (!query.isNullOrEmpty() && order == SortOrder.RELEVANCE) {
 				list.sortBy { it.manga.title.levenshteinDistance(query) }
@@ -269,7 +269,21 @@ class LocalMangaRepository @Inject constructor(
 	private suspend fun getAllFiles() = storageManager.getReadableDirs()
 		.asSequence()
 		.flatMap { dir ->
-			dir.withChildren { children -> children.filterNot { it.isHidden || it.shouldSkip() }.toList() }
+			dir.withChildren { children ->
+				val result = ArrayList<File>()
+				children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
+					if (child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile) {
+						child.withChildren { sourceChildren ->
+							sourceChildren
+								.filterNot { it.isHidden || it.shouldSkip() }
+								.forEach(result::add)
+						}
+					} else {
+						result.add(child)
+					}
+				}
+				result
+			}
 		}
 
 	private fun Collection<LocalManga>.unwrap(): List<Manga> = map { it.manga }
