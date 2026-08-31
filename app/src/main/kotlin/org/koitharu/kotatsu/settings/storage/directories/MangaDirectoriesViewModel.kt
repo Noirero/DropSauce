@@ -59,26 +59,47 @@ class MangaDirectoriesViewModel @Inject constructor(
         val prevJob = loadingJob
         loadingJob = launchJob(Dispatchers.Default) {
             prevJob?.cancelAndJoin()
-            val downloadDir = storageManager.getDefaultWriteableDir()
-            val applicationDirs = storageManager.getApplicationStorageDirs()
+
+            // Resolving folder sizes can be very expensive for a large manga library. Previously
+            // the list was not published until computeSize() had recursively scanned every folder,
+            // which made this screen look completely empty after choosing a directory.
+            val downloadDir = runCatching { storageManager.getDefaultWriteableDir() }.getOrNull()
+            val applicationDirs = runCatching { storageManager.getApplicationStorageDirs() }
+                .getOrDefault(emptySet())
             val configuredCustomDirs = LinkedHashSet(settings.userSpecifiedMangaDirectories)
             settings.mangaStorageDir?.let(configuredCustomDirs::add)
             val customDirs = configuredCustomDirs - applicationDirs
 
-            // Build every row independently. A storage-stat failure on one location must not
-            // prevent all configured directories from being shown in the settings screen.
-            items.value = buildList(applicationDirs.size + customDirs.size) {
-                applicationDirs.mapTo(this) { dir ->
-                    dir.toDirectoryModel(
+            val directories = buildList<Pair<File, Boolean>>(applicationDirs.size + customDirs.size) {
+                applicationDirs.forEach { add(it to true) }
+                customDirs.forEach { add(it to false) }
+            }
+
+            // Publish the rows immediately. Storage size is filled in afterwards in the background.
+            // This also keeps a configured custom directory visible when storage statistics cannot
+            // be read on a particular device.
+            items.value = directories.map { (dir, isAppPrivate) ->
+                dir.toDirectoryModel(
+                    isDefault = dir == downloadDir,
+                    isAppPrivate = isAppPrivate,
+                    calculateSize = false,
+                )
+            }
+
+            directories.forEach { (dir, isAppPrivate) ->
+                val size = runCatching { dir.computeSize() }.getOrDefault(0L)
+                val current = items.value
+                val index = current.indexOfFirst { it.path == dir }
+                if (index >= 0) {
+                    val old = current[index]
+                    val updated = old.copy(
+                        size = size,
+                        available = getAvailableBytes(dir),
+                        isAccessible = runCatching { dir.isReadable() && dir.isWriteable() }.getOrDefault(false),
                         isDefault = dir == downloadDir,
-                        isAppPrivate = true,
+                        isAppPrivate = isAppPrivate,
                     )
-                }
-                customDirs.mapTo(this) { dir ->
-                    dir.toDirectoryModel(
-                        isDefault = dir == downloadDir,
-                        isAppPrivate = false,
-                    )
+                    items.value = current.toMutableList().also { it[index] = updated }
                 }
             }
         }
@@ -87,6 +108,7 @@ class MangaDirectoriesViewModel @Inject constructor(
     private suspend fun File.toDirectoryModel(
         isDefault: Boolean,
         isAppPrivate: Boolean,
+        calculateSize: Boolean,
     ) = DirectoryConfigModel(
         title = runCatching {
             storageManager.getDirectoryDisplayName(this, isFullPath = false)
@@ -97,7 +119,11 @@ class MangaDirectoriesViewModel @Inject constructor(
         isDefault = isDefault,
         isAccessible = runCatching { isReadable() && isWriteable() }.getOrDefault(false),
         isAppPrivate = isAppPrivate,
-        size = runCatching { computeSize() }.getOrDefault(0L),
-        available = runCatching { StatFs(absolutePath).availableBytes }.getOrDefault(freeSpace.coerceAtLeast(0L)),
+        size = if (calculateSize) runCatching { computeSize() }.getOrDefault(0L) else 0L,
+        available = getAvailableBytes(this),
     )
+
+    private fun getAvailableBytes(directory: File): Long = runCatching {
+        StatFs(directory.absolutePath).availableBytes
+    }.getOrDefault(directory.freeSpace.coerceAtLeast(0L))
 }
