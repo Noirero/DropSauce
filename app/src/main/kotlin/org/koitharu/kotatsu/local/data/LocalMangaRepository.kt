@@ -212,31 +212,49 @@ class LocalMangaRepository @Inject constructor(
 			dir.withChildren { children ->
 				val result = ArrayList<File>()
 				children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
-					when {
-						child.isDirectory && child.name == LocalMangaOutput.NOVEL_DIR_NAME -> {
-							child.withChildren { novelSources ->
-								novelSources.filterNot { it.isHidden || it.shouldSkip() }.forEach { sourceDir ->
-									if (sourceDir.isDirectory) {
-										sourceDir.withChildren { novels ->
-											novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
-										}
-									}
-								}
-							}
-						}
-
-						child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile -> {
-							child.withChildren { sourceChildren ->
-								sourceChildren.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
-							}
-						}
-
-						else -> result.add(child)
+					if (child.isDirectory && child.name == LocalMangaOutput.DOWNLOADS_DIR_NAME) {
+						scanDownloadRoot(child, result)
+					} else {
+						scanLegacyEntry(child, result)
 					}
 				}
 				result
 			}
 		}
+
+	private fun scanDownloadRoot(downloads: File, result: MutableList<File>) {
+		downloads.withChildren { children ->
+			children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
+				when {
+					child.isDirectory && child.name == LocalMangaOutput.NOVEL_DIR_NAME -> scanNovelRoot(child, result)
+					child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile -> child.withChildren { mangaDirs ->
+						mangaDirs.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+					}
+					else -> result.add(child)
+				}
+			}
+		}
+	}
+
+	private fun scanNovelRoot(novelRoot: File, result: MutableList<File>) {
+		novelRoot.withChildren { novelSources ->
+			novelSources.filterNot { it.isHidden || it.shouldSkip() }.forEach { sourceDir ->
+				if (sourceDir.isDirectory) sourceDir.withChildren { novels ->
+					novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+				}
+			}
+		}
+	}
+
+	private fun scanLegacyEntry(child: File, result: MutableList<File>) {
+		when {
+			child.isDirectory && child.name == LocalMangaOutput.NOVEL_DIR_NAME -> scanNovelRoot(child, result)
+			child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile -> child.withChildren { sourceChildren ->
+				sourceChildren.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
+			}
+			else -> result.add(child)
+		}
+	}
 
 	private fun Collection<LocalManga>.unwrap(): List<Manga> = map { it.manga }
 
