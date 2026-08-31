@@ -33,84 +33,82 @@ jobs:
           if start < 0 or end < 0:
               raise SystemExit('Could not locate EPUB translation helper block')
 
-          replacement = r'''\tprivate fun splitTranslationText(text: String, maxChars: Int = 2500): List<Pair<String, String>> {
-          \t\tif (text.isEmpty()) return listOf("" to "")
-          \t\tval result = ArrayList<Pair<String, String>>()
-          \t\tvar cursor = 0
-          \t\tNEWLINE_RUN.findAll(text).forEach { match ->
-          \t\t\tappendTranslationParagraph(
-          \t\t\t\tresult = result,
-          \t\t\t\tparagraph = text.substring(cursor, match.range.first),
-          \t\t\t\tseparator = match.value,
-          \t\t\t\tmaxChars = maxChars,
-          \t\t\t)
-          \t\t\tcursor = match.range.last + 1
-          \t\t}
-          \t\tappendTranslationParagraph(
-          \t\t\tresult = result,
-          \t\t\tparagraph = text.substring(cursor),
-          \t\t\tseparator = "",
-          \t\t\tmaxChars = maxChars,
-          \t\t)
-          \t\treturn result.ifEmpty { listOf(text to "") }
-          \t}
-
-          \tprivate fun appendTranslationParagraph(
-          \t\tresult: MutableList<Pair<String, String>>,
-          \t\tparagraph: String,
-          \t\tseparator: String,
-          \t\tmaxChars: Int,
-          \t) {
-          \t\tif (paragraph.isEmpty()) {
-          \t\t\tresult += "" to separator
-          \t\t\treturn
-          \t\t}
-          \t\tval pieces = paragraph.chunked(maxChars)
-          \t\tpieces.forEachIndexed { index, piece ->
-          \t\t\tresult += piece to if (index == pieces.lastIndex) separator else ""
-          \t\t}
-          \t}
-
-          \tprivate fun translateChunks(
-          \t\ttranslator: Translator,
-          \t\tchunks: List<Pair<String, String>>,
-          \t\tindex: Int,
-          \t\tresult: MutableList<String>,
-          \t\tgeneration: Int,
-          \t\tonComplete: (String?, Throwable?) -> Unit,
-          \t) {
-          \t\tif (generation != translationGeneration) return
-          \t\tif (index >= chunks.size) {
-          \t\t\tonComplete(result.joinToString(""), null)
-          \t\t\treturn
-          \t\t}
-          \t\tval (sourceText, separator) = chunks[index]
-          \t\tif (sourceText.isBlank()) {
-          \t\t\tresult += sourceText + separator
-          \t\t\tif (isAdded) updateTranslationStatus(
-          \t\t\t\tgetString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
-          \t\t\t)
-          \t\t\ttranslateChunks(translator, chunks, index + 1, result, generation, onComplete)
-          \t\t\treturn
-          \t\t}
-          \t\ttranslator.translate(sourceText)
-          \t\t\t.addOnSuccessListener { translated ->
-          \t\t\t\tif (generation != translationGeneration) return@addOnSuccessListener
-          \t\t\t\tresult += translated + separator
-          \t\t\t\tif (isAdded) updateTranslationStatus(
-          \t\t\t\t\tgetString(R.string.epub_translate_translating_progress, index + 1, chunks.size),
-          \t\t\t\t)
-          \t\t\t\ttranslateChunks(translator, chunks, index + 1, result, generation, onComplete)
-          \t\t\t}
-          \t\t\t.addOnFailureListener { error ->
-          \t\t\t\tif (generation == translationGeneration) onComplete(null, error)
-          \t\t\t}
-          \t}
-
-          \tprivate companion object TranslationLayout {
-          \t\tval NEWLINE_RUN = Regex("\\n+")
-          \t}
-          '''
+          replacement = "\n".join([
+              '\tprivate fun splitTranslationText(text: String, maxChars: Int = 2500): List<Pair<String, String>> {',
+              '\t\tif (text.isEmpty()) return listOf("" to "")',
+              '\t\tval result = ArrayList<Pair<String, String>>()',
+              '\t\tvar cursor = 0',
+              '\t\tRegex("\\\\n+").findAll(text).forEach { match ->',
+              '\t\t\tappendTranslationParagraph(',
+              '\t\t\t\tresult = result,',
+              '\t\t\t\tparagraph = text.substring(cursor, match.range.first),',
+              '\t\t\t\tseparator = match.value,',
+              '\t\t\t\tmaxChars = maxChars,',
+              '\t\t\t)',
+              '\t\t\tcursor = match.range.last + 1',
+              '\t\t}',
+              '\t\tappendTranslationParagraph(',
+              '\t\t\tresult = result,',
+              '\t\t\tparagraph = text.substring(cursor),',
+              '\t\t\tseparator = "",',
+              '\t\t\tmaxChars = maxChars,',
+              '\t\t)',
+              '\t\treturn result.ifEmpty { listOf(text to "") }',
+              '\t}',
+              '',
+              '\tprivate fun appendTranslationParagraph(',
+              '\t\tresult: MutableList<Pair<String, String>>,',
+              '\t\tparagraph: String,',
+              '\t\tseparator: String,',
+              '\t\tmaxChars: Int,',
+              '\t) {',
+              '\t\tif (paragraph.isEmpty()) {',
+              '\t\t\tresult += "" to separator',
+              '\t\t\treturn',
+              '\t\t}',
+              '\t\tval pieces = paragraph.chunked(maxChars)',
+              '\t\tpieces.forEachIndexed { index, piece ->',
+              '\t\t\tresult += piece to if (index == pieces.lastIndex) separator else ""',
+              '\t\t}',
+              '\t}',
+              '',
+              '\tprivate fun translateChunks(',
+              '\t\ttranslator: Translator,',
+              '\t\tchunks: List<Pair<String, String>>,',
+              '\t\tindex: Int,',
+              '\t\tresult: MutableList<String>,',
+              '\t\tgeneration: Int,',
+              '\t\tonComplete: (String?, Throwable?) -> Unit,',
+              '\t) {',
+              '\t\tif (generation != translationGeneration) return',
+              '\t\tif (index >= chunks.size) {',
+              '\t\t\tonComplete(result.joinToString(""), null)',
+              '\t\t\treturn',
+              '\t\t}',
+              '\t\tval (sourceText, separator) = chunks[index]',
+              '\t\tif (sourceText.isBlank()) {',
+              '\t\t\tresult += sourceText + separator',
+              '\t\t\tif (isAdded) updateTranslationStatus(',
+              '\t\t\t\tgetString(R.string.epub_translate_translating_progress, index + 1, chunks.size),',
+              '\t\t\t)',
+              '\t\t\ttranslateChunks(translator, chunks, index + 1, result, generation, onComplete)',
+              '\t\t\treturn',
+              '\t\t}',
+              '\t\ttranslator.translate(sourceText)',
+              '\t\t\t.addOnSuccessListener { translated ->',
+              '\t\t\t\tif (generation != translationGeneration) return@addOnSuccessListener',
+              '\t\t\t\tresult += translated + separator',
+              '\t\t\t\tif (isAdded) updateTranslationStatus(',
+              '\t\t\t\t\tgetString(R.string.epub_translate_translating_progress, index + 1, chunks.size),',
+              '\t\t\t\t)',
+              '\t\t\t\ttranslateChunks(translator, chunks, index + 1, result, generation, onComplete)',
+              '\t\t\t}',
+              '\t\t\t.addOnFailureListener { error ->',
+              '\t\t\t\tif (generation == translationGeneration) onComplete(null, error)',
+              '\t\t\t}',
+              '\t}',
+              '',
+          ])
 
           text = text[:start] + replacement + text[end:]
           path.write_text(text)
