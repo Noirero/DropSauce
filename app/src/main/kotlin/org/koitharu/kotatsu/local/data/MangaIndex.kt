@@ -132,11 +132,19 @@ class MangaIndex(source: String?) {
 		json.put(KEY_COVER_ENTRY, name)
 	}
 
-	fun getChapterNamesPattern(chapter: MangaChapter) = Regex(
-		json.getJSONObject(KEY_CHAPTERS)
+	fun getChapterNamesPattern(chapter: MangaChapter): Regex {
+		val chapters = json.getJSONObject(KEY_CHAPTERS)
+		val storedPattern = chapters
 			.getJSONObject(chapter.id.toString())
-			.getString(KEY_ENTRIES),
-	)
+			.getString(KEY_ENTRIES)
+		return if (chapters.length() == 1) {
+			// A single-chapter CBZ does not need encoded chapter identifiers. Accept ordinary
+			// page names such as 1.webp, 2.webp, 10.webp while keeping old Kotatsu names working.
+			Regex("(?:$storedPattern|\\d+)")
+		} else {
+			Regex(storedPattern)
+		}
+	}
 
 	fun clear() {
 		val keys = json.keys()
@@ -220,7 +228,6 @@ class MangaIndex(source: String?) {
 				MangaIndex(text)
 			} else {
 				null
-			}
 		}.onFailure { e ->
 			e.printStackTraceDebug()
 		}.getOrNull()
