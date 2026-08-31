@@ -142,11 +142,13 @@ class LocalMangaDirOutput(
 		index.getChapterFileName(chapter.value.id)?.let {
 			return it
 		}
-		val baseName = chapter.value.title
-			?.nullIfEmpty()
-			?.let(::readableChapterFileName)
-			?.take(MAX_CHAPTER_FILENAME_LENGTH)
-			?: "Chapter ${chapter.index + 1}"
+		val rawTitle = chapter.value.title?.nullIfEmpty()
+		val scanlator = chapter.value.scanlator?.nullIfEmpty()?.let(::readableChapterFileName)
+		val baseName = when {
+			rawTitle == null -> scanlator?.let { "${it}_Chapter" } ?: "Chapter ${chapter.index + 1}"
+			rawTitle.trim().equals("Chapter", ignoreCase = true) && scanlator != null -> "${scanlator}_Chapter"
+			else -> readableChapterFileName(rawTitle)
+		}.take(MAX_CHAPTER_FILENAME_LENGTH)
 		var i = 0
 		while (true) {
 			val name = (if (i == 0) baseName else "$baseName ($i)") + ".cbz"
