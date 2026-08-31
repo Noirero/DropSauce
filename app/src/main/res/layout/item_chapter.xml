@@ -68,6 +68,18 @@
 		app:srcCompat="@drawable/ic_eye_check"
 		app:tint="?colorPrimary" />
 
+	<ProgressBar
+		android:id="@+id/progressBar_download"
+		style="?android:attr/progressBarStyleSmall"
+		android:layout_width="48dp"
+		android:layout_height="48dp"
+		android:layout_marginEnd="4dp"
+		android:indeterminate="true"
+		android:indeterminateTint="?colorOnSurfaceVariant"
+		android:padding="12dp"
+		android:visibility="gone"
+		tools:visibility="visible" />
+
 	<ImageButton
 		android:id="@+id/imageButton_download"
 		android:layout_width="48dp"
