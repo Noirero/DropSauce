@@ -16,6 +16,7 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import java.io.File
+import java.text.Normalizer
 import java.util.Locale
 
 sealed class LocalMangaOutput(
@@ -182,7 +183,10 @@ sealed class LocalMangaOutput(
 		}
 
 		private fun String.toReadableFileName(): String {
-			return replace("|", " _ ")
+			// Normalize to composed Unicode so titles are kept exactly as displayed where possible,
+			// e.g. `yokubō` stays `yokubō` instead of losing the macron-bearing character.
+			return Normalizer.normalize(this, Normalizer.Form.NFC)
+				.replace("|", " _ ")
 				.replace(invalidFileNameChars, "_")
 				.replace(repeatedWhitespace, " ")
 				.trim()
