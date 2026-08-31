@@ -84,8 +84,10 @@ class ChaptersFragment :
 				}
 			},
 			onDeleteClick = { item ->
-				val manga = viewModel.getMangaOrNull() ?: return@ChaptersAdapter
-				LocalChaptersRemoveService.start(requireContext(), manga, setOf(item.chapter.id))
+				val manga = viewModel.getMangaOrNull()
+				if (manga != null) {
+					LocalChaptersRemoveService.start(requireContext(), manga, setOf(item.chapter.id))
+				}
 			},
 		)
 		selectionController = ListSelectionController(
