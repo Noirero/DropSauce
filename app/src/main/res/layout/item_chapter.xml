@@ -65,7 +65,7 @@
 		android:layout_height="24dp"
 		android:layout_marginEnd="16dp"
 		android:contentDescription="@string/downloaded"
-		app:srcCompat="@drawable/ic_download_done"
+		app:srcCompat="@drawable/ic_eye_check"
 		app:tint="?colorPrimary" />
 
 	<ImageButton
