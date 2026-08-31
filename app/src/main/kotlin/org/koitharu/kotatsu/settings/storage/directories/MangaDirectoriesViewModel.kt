@@ -43,8 +43,8 @@ class MangaDirectoriesViewModel @Inject constructor(
             }
             if (dir !in storageManager.getApplicationStorageDirs()) {
                 settings.userSpecifiedMangaDirectories += dir
-                loadList()
             }
+            loadList()
         }
     }
 
@@ -62,7 +62,9 @@ class MangaDirectoriesViewModel @Inject constructor(
             prevJob?.cancelAndJoin()
             val downloadDir = storageManager.getDefaultWriteableDir()
             val applicationDirs = storageManager.getApplicationStorageDirs()
-            val customDirs = settings.userSpecifiedMangaDirectories - applicationDirs
+            val configuredCustomDirs = LinkedHashSet(settings.userSpecifiedMangaDirectories)
+            settings.mangaStorageDir?.let(configuredCustomDirs::add)
+            val customDirs = configuredCustomDirs - applicationDirs
             items.value = buildList(applicationDirs.size + customDirs.size) {
                 applicationDirs.mapTo(this) { dir ->
                     dir.toDirectoryModel(
