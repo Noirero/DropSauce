@@ -6,15 +6,18 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okio.Closeable
 import org.koitharu.kotatsu.core.model.isNovelSource
+import org.koitharu.kotatsu.core.model.unwrap
 import org.koitharu.kotatsu.core.prefs.DownloadFormat
 import org.koitharu.kotatsu.core.util.ext.MimeType
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.core.util.ext.toFileNameSafe
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
+import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import java.io.File
+import java.util.Locale
 
 sealed class LocalMangaOutput(
 	val rootFile: File,
@@ -59,6 +62,7 @@ sealed class LocalMangaOutput(
 	companion object {
 
 		const val ENTRY_NAME_INDEX = "index.json"
+		const val SOURCE_DIR_MARKER = ".dropsauce-source"
 		const val SUFFIX_TMP = ".tmp"
 		private val mutex = Mutex()
 
@@ -67,20 +71,57 @@ sealed class LocalMangaOutput(
 			manga: Manga,
 			format: DownloadFormat,
 		): LocalMangaOutput = withContext(Dispatchers.IO) {
+			// Mihon keeps each chapter as its own download under the manga directory. Use that layout
+			// for Automatic as well; an explicit Single CBZ preference is still respected.
 			val targetFormat = if (format == DownloadFormat.AUTOMATIC) {
-				if (manga.chapters.let { it != null && it.size <= 3 }) {
-					DownloadFormat.SINGLE_CBZ
-				} else {
-					DownloadFormat.MULTIPLE_CBZ
-				}
+				DownloadFormat.MULTIPLE_CBZ
 			} else {
 				format
 			}
-			checkNotNull(getImpl(root, manga, onlyIfExists = false, format = targetFormat))
+			val sourceRoot = getSourceDirectory(root, manga)
+			// Keep writing an existing legacy download in its old location rather than splitting one
+			// title across two folders. New downloads use the Mihon-style source directory.
+			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat)
+				?: getImpl(root, manga, onlyIfExists = true, format = targetFormat)
+				?: run {
+					if (sourceRoot != root) {
+						check(sourceRoot.exists() || sourceRoot.mkdirs()) {
+							"Cannot create source directory $sourceRoot"
+						}
+						File(sourceRoot, SOURCE_DIR_MARKER).createNewFile()
+					}
+					checkNotNull(getImpl(sourceRoot, manga, onlyIfExists = false, format = targetFormat))
+				}
 		}
 
 		suspend fun get(root: File, manga: Manga): LocalMangaOutput? = withContext(Dispatchers.IO) {
-			getImpl(root, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
+			val sourceRoot = getSourceDirectory(root, manga)
+			getImpl(sourceRoot, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
+				?: if (sourceRoot != root) {
+					getImpl(root, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
+				} else {
+					null
+				}
+		}
+
+		/**
+		 * Returns the Mihon-compatible source directory, e.g. `MangaDex (EN)`.
+		 * Non-Mihon sources keep their existing root layout.
+		 */
+		fun getSourceDirectory(root: File, manga: Manga): File {
+			val source = manga.source.unwrap()
+			if (source !is MihonMangaSource) {
+				return root
+			}
+			val sourceName = buildString {
+				append(source.displayName)
+				source.language.trim().takeIf { it.isNotEmpty() }?.let { language ->
+					append(" (")
+					append(language.uppercase(Locale.ROOT))
+					append(')')
+				}
+			}.toFileNameSafe()
+			return File(root, sourceName)
 		}
 
 		private suspend fun getImpl(
