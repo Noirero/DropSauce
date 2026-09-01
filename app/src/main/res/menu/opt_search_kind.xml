@@ -35,17 +35,10 @@
 			</group>
 
 			<group android:id="@+id/group_search_filters">
-
-				<item
-					android:id="@+id/action_filter_pinned_only"
-					android:checkable="true"
-					android:title="@string/pinned_sources_only" />
-
 				<item
 					android:id="@+id/action_filter_local_only"
 					android:checkable="true"
 					android:title="@string/local_library_only" />
-
 			</group>
 		</menu>
 
