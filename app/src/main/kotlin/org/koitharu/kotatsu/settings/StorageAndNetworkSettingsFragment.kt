@@ -22,6 +22,7 @@ import androidx.fragment.app.viewModels
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.network.DoHManager
 import org.koitharu.kotatsu.core.network.DoHProvider
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.util.FileSize
@@ -96,7 +97,6 @@ class StorageAndNetworkSettingsFragment : BaseComposeSettingsFragment(R.string.s
 		}
 	}
 
-
 	private fun buildProxySummary(): String {
 		val type = settings.proxyType
 		val address = settings.proxyAddress
@@ -137,6 +137,7 @@ private fun StorageNetworkScreen(
 
 	var prefetchContent by rememberStringPref(AppSettings.KEY_PREFETCH_CONTENT, "1")
 	var doh by rememberStringPref(AppSettings.KEY_DOH, DoHProvider.NONE.name)
+	var customDohUrl by rememberStringPref(DoHManager.KEY_CUSTOM_URL, "")
 	// Blank = use the device WebView UA (kept in sync with Cloudflare challenge solving).
 	var userAgent by rememberStringPref(AppSettings.KEY_MIHON_USER_AGENT, "")
 	var imageProxy by rememberStringPref(AppSettings.KEY_IMAGES_PROXY, "-1")
@@ -196,7 +197,6 @@ private fun StorageNetworkScreen(
 						selectedValue = prefetchContent,
 						onValueChange = { prefetchContent = it },
 						icon = R.drawable.ic_downloading,
-						
 						shape = pos.shape,
 					)
 				}
@@ -205,7 +205,6 @@ private fun StorageNetworkScreen(
 						title = stringResource(R.string.proxy),
 						subtitle = proxySummary,
 						icon = R.drawable.ic_plug_large,
-						
 						shape = pos.shape,
 						onClick = onOpenProxy,
 					)
@@ -218,9 +217,20 @@ private fun StorageNetworkScreen(
 						selectedValue = doh,
 						onValueChange = { doh = it },
 						icon = R.drawable.ic_web,
-
 						shape = pos.shape,
 					)
+				}
+				if (doh == DoHProvider.CUSTOM.name) {
+					item { pos ->
+						EditTextSettingsItem(
+							title = "Alamat DNS Kustom",
+							value = customDohUrl,
+							hint = "https://example.com/dns-query",
+							onValueChange = { customDohUrl = it.trim() },
+							icon = R.drawable.ic_web,
+							shape = pos.shape,
+						)
+					}
 				}
 				item { pos ->
 					EditTextSettingsItem(
@@ -241,7 +251,6 @@ private fun StorageNetworkScreen(
 						selectedValue = imageProxy,
 						onValueChange = { imageProxy = it },
 						icon = R.drawable.ic_images,
-						
 						shape = pos.shape,
 					)
 				}
@@ -255,7 +264,6 @@ private fun StorageNetworkScreen(
 							onSslRestartHint()
 						},
 						icon = R.drawable.ic_lock,
-						
 						shape = pos.shape,
 					)
 				}
@@ -266,7 +274,6 @@ private fun StorageNetworkScreen(
 						checked = noOffline,
 						onCheckedChange = { noOffline = it },
 						icon = R.drawable.ic_offline,
-						
 						shape = pos.shape,
 					)
 				}
@@ -277,7 +284,6 @@ private fun StorageNetworkScreen(
 						checked = adblock,
 						onCheckedChange = { adblock = it },
 						icon = R.drawable.ic_disable,
-						
 						shape = pos.shape,
 					)
 				}
