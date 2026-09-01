@@ -10,7 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.FlowCollector
 import org.koitharu.kotatsu.core.util.ContinuationResumeRunnable
+import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment
+import org.koitharu.kotatsu.favourites.ui.list.LocalFavouritesListFragment
 import org.koitharu.kotatsu.list.ui.ListModelDiffCallback
 import kotlin.coroutines.suspendCoroutine
 
@@ -36,7 +38,11 @@ class FavouritesContainerAdapter(fragment: Fragment) : FragmentStateAdapter(frag
 
 	override fun createFragment(position: Int): Fragment {
 		val item = differ.currentList[position]
-		return FavouritesListFragment.newInstance(item.id)
+		return if (item.id == LOCAL_FAVOURITES_CATEGORY_ID) {
+			LocalFavouritesListFragment()
+		} else {
+			FavouritesListFragment.newInstance(item.id)
+		}
 	}
 
 	override suspend fun emit(value: List<FavouriteTabModel>) = suspendCoroutine { cont ->
