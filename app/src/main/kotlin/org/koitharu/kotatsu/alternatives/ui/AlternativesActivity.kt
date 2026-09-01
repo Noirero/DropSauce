@@ -173,6 +173,11 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		}
 	}
 
+	override fun onItemLongClick(item: MangaAlternativeModel, view: View): Boolean {
+		router.openBrowser(item.manga)
+		return true
+	}
+
 	override fun onRetryClick(error: Throwable) = viewModel.retry()
 	override fun onEmptyActionClick() = Unit
 	override fun onFooterButtonClick() = Unit
