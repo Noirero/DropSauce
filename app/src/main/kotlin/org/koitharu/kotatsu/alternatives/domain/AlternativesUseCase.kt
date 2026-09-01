@@ -67,6 +67,15 @@ class AlternativesUseCase @Inject constructor(
 	}
 
 	private suspend fun getSources(): List<MangaSource> {
-		return sourcesRepository.getEnabledSources().toList()
+		// Follow Kahon's migration-source default: when the user has pinned sources, search only
+		// those sources. If there are no pins, fall back to every enabled source. The repository
+		// builds the pinned set from the persisted pin order, so converting it to a list keeps that
+		// order for the alternative search as well.
+		val pinnedSources = sourcesRepository.getPinnedSources()
+		return if (pinnedSources.isNotEmpty()) {
+			pinnedSources.toList()
+		} else {
+			sourcesRepository.getEnabledSources()
+		}
 	}
 }
