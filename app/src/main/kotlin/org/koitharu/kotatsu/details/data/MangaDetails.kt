@@ -33,12 +33,14 @@ data class MangaDetails(
     val id: Long
         get() = manga.id
 
-    /**
-     * The pristine manga from the source, without any user override applied. Use this (rather than
-     * [toManga]) when the genuine original title/cover is required, e.g. in the override editor.
-     */
     val sourceManga: Manga
         get() = manga
+
+    val artist: String?
+        get() = override?.artist?.trim()?.takeIf { it.isNotEmpty() }
+
+    val displayDescription: CharSequence?
+        get() = override?.description?.takeIf { it.isNotBlank() } ?: description ?: manga.description
 
     val allChapters: List<MangaChapter> by lazy { mergeChapters() }
 
@@ -69,8 +71,7 @@ data class MangaDetails(
         get() = manga.state == MangaState.RESTRICTED
 
     private val mergedManga by lazy {
-        if (localManga == null) {
-            // fast path
+        val base = if (localManga == null) {
             manga.withOverride(override)
         } else {
             manga.copy(
@@ -81,6 +82,10 @@ data class MangaDetails(
                 chapters = allChapters,
             )
         }
+        base.copy(
+            authors = override?.author.toAuthorsOrNull() ?: base.authors,
+            description = override?.description?.takeIf { it.isNotBlank() } ?: base.description,
+        )
     }
 
     fun toManga() = mergedManga
@@ -100,50 +105,48 @@ data class MangaDetails(
 			?.nullIfEmpty()
 
     fun getLocale(): Locale? {
-        findAppropriateLocale(chapters.keys.singleOrNull())?.let {
-            return it
-        }
+        findAppropriateLocale(chapters.keys.singleOrNull())?.let { return it }
         return manga.source.getLocale()
     }
 
     fun filterChapters(branch: String?) = copy(
         manga = manga.filterChapters(branch),
-        localManga = localManga?.run {
-            copy(manga = manga.filterChapters(branch))
-        },
+        localManga = localManga?.run { copy(manga = manga.filterChapters(branch)) },
     )
 
     private fun mergeChapters(): List<MangaChapter> {
         val chapters = manga.chapters
         val localChapters = local?.manga?.chapters.orEmpty()
-        if (chapters.isNullOrEmpty()) {
-            return localChapters
-        }
+        if (chapters.isNullOrEmpty()) return localChapters
         val localMap = if (localChapters.isNotEmpty()) {
             localChapters.associateByTo(LinkedHashMap(localChapters.size)) { it.id }
-        } else {
-            null
-        }
+        } else null
         val result = ArrayList<MangaChapter>(chapters.size)
         for (chapter in chapters) {
             val local = localMap?.remove(chapter.id)
             result += local ?: chapter
         }
-        if (!localMap.isNullOrEmpty()) {
-            result.addAll(localMap.values)
-        }
+        if (!localMap.isNullOrEmpty()) result.addAll(localMap.values)
         return result
     }
 
     private fun findAppropriateLocale(name: String?): Locale? {
-        if (name.isNullOrEmpty()) {
-            return null
-        }
+        if (name.isNullOrEmpty()) return null
         return Locale.getAvailableLocales().find { lc ->
             name.contains(lc.getDisplayName(lc), ignoreCase = true) ||
                 name.contains(lc.getDisplayName(Locale.ENGLISH), ignoreCase = true) ||
                 name.contains(lc.getDisplayLanguage(lc), ignoreCase = true) ||
                 name.contains(lc.getDisplayLanguage(Locale.ENGLISH), ignoreCase = true)
         }
+    }
+
+    private fun String?.toAuthorsOrNull(): Set<String>? {
+        val values = this
+            ?.split(',', '\n')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.toSet()
+            .orEmpty()
+        return values.takeIf { it.isNotEmpty() }
     }
 }
