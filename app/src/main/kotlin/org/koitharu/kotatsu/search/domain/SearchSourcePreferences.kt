@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.search.domain
 
 import android.content.Context
 import androidx.core.content.edit
+import androidx.core.os.ConfigurationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
@@ -25,8 +26,9 @@ class SearchSourcePreferences @Inject constructor(
 
 	val defaultPreferredLanguages: Set<String>
 		get() = linkedSetOf(
-			context.resources.configuration.locales[0]?.language.orEmpty().baseLanguageCode(),
+			ConfigurationCompat.getLocales(context.resources.configuration).get(0)?.language.orEmpty().baseLanguageCode(),
 			"en",
+			LANGUAGE_OTHER,
 		).filterTo(LinkedHashSet()) { it.isNotBlank() }
 
 	var preferredLanguages: Set<String>
@@ -109,10 +111,7 @@ fun MangaSource.searchLanguageCode(): String = when (this) {
 }
 
 fun MangaSource.matchesPreferredLanguage(preferredLanguages: Set<String>): Boolean {
-	val language = searchLanguageCode()
-	// Native parser sources do not expose a reliable language field. Keep them instead of guessing
-	// and accidentally making them disappear from Preferred Languages mode.
-	return language == LANGUAGE_OTHER || language in preferredLanguages
+	return searchLanguageCode() in preferredLanguages
 }
 
 fun String.baseLanguageCode(): String = trim()
