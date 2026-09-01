@@ -73,6 +73,7 @@ jobs:
           BASE_VERSION=$(grep -E "versionName = '[^']+'" "$BUILD_GRADLE" | head -n1 | sed -E "s/.*versionName = '([^']+)'.*/\1/")
           VERSION_NAME="${BASE_VERSION}-beta.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER * 10 + GITHUB_RUN_ATTEMPT))
+          export VERSION_NAME VERSION_CODE
           python3 - <<'PY'
           import os
           import re
@@ -89,9 +90,6 @@ jobs:
           path.write_text(text)
           PY
           echo "Beta version: ${VERSION_NAME} (versionCode ${VERSION_CODE})"
-        env:
-          VERSION_NAME: ${{ format('{0}-beta.{1}.{2}', '0.9.5', github.run_number, github.run_attempt) }}
-          VERSION_CODE: ${{ 200000 + github.run_number * 10 + github.run_attempt }}
 
       - name: Pre-warm JitPack dependencies
         run: |
