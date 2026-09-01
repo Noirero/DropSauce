@@ -5,11 +5,12 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import coil3.ImageLoader
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
-import org.koitharu.kotatsu.alternatives.domain.AlternativeSearchScope
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.nav.router
@@ -27,10 +28,14 @@ import org.koitharu.kotatsu.list.ui.adapter.ListStateHolderListener
 import org.koitharu.kotatsu.list.ui.adapter.TypedListSpacingDecoration
 import org.koitharu.kotatsu.list.ui.adapter.buttonFooterAD
 import org.koitharu.kotatsu.list.ui.adapter.emptyStateListAD
+import org.koitharu.kotatsu.list.ui.adapter.listHeaderAD
 import org.koitharu.kotatsu.list.ui.adapter.loadingFooterAD
 import org.koitharu.kotatsu.list.ui.adapter.loadingStateAD
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.search.domain.LANGUAGE_OTHER
+import org.koitharu.kotatsu.search.domain.SearchSourceMode
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -49,6 +54,7 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
 		viewBinding.collapsingToolbarLayout.subtitle = null
 		val listAdapter = BaseListAdapter<ListModel>()
+			.addDelegate(ListItemType.HEADER, listHeaderAD(null))
 			.addDelegate(ListItemType.MANGA_LIST_DETAILED, alternativeAD(coil, this, this))
 			.addDelegate(ListItemType.STATE_EMPTY, emptyStateListAD(null))
 			.addDelegate(ListItemType.FOOTER_LOADING, loadingFooterAD())
@@ -63,25 +69,24 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		viewBinding.buttonScopePinned.isEnabled = viewModel.hasPinnedSources
 		viewBinding.toggleSearchScope.addOnButtonCheckedListener { _, checkedId, isChecked ->
 			if (!isChecked) return@addOnButtonCheckedListener
-			viewModel.setSearchScope(
-				if (checkedId == R.id.button_scope_pinned) {
-					AlternativeSearchScope.PINNED
-				} else {
-					AlternativeSearchScope.ALL_INSTALLED
+			viewModel.setSearchMode(
+				when (checkedId) {
+					R.id.button_scope_pinned -> SearchSourceMode.PINNED_ONLY
+					R.id.button_scope_preferred -> SearchSourceMode.PREFERRED_LANGUAGES
+					else -> SearchSourceMode.ALL_SOURCES
 				},
 			)
 		}
-		viewModel.searchScope.observe(this) { scope ->
-			val checkedId = if (scope == AlternativeSearchScope.PINNED) {
-				R.id.button_scope_pinned
-			} else {
-				R.id.button_scope_all
-			}
-			if (viewBinding.toggleSearchScope.checkedButtonId != checkedId) {
-				viewBinding.toggleSearchScope.check(checkedId)
-			}
+		viewBinding.chipAlternativeLanguage.setOnClickListener { showLanguageDialog() }
+		viewBinding.chipAlternativeHasResults.setOnCheckedChangeListener { _, checked ->
+			viewModel.setHasResultsOnly(checked)
 		}
+		viewBinding.chipAlternativeReset.setOnClickListener { viewModel.resetFilters() }
 
+		viewModel.searchMode.observe(this, ::updateSearchMode)
+		viewModel.preferredLanguages.observe(this, ::updateLanguageChip)
+		viewModel.hasResultsOnly.observe(this) { viewBinding.chipAlternativeHasResults.isChecked = it }
+		viewModel.searchProgress.observe(this, ::updateProgress)
 		viewModel.onError.observeEvent(this, SnackbarErrorObserver(viewBinding.recyclerView, null))
 		viewModel.list.observe(this, listAdapter)
 		viewModel.onMigrated.observeEvent(this) {
@@ -91,10 +96,61 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		}
 	}
 
-	override fun onApplyWindowInsets(
-		v: View,
-		insets: WindowInsetsCompat
-	): WindowInsetsCompat {
+	private fun updateSearchMode(mode: SearchSourceMode) {
+		val checkedId = when (mode) {
+			SearchSourceMode.PINNED_ONLY -> R.id.button_scope_pinned
+			SearchSourceMode.PREFERRED_LANGUAGES -> R.id.button_scope_preferred
+			SearchSourceMode.ALL_SOURCES -> R.id.button_scope_all
+		}
+		if (viewBinding.toggleSearchScope.checkedButtonId != checkedId) {
+			viewBinding.toggleSearchScope.check(checkedId)
+		}
+	}
+
+	private fun showLanguageDialog() {
+		val languages = (viewModel.availableLanguages.value + viewModel.preferredLanguages.value)
+			.distinct()
+			.sorted()
+		if (languages.isEmpty()) return
+		val selected = viewModel.preferredLanguages.value.toMutableSet()
+		val labels = languages.map(::languageLabel).toTypedArray()
+		val checked = BooleanArray(languages.size) { languages[it] in selected }
+		MaterialAlertDialogBuilder(this)
+			.setTitle(R.string.search_filter_language)
+			.setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+				if (isChecked) selected += languages[which] else selected -= languages[which]
+			}
+			.setNegativeButton(android.R.string.cancel, null)
+			.setPositiveButton(android.R.string.ok) { _, _ -> viewModel.setPreferredLanguages(selected) }
+			.show()
+	}
+
+	private fun updateLanguageChip(languages: Set<String>) {
+		val value = languages.sorted().joinToString(", ") { code ->
+			if (code == LANGUAGE_OTHER) getString(R.string.search_language_other) else code.uppercase(Locale.ROOT)
+		}
+		viewBinding.chipAlternativeLanguage.text = getString(R.string.search_filter_language_value, value)
+	}
+
+	private fun languageLabel(code: String): String {
+		if (code == LANGUAGE_OTHER) return getString(R.string.search_language_other)
+		val locale = Locale.forLanguageTag(code)
+		val name = locale.getDisplayLanguage(Locale.getDefault()).ifBlank { code.uppercase(Locale.ROOT) }
+		return "$name (${code.uppercase(Locale.ROOT)})"
+	}
+
+	private fun updateProgress(progress: AlternativeSearchProgress) {
+		with(viewBinding.progressAlternativeSearch) {
+			isVisible = progress.total > 0 && progress.completed < progress.total
+			max = progress.total.coerceAtLeast(1)
+			setProgressCompat(progress.completed, true)
+		}
+		viewBinding.collapsingToolbarLayout.subtitle = if (progress.total > 0) {
+			getString(R.string.search_progress_sources, progress.completed, progress.total, progress.errors)
+		} else null
+	}
+
+	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
 		val barsInsets = insets.systemBarsInsets
 		viewBinding.recyclerView.updatePadding(
 			left = barsInsets.left,
@@ -118,9 +174,7 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 	}
 
 	override fun onRetryClick(error: Throwable) = viewModel.retry()
-
 	override fun onEmptyActionClick() = Unit
-
 	override fun onFooterButtonClick() = Unit
 
 	private fun confirmMigration(target: Manga) {
@@ -137,9 +191,7 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 				),
 			)
 			setNegativeButton(android.R.string.cancel, null)
-			setPositiveButton(R.string.migrate) { _, _ ->
-				viewModel.migrate(target)
-			}
+			setPositiveButton(R.string.migrate) { _, _ -> viewModel.migrate(target) }
 		}.show()
 	}
 }
