@@ -24,23 +24,33 @@ class SearchV2Helper @AssistedInject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val dataRepository: MangaDataRepository,
 	private val settings: AppSettings,
+	private val cache: SearchResultCache,
 ) {
 
 	suspend operator fun invoke(query: String, kind: SearchKind): SearchResults? {
 		if (settings.isNsfwContentDisabled && source.isNsfw()) {
 			return null
 		}
+		cache.get(source, query, kind)?.let { return it }
+
+		val parsed = parseSearchQuery(query)
+		val effectiveKind = if (parsed.author != null) SearchKind.AUTHOR else kind
 		val repository = mangaRepositoryFactory.create(source)
-		val listFilter = repository.getFilter(query, kind) ?: return null
-		val sortOrder = repository.getSortOrder(kind)
+		val listFilter = repository.getFilter(parsed.text, effectiveKind) ?: return null
+		val sortOrder = repository.getSortOrder(effectiveKind)
 		val list = repository.getList(0, sortOrder, listFilter)
 		if (list.isEmpty()) {
 			return null
 		}
 		val result = list.toMutableList()
-		result.postFilter(query, kind)
-		result.sortByRelevance(query, kind)
-		return SearchResults(listFilter = listFilter, sortOrder = sortOrder, manga = result)
+		result.postFilter(parsed, effectiveKind)
+		result.sortByRelevance(parsed.text, effectiveKind)
+		if (result.isEmpty()) {
+			return null
+		}
+		return SearchResults(listFilter = listFilter, sortOrder = sortOrder, manga = result).also {
+			cache.put(source, query, kind, it)
+		}
 	}
 
 	private suspend fun MangaRepository.getFilter(query: String, kind: SearchKind): MangaListFilter? = when (kind) {
@@ -66,70 +76,65 @@ class SearchV2Helper @AssistedInject constructor(
 				e.printStackTraceDebug()
 			}.getOrDefault(emptySet())
 			val tag = tags.find { x -> x.title.equals(query, ignoreCase = true) }
-			if (tag != null) {
-				MangaListFilter(tags = setOf(tag))
-			} else {
-				null
-			}
+			if (tag != null) MangaListFilter(tags = setOf(tag)) else null
 		}
 	}
 
-	private fun MutableList<Manga>.postFilter(query: String, kind: SearchKind) {
+	private fun MutableList<Manga>.postFilter(parsed: ParsedSearchQuery, kind: SearchKind) {
 		if (settings.isNsfwContentDisabled) {
 			removeAll { it.isNsfw() }
 		}
 		when (kind) {
-			SearchKind.TITLE -> retainAll { m ->
-				m.matches(query, MATCH_THRESHOLD_DEFAULT)
+			SearchKind.TITLE -> retainAll { manga -> manga.matches(parsed.text, MATCH_THRESHOLD_DEFAULT) }
+			SearchKind.AUTHOR -> retainAll { manga ->
+				manga.authors.isEmpty() || manga.authors.contains(parsed.text, ignoreCase = true)
 			}
-
-			SearchKind.AUTHOR -> retainAll { m ->
-				m.authors.isEmpty() || m.authors.contains(query, ignoreCase = true)
-			}
-
-			SearchKind.SIMPLE, // no filtering expected
+			SearchKind.SIMPLE,
 			SearchKind.TAG -> Unit
+		}
+		parsed.exactPhrase?.let { phrase ->
+			retainAll { manga -> manga.containsSearchText(phrase) }
+		}
+		if (parsed.excludes.isNotEmpty()) {
+			removeAll { manga -> parsed.excludes.any(manga::containsSearchText) }
 		}
 	}
 
 	private fun MutableList<Manga>.sortByRelevance(query: String, kind: SearchKind) {
 		when (kind) {
 			SearchKind.SIMPLE,
-			SearchKind.TITLE -> sortBy { m ->
-				minOf(
-					m.title.levenshteinDistance(query),
-					m.altTitles.firstOrNull()?.levenshteinDistance(query) ?: Int.MAX_VALUE,
-				)
+			SearchKind.TITLE -> sortBy { manga ->
+				sequenceOf(manga.title).plus(manga.altTitles.asSequence())
+					.minOfOrNull { it.levenshteinDistance(query) } ?: Int.MAX_VALUE
 			}
-
-			SearchKind.AUTHOR -> sortByDescending { m ->
-				m.authors.contains(query, ignoreCase = true)
-			}
-
-			SearchKind.TAG -> sortByDescending { m ->
-				m.tags.any { tag -> tag.title.equals(query, ignoreCase = true) }
+			SearchKind.AUTHOR -> sortByDescending { manga -> manga.authors.contains(query, ignoreCase = true) }
+			SearchKind.TAG -> sortByDescending { manga ->
+				manga.tags.any { tag -> tag.title.equals(query, ignoreCase = true) }
 			}
 		}
 	}
 
 	private fun MangaRepository.getSortOrder(kind: SearchKind): SortOrder {
-		val preferred: SortOrder = when (kind) {
+		val preferred = when (kind) {
 			SearchKind.SIMPLE,
 			SearchKind.TITLE,
 			SearchKind.AUTHOR -> SortOrder.RELEVANCE
-
 			SearchKind.TAG -> SortOrder.POPULARITY
 		}
-		return if (preferred in sortOrders) {
-			preferred
-		} else {
-			defaultSortOrder
+		return if (preferred in sortOrders) preferred else defaultSortOrder
+	}
+
+	private fun Manga.matches(query: String, threshold: Float): Boolean {
+		return sequenceOf(title).plus(altTitles.asSequence()).any { title ->
+			matchesTitles(title, query, threshold)
 		}
 	}
 
-
-	private fun Manga.matches(query: String, threshold: Float): Boolean {
-		return matchesTitles(title, query, threshold) || matchesTitles(altTitles.firstOrNull(), query, threshold)
+	private fun Manga.containsSearchText(text: String): Boolean {
+		if (title.contains(text, ignoreCase = true)) return true
+		if (altTitles.any { it.contains(text, ignoreCase = true) }) return true
+		if (authors.any { it.contains(text, ignoreCase = true) }) return true
+		return false
 	}
 
 	private fun matchesTitles(a: String?, b: String?, threshold: Float): Boolean {
@@ -138,7 +143,6 @@ class SearchV2Helper @AssistedInject constructor(
 
 	@AssistedFactory
 	interface Factory {
-
 		fun create(source: MangaSource): SearchV2Helper
 	}
 }
