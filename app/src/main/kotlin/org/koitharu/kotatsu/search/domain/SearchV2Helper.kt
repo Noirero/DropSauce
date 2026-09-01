@@ -96,7 +96,7 @@ class SearchV2Helper @AssistedInject constructor(
 			retainAll { manga -> manga.containsSearchText(phrase) }
 		}
 		if (parsed.excludes.isNotEmpty()) {
-			removeAll { manga -> parsed.excludes.any(manga::containsSearchText) }
+			removeAll { manga -> parsed.excludes.any { excluded -> manga.containsSearchText(excluded) } }
 		}
 	}
 
