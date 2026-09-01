@@ -1,31 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<FrameLayout
 	xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto"
 	xmlns:tools="http://schemas.android.com/tools"
 	android:layout_width="match_parent"
-	android:layout_height="match_parent"
-	android:orientation="vertical">
+	android:layout_height="match_parent">
 
-	<com.google.android.material.tabs.TabLayout
-		android:id="@+id/tabs"
-		android:layout_width="match_parent"
-		android:layout_height="wrap_content"
-		android:background="@null"
-		app:tabGravity="start"
-		app:tabMode="scrollable" />
-
-	<androidx.viewpager2.widget.ViewPager2
-		android:id="@+id/pager"
+	<LinearLayout
 		android:layout_width="match_parent"
 		android:layout_height="match_parent"
-		tools:visibility="gone" />
+		android:orientation="vertical">
 
-	<ViewStub
-		android:id="@+id/stub_empty"
-		android:layout_width="match_parent"
-		android:layout_height="match_parent"
-		android:layout="@layout/item_empty_state"
-		tools:visibility="visible" />
+		<com.google.android.material.tabs.TabLayout
+			android:id="@+id/tabs"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:background="@null"
+			app:tabGravity="start"
+			app:tabMode="scrollable" />
 
-</LinearLayout>
+		<androidx.viewpager2.widget.ViewPager2
+			android:id="@+id/pager"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			tools:visibility="gone" />
+
+		<ViewStub
+			android:id="@+id/stub_empty"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			android:layout="@layout/item_empty_state"
+			tools:visibility="visible" />
+
+	</LinearLayout>
+
+	<com.google.android.material.button.MaterialButton
+		android:id="@+id/button_content_type"
+		style="?attr/materialButtonStyle"
+		android:layout_width="wrap_content"
+		android:layout_height="48dp"
+		android:layout_gravity="bottom|end"
+		android:layout_marginEnd="20dp"
+		android:layout_marginBottom="92dp"
+		android:minWidth="0dp"
+		android:paddingHorizontal="18dp"
+		android:text="Manga  ^"
+		android:textAllCaps="false"
+		android:textColor="?attr/colorOnSurface"
+		app:backgroundTint="?attr/colorSurfaceContainerHigh"
+		app:cornerRadius="24dp"
+		app:elevation="3dp"
+		tools:ignore="HardcodedText" />
+
+</FrameLayout>
