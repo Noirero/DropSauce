@@ -87,6 +87,8 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		binding.pager.offscreenPageLimit = adapter.itemCount
 		binding.pager.recyclerView?.isNestedScrollingEnabled = false
 		binding.pager.adapter = adapter
+		// Keep tabs clickable, but reserve horizontal swipes for chapter item actions.
+		binding.pager.isUserInputEnabled = false
 		binding.pager.doOnPageChanged(::onPageChanged)
 		TabLayoutMediator(binding.tabs, binding.pager, adapter).attach()
 		binding.tabs.addOnTabSelectedListener(this)
@@ -229,7 +231,8 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 
 	private fun adjustLockState() {
 		viewBinding?.run {
-			pager.isUserInputEnabled = !isLocked
+			// Never re-enable ViewPager swipe navigation after selection/action mode.
+			pager.isUserInputEnabled = false
 			tabs.visibility = when {
 				(pager.adapter?.itemCount ?: 0) <= 1 && !keepTabsVisible -> View.GONE
 				isLocked -> View.INVISIBLE
