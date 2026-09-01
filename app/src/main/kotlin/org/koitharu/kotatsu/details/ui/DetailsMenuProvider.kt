@@ -66,7 +66,17 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_online).isVisible = viewModel.remoteManga.value != null
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
 		menu.findItem(R.id.action_note).isVisible = manga != null && onNoteClick != null
-		menu.findItem(R.id.action_incognito).isVisible = manga != null
+
+		// Preserve the exact availability rules from the old Read FAB submenu. Incognito used to be
+		// offered only while the read action itself was ready and only when the current reading mode
+		// was not already incognito.
+		val historyInfo = viewModel.historyInfo.value
+		val isChaptersLoading = viewModel.isLoading.value &&
+			(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+		val isReadActionReady = !isChaptersLoading && historyInfo.isValid
+		menu.findItem(R.id.action_incognito).isVisible =
+			manga != null && isReadActionReady && !historyInfo.isIncognitoMode
+
 		// Novels and local books only — there is nothing to put in an epub for an image manga.
 		menu.findItem(R.id.action_export_epub).isVisible = manga?.isEpub == true
 	}
@@ -124,10 +134,20 @@ class DetailsMenuProvider(
 			}
 
 			R.id.action_incognito -> {
-				if (viewModel.historyInfo.value.isChapterMissing) {
+				// Re-check the old FAB's availability conditions at click time as well. This protects
+				// against a stale overflow menu if loading/incognito state changes while it is open.
+				val historyInfo = viewModel.historyInfo.value
+				val isChaptersLoading = viewModel.isLoading.value &&
+					(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+				if (historyInfo.isIncognitoMode || isChaptersLoading || !historyInfo.isValid) {
+					return true
+				}
+				if (historyInfo.isChapterMissing) {
 					Snackbar.make(snackbarHost, R.string.chapter_is_missing, Snackbar.LENGTH_SHORT).show()
 					return true
 				}
+				// This is the same ReaderIntent path the old Read FAB submenu used: same manga,
+				// selected branch and EXTRA_INCOGNITO flag, followed by the same confirmation toast.
 				val readerIntent = ReaderIntent.Builder(activity)
 					.manga(manga)
 					.branch(viewModel.selectedBranchValue)
