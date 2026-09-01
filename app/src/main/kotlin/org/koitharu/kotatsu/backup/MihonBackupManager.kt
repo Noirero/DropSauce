@@ -508,10 +508,10 @@ class MihonBackupManager @Inject constructor(
             id = remoteEntryId,
             mangaId = mangaId,
             targetId = targetId,
-            status = decodeTrackingStatus(tracking.status),
+            status = decodeTrackingStatus(tracking.syncId, tracking.status),
             chapter = tracking.lastChapterRead.toInt().coerceAtLeast(0),
             comment = null,
-            rating = tracking.score,
+            rating = decodeTrackingRating(tracking.syncId, tracking.score),
           )
         }
       } else {
@@ -708,13 +708,15 @@ class MihonBackupManager @Inject constructor(
     )
     extensionStoreRegistry.importStores(
       repos.map { repo ->
-        val url = normalizeExtensionStoreUrl(repo.baseUrl)
+        val url = normalizeExtensionStoreUrl(repo.indexUrl)
         ExtensionStoreRecord(
           id = stableExtensionStoreId(url),
           indexUrl = url,
-          name = repo.name.ifBlank { repo.baseUrl },
-          shortName = repo.shortName,
-          fingerprint = repo.signingKeyFingerprint.takeIf(String::isNotBlank),
+          name = repo.name.ifBlank { repo.indexUrl },
+          shortName = repo.badgeLabel,
+          fingerprint = repo.signingKey.takeIf(String::isNotBlank),
+          website = repo.contactWebsite.takeIf(String::isNotBlank),
+          discord = repo.contactDiscord?.takeIf(String::isNotBlank),
         )
       },
     )
@@ -809,16 +811,65 @@ class MihonBackupManager @Inject constructor(
     else -> null
   }
 
-  private fun decodeTrackingStatus(status: Int): String? {
-    return when (status) {
-      1 -> "planned"
-      2 -> "reading"
-      3 -> "completed"
-      4 -> "on_hold"
-      5 -> "dropped"
-      6 -> "re_reading"
+  /** Mihon tracker status numbers are service-specific; they cannot be decoded as one shared enum. */
+  private fun decodeTrackingStatus(syncId: Int, status: Int): String? = when (syncId) {
+    1 -> when (status) { // MyAnimeList
+      1 -> "reading"
+      2 -> "completed"
+      3 -> "on_hold"
+      4 -> "dropped"
+      6 -> "plan_to_read"
+      7 -> "reading" // DropSauce MAL has no separate rereading state.
       else -> null
     }
+    2 -> when (status) { // AniList
+      1 -> "CURRENT"
+      2 -> "COMPLETED"
+      3 -> "PAUSED"
+      4 -> "DROPPED"
+      5 -> "PLANNING"
+      6 -> "REPEATING"
+      else -> null
+    }
+    3 -> when (status) { // Kitsu
+      1 -> "current"
+      2 -> "completed"
+      3 -> "on_hold"
+      4 -> "dropped"
+      5 -> "planned"
+      else -> null
+    }
+    4 -> when (status) { // Shikimori
+      1 -> "watching"
+      2 -> "completed"
+      3 -> "on_hold"
+      4 -> "dropped"
+      5 -> "planned"
+      6 -> "rewatching"
+      else -> null
+    }
+    11 -> when (status) { // MangaBaka
+      1 -> "reading"
+      2 -> "completed"
+      3 -> "paused"
+      4 -> "dropped"
+      5 -> "plan_to_read"
+      6 -> "rereading"
+      7 -> "plan_to_read" // "Considering" has no DropSauce equivalent.
+      else -> null
+    }
+    else -> null
+  }
+
+  /** DropSauce stores scrobbling ratings normalized to 0..1; Mihon stores each tracker's native scale. */
+  private fun decodeTrackingRating(syncId: Int, score: Float): Float {
+    val normalized = when (syncId) {
+      1, 4 -> score / 10f // MAL, Shikimori
+      2, 11 -> score / 100f // AniList, MangaBaka
+      3 -> score / 20f // Kitsu
+      else -> score
+    }
+    return normalized.coerceIn(0f, 1f)
   }
 
   private fun computeHistoryPercent(

@@ -28,6 +28,7 @@ data class MihonBackupManga(
     @ProtoNumber(8) var status: Int = 0,
     @ProtoNumber(9) var thumbnailUrl: String? = null,
     @ProtoNumber(13) var dateAdded: Long = 0,
+    @ProtoNumber(14) var viewer: Int = 0,
     @ProtoNumber(16) var chapters: List<MihonBackupChapter> = emptyList(),
     @ProtoNumber(17) var categories: List<Long> = emptyList(),
     @ProtoNumber(18) var tracking: List<MihonBackupTracking> = emptyList(),
@@ -42,6 +43,7 @@ data class MihonBackupManga(
     @ProtoNumber(109) var version: Long = 0,
     @ProtoNumber(110) var notes: String = "",
     @ProtoNumber(111) var initialized: Boolean = false,
+    @ProtoNumber(112) var memo: ByteArray = byteArrayOf(),
 )
 
 @Serializable
@@ -59,6 +61,7 @@ data class MihonBackupChapter(
     @ProtoNumber(10) var sourceOrder: Long = 0,
     @ProtoNumber(11) var lastModifiedAt: Long = 0,
     @ProtoNumber(12) var version: Long = 0,
+    @ProtoNumber(13) var memo: ByteArray = byteArrayOf(),
 )
 
 @Serializable
@@ -145,13 +148,20 @@ data class MihonBooleanPreferenceValue(val value: Boolean) : MihonPreferenceValu
 @SerialName("eu.kanade.tachiyomi.data.backup.models.StringSetPreferenceValue")
 data class MihonStringSetPreferenceValue(val value: Set<String>) : MihonPreferenceValue()
 
+/**
+ * Mihon renamed BackupExtensionRepos to BackupExtensionStore in 2026. Field numbers 1..5 were kept
+ * wire-compatible with the old model, so this single model can decode both Tachiyomi/older Mihon
+ * repositories and current Mihon extension stores while also accepting the new fields 6..8.
+ */
 @Serializable
-@SerialName("eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos")
+@SerialName("eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore")
 data class MihonBackupExtensionRepo(
-    @ProtoNumber(1) var baseUrl: String,
+    @ProtoNumber(1) var indexUrl: String,
     @ProtoNumber(2) var name: String,
-    @ProtoNumber(3) var shortName: String?,
-    @ProtoNumber(4) var website: String,
-    @ProtoNumber(5) var signingKeyFingerprint: String,
+    @ProtoNumber(3) var badgeLabel: String? = null,
+    @ProtoNumber(4) var contactWebsite: String = "",
+    @ProtoNumber(5) var signingKey: String = "",
+    @ProtoNumber(6) var contactDiscord: String? = null,
+    @ProtoNumber(7) var isLegacy: Boolean? = null,
+    @ProtoNumber(8) var extensionListUrl: String? = null,
 )
-
