@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import org.koitharu.kotatsu.core.model.chaptersCount
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
@@ -54,9 +53,8 @@ class AlternativesUseCase @Inject constructor(
 			return emptyFlow()
 		}
 
-		// Kahon uses five parallel migration sources. Keep source searches responsive while also
-		// capping detail requests separately so a source returning many matches cannot flood the
-		// network/client and make the screen feel slower instead of faster.
+		// Keep source and detail requests bounded while allowing multiple genuinely different
+		// matches from the same extension to survive (for example Chinese and Korean originals).
 		val sourceSemaphore = Semaphore(MAX_PARALLEL_SOURCES)
 		val detailsSemaphore = Semaphore(MAX_PARALLEL_DETAILS)
 		return channelFlow {
@@ -69,21 +67,20 @@ class AlternativesUseCase @Inject constructor(
 						}
 					}.getOrNull()
 
-					// SearchV2Helper already sorts by title relevance. Inspect only the strongest matches
-					// instead of fetching details for every result a source returns. This keeps the existing
-					// "prefer the branch with more chapters" behaviour without generating dozens of detail
-					// requests for weakly related titles.
+					// SearchV2Helper already sorts by title relevance. Inspect only the strongest matches.
+					// Dedupe only exact source-item/title duplicates: entries with the same id but a different
+					// displayed/original title remain separate so language variants are not collapsed.
 					val candidates = list
 						?.asSequence()
 						?.filter { it.id != manga.id }
-						?.distinctBy { it.id }
+						?.distinctBy { it.dedupeKey() }
 						?.take(MAX_DETAIL_CANDIDATES)
 						?.toList()
 					if (candidates.isNullOrEmpty()) {
 						return@launch
 					}
 
-					val best = candidates.map { candidate ->
+					val detailed = candidates.map { candidate ->
 						async {
 							detailsSemaphore.withPermit {
 								runCatchingCancellable {
@@ -91,14 +88,17 @@ class AlternativesUseCase @Inject constructor(
 								}.getOrDefault(candidate)
 							}
 						}
-					}.awaitAll().maxByOrNull { it.chaptersCount() }
-					if (best != null) {
-						send(best)
+					}.awaitAll().distinctBy { it.dedupeKey() }
+
+					for (result in detailed) {
+						send(result)
 					}
 				}
 			}
 		}
 	}
+
+	private fun Manga.dedupeKey(): Pair<Long, String> = id to title.trim().lowercase()
 
 	private fun getSources(scope: AlternativeSearchScope): List<MangaSource> = when (scope) {
 		AlternativeSearchScope.PINNED -> sourcesRepository.getPinnedSources().toList()
