@@ -91,18 +91,18 @@
 		app:showAsAction="never" />
 
 	<item
-		android:id="@+id/action_incognito"
-		android:icon="@drawable/ic_incognito"
-		android:orderInCategory="55"
-		android:title="@string/incognito_mode"
-		android:visible="false"
-		app:showAsAction="never" />
-
-	<item
 		android:id="@+id/action_export_epub"
 		android:icon="@drawable/ic_export_notes"
 		android:orderInCategory="60"
 		android:title="@string/export_epub"
+		android:visible="false"
+		app:showAsAction="never" />
+
+	<item
+		android:id="@+id/action_incognito"
+		android:icon="@drawable/ic_incognito"
+		android:orderInCategory="70"
+		android:title="@string/incognito_mode"
 		android:visible="false"
 		app:showAsAction="never" />
 
