@@ -46,6 +46,12 @@ fun chapterListItemAD(
 			setOnMenuItemClickListener { menuItem ->
 				if (menuItem.itemId == R.id.action_delete) {
 					onDeleteClick(item)
+					// Reflect the requested deletion immediately instead of keeping a stale
+					// downloaded icon until the chapter list is manually refreshed. The
+					// storage-change event will still reconcile the real state afterwards.
+					anchor.isVisible = false
+					binding.progressBarDownload.isVisible = false
+					binding.imageButtonDownload.isVisible = true
 					true
 				} else {
 					false
