@@ -34,9 +34,9 @@
 					android:id="@+id/button_content_manga"
 					style="?attr/materialButtonOutlinedStyle"
 					android:layout_width="0dp"
-					android:layout_height="40dp"
+					android:layout_height="wrap_content"
 					android:layout_weight="1"
-					android:minHeight="0dp"
+					android:minHeight="48dp"
 					android:text="@string/content_type_manga"
 					android:textAllCaps="false" />
 
@@ -44,9 +44,9 @@
 					android:id="@+id/button_content_novel"
 					style="?attr/materialButtonOutlinedStyle"
 					android:layout_width="0dp"
-					android:layout_height="40dp"
+					android:layout_height="wrap_content"
 					android:layout_weight="1"
-					android:minHeight="0dp"
+					android:minHeight="48dp"
 					android:text="@string/content_type_novel"
 					android:textAllCaps="false" />
 
