@@ -297,8 +297,21 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private fun createInlineSearchEdit(searchBar: SearchBar): AppCompatEditText? {
 		val parent = searchBar.parent as? LinearLayout ?: return null
 		val density = resources.displayMetrics.density
+		val searchBarParams = searchBar.layoutParams as? LinearLayout.LayoutParams
 		val edit = AppCompatEditText(requireContext()).apply {
-			layoutParams = LinearLayout.LayoutParams(searchBar.layoutParams)
+			layoutParams = LinearLayout.LayoutParams(
+				0,
+				searchBarParams?.height ?: LinearLayout.LayoutParams.WRAP_CONTENT,
+				1f,
+			).apply {
+				if (searchBarParams != null) {
+					marginStart = searchBarParams.marginStart
+					marginEnd = searchBarParams.marginEnd
+					topMargin = searchBarParams.topMargin
+					bottomMargin = searchBarParams.bottomMargin
+					gravity = searchBarParams.gravity
+				}
+			}
 			background = searchBar.background?.constantState?.newDrawable(resources)?.mutate()
 			hint = if (contentTypeStore.selectedType.value == FavouriteContentType.NOVEL) {
 				getString(R.string.search_novel)
