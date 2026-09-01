@@ -15,10 +15,12 @@ import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
+import org.koitharu.kotatsu.search.domain.LANGUAGE_LOCAL
 import org.koitharu.kotatsu.search.domain.SearchKind
 import org.koitharu.kotatsu.search.domain.SearchSourceMode
 import org.koitharu.kotatsu.search.domain.SearchV2Helper
 import org.koitharu.kotatsu.search.domain.matchesPreferredLanguage
+import org.koitharu.kotatsu.search.domain.searchLanguageCode
 import javax.inject.Inject
 
 private const val MAX_PARALLEL_SOURCES = 5
@@ -44,6 +46,18 @@ class AlternativesUseCase @Inject constructor(
 		SearchSourceMode.PINNED_ONLY
 	} else {
 		SearchSourceMode.ALL_SOURCES
+	}
+
+	fun getAvailableLanguages(manga: Manga): List<String> {
+		val isNovel = manga.source.isNovelSource
+		return sourcesRepository.getEnabledSources()
+			.asSequence()
+			.filter { it != manga.source && it.isNovelSource == isNovel }
+			.map { it.searchLanguageCode() }
+			.filter { it != LANGUAGE_LOCAL }
+			.distinct()
+			.sorted()
+			.toList()
 	}
 
 	suspend fun getSources(
