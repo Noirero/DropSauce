@@ -26,7 +26,6 @@ import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
-import org.koitharu.kotatsu.favourites.domain.FavoriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
