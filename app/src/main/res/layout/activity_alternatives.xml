@@ -29,6 +29,38 @@
 
 		</com.google.android.material.appbar.CollapsingToolbarLayout>
 
+		<com.google.android.material.button.MaterialButtonToggleGroup
+			android:id="@+id/toggle_search_scope"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:layout_marginStart="16dp"
+			android:layout_marginEnd="16dp"
+			android:layout_marginBottom="8dp"
+			app:selectionRequired="true"
+			app:singleSelection="true">
+
+			<com.google.android.material.button.MaterialButton
+				android:id="@+id/button_scope_pinned"
+				style="?attr/materialButtonOutlinedStyle"
+				android:layout_width="0dp"
+				android:layout_height="40dp"
+				android:layout_weight="1"
+				android:minHeight="0dp"
+				android:text="@string/alternative_search_scope_pinned"
+				android:textAllCaps="false" />
+
+			<com.google.android.material.button.MaterialButton
+				android:id="@+id/button_scope_all"
+				style="?attr/materialButtonOutlinedStyle"
+				android:layout_width="0dp"
+				android:layout_height="40dp"
+				android:layout_weight="1"
+				android:minHeight="0dp"
+				android:text="@string/alternative_search_scope_all"
+				android:textAllCaps="false" />
+
+		</com.google.android.material.button.MaterialButtonToggleGroup>
+
 	</com.google.android.material.appbar.AppBarLayout>
 
 	<org.koitharu.kotatsu.core.ui.list.fastscroll.FastScrollRecyclerView

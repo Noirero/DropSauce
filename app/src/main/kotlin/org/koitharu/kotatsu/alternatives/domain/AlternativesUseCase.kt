@@ -23,17 +23,33 @@ private const val MAX_PARALLEL_SOURCES = 5
 private const val MAX_PARALLEL_DETAILS = 5
 private const val MAX_DETAIL_CANDIDATES = 3
 
+enum class AlternativeSearchScope {
+	PINNED,
+	ALL_INSTALLED,
+}
+
 class AlternativesUseCase @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
 	private val searchHelperFactory: SearchV2Helper.Factory,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 ) {
 
-	suspend operator fun invoke(manga: Manga): Flow<Manga> {
+	fun hasPinnedSources(): Boolean = sourcesRepository.getPinnedSources().isNotEmpty()
+
+	fun defaultScope(): AlternativeSearchScope = if (hasPinnedSources()) {
+		AlternativeSearchScope.PINNED
+	} else {
+		AlternativeSearchScope.ALL_INSTALLED
+	}
+
+	suspend operator fun invoke(
+		manga: Manga,
+		scope: AlternativeSearchScope = defaultScope(),
+	): Flow<Manga> {
 		// Same kind only. A manga migrated onto a novel source (or the reverse) lands in the wrong
 		// reader with content it cannot load, so those are never offered as alternatives.
 		val isNovel = manga.source.isNovelSource
-		val sources = getSources().filter { it != manga.source && it.isNovelSource == isNovel }
+		val sources = getSources(scope).filter { it != manga.source && it.isNovelSource == isNovel }
 		if (sources.isEmpty()) {
 			return emptyFlow()
 		}
@@ -84,16 +100,8 @@ class AlternativesUseCase @Inject constructor(
 		}
 	}
 
-	private suspend fun getSources(): List<MangaSource> {
-		// Follow Kahon's migration-source default: when the user has pinned sources, search only
-		// those sources. If there are no pins, fall back to every enabled source. The repository
-		// builds the pinned set from the persisted pin order, so converting it to a list keeps that
-		// order for the alternative search as well.
-		val pinnedSources = sourcesRepository.getPinnedSources()
-		return if (pinnedSources.isNotEmpty()) {
-			pinnedSources.toList()
-		} else {
-			sourcesRepository.getEnabledSources()
-		}
+	private fun getSources(scope: AlternativeSearchScope): List<MangaSource> = when (scope) {
+		AlternativeSearchScope.PINNED -> sourcesRepository.getPinnedSources().toList()
+		AlternativeSearchScope.ALL_INSTALLED -> sourcesRepository.getEnabledSources()
 	}
 }

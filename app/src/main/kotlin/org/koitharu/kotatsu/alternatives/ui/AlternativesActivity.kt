@@ -9,6 +9,7 @@ import androidx.core.view.updatePadding
 import coil3.ImageLoader
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.alternatives.domain.AlternativeSearchScope
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.nav.router
@@ -57,6 +58,28 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 			setHasFixedSize(true)
 			addItemDecoration(TypedListSpacingDecoration(context, addHorizontalPadding = false))
 			adapter = listAdapter
+		}
+
+		viewBinding.buttonScopePinned.isEnabled = viewModel.hasPinnedSources
+		viewBinding.toggleSearchScope.addOnButtonCheckedListener { _, checkedId, isChecked ->
+			if (!isChecked) return@addOnButtonCheckedListener
+			viewModel.setSearchScope(
+				if (checkedId == R.id.button_scope_pinned) {
+					AlternativeSearchScope.PINNED
+				} else {
+					AlternativeSearchScope.ALL_INSTALLED
+				},
+			)
+		}
+		viewModel.searchScope.observe(this) { scope ->
+			val checkedId = if (scope == AlternativeSearchScope.PINNED) {
+				R.id.button_scope_pinned
+			} else {
+				R.id.button_scope_all
+			}
+			if (viewBinding.toggleSearchScope.checkedButtonId != checkedId) {
+				viewBinding.toggleSearchScope.check(checkedId)
+			}
 		}
 
 		viewModel.onError.observeEvent(this, SnackbarErrorObserver(viewBinding.recyclerView, null))

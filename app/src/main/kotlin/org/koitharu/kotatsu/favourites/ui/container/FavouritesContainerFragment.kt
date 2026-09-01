@@ -12,7 +12,6 @@ import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.AppCompatEditText
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -73,7 +72,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	override fun onViewBindingCreated(binding: FragmentFavouritesContainerBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
-		val shouldRestoreInlineSearch = savedInstanceState?.getBoolean(STATE_INLINE_SEARCH_ACTIVE) == true
+		val shouldRestoreInlineSearch = savedInstanceState?.getBoolean(STATE_INLINE_SEARCH_ACTIVE)
+			?: searchSessionActive.value
 		savedInstanceState?.getString(STATE_SEARCH_QUERY)?.let { searchQuery.value = it }
 		searchScopeActive.value = !isHidden
 		val pagerAdapter = FavouritesContainerAdapter(this)
@@ -86,7 +86,18 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			FavouritesTabConfigurationStrategy(pagerAdapter, viewModel, router),
 		).attach()
 		binding.stubEmpty.setOnInflateListener(this)
-		binding.buttonContentType.setOnClickListener(::showContentTypeMenu)
+		binding.toggleContentType.addOnButtonCheckedListener { _, checkedId, isChecked ->
+			if (!isChecked) return@addOnButtonCheckedListener
+			val type = when (checkedId) {
+				R.id.button_content_novel -> FavouriteContentType.NOVEL
+				else -> FavouriteContentType.MANGA
+			}
+			if (contentTypeStore.selectedType.value != type) {
+				contentTypeStore.setSelectedType(type)
+				binding.pager.setCurrentItem(0, false)
+			}
+		}
+		onContentTypeChanged(contentTypeStore.selectedType.value)
 		if (!isHidden) {
 			attachTabsToAppBar()
 			installFavouriteSearchHandler()
@@ -108,13 +119,13 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	override fun onSaveInstanceState(outState: Bundle) {
-		outState.putBoolean(STATE_INLINE_SEARCH_ACTIVE, inlineSearchActive)
+		outState.putBoolean(STATE_INLINE_SEARCH_ACTIVE, searchSessionActive.value)
 		outState.putString(STATE_SEARCH_QUERY, searchQuery.value)
 		super.onSaveInstanceState(outState)
 	}
 
 	override fun onDestroyView() {
-		exitInlineSearch(clearQuery = false)
+		exitInlineSearch(clearQuery = false, endSession = false)
 		restoreGlobalSearchHandler()
 		inlineSearchEdit?.let { edit -> (edit.parent as? ViewGroup)?.removeView(edit) }
 		inlineSearchEdit = null
@@ -125,25 +136,20 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		super.onDestroyView()
 	}
 
-	override fun onDestroy() {
-		if (activity?.isChangingConfigurations != true) {
-			searchQuery.value = ""
-			searchScopeActive.value = false
-		}
-		super.onDestroy()
-	}
-
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat = insets
 
 	override fun onHiddenChanged(hidden: Boolean) {
 		super.onHiddenChanged(hidden)
 		searchScopeActive.value = !hidden
 		if (hidden) {
-			exitInlineSearch()
+			exitInlineSearch(clearQuery = false, endSession = false)
 			restoreGlobalSearchHandler()
 		} else {
 			installFavouriteSearchHandler()
 			onContentTypeChanged(contentTypeStore.selectedType.value)
+			if (searchSessionActive.value) {
+				enterInlineSearch()
+			}
 			for (page in childFragmentManager.fragments) {
 				val recyclerView = (page as? RecyclerViewOwner)?.recyclerView ?: continue
 				when (val lm = recyclerView.layoutManager) {
@@ -158,7 +164,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = false
 			tabs.setTabsEnabled(false)
-			buttonContentType.isEnabled = false
+			buttonContentManga.isEnabled = false
+			buttonContentNovel.isEnabled = false
 		}
 	}
 
@@ -166,7 +173,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = true
 			tabs.setTabsEnabled(true)
-			buttonContentType.isEnabled = true
+			buttonContentManga.isEnabled = true
+			buttonContentNovel.isEnabled = true
 		}
 	}
 
@@ -186,31 +194,23 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		}
 	}
 
-	private fun showContentTypeMenu(anchor: View) {
-		PopupMenu(requireContext(), anchor).apply {
-			menu.add(0, MENU_MANGA, 0, getString(R.string.content_type_manga))
-			menu.add(0, MENU_NOVELS, 1, "Novels")
-			setOnMenuItemClickListener { item ->
-				val type = when (item.itemId) {
-					MENU_MANGA -> FavouriteContentType.MANGA
-					MENU_NOVELS -> FavouriteContentType.NOVEL
-					else -> return@setOnMenuItemClickListener false
-				}
-				contentTypeStore.setSelectedType(type)
-				viewBinding?.pager?.setCurrentItem(0, false)
-				true
-			}
-			show()
-		}
-	}
-
 	private fun onContentTypeChanged(type: FavouriteContentType) {
-		val label = if (type == FavouriteContentType.NOVEL) "Novels" else getString(R.string.content_type_manga)
-		viewBinding?.buttonContentType?.text = "$label  ▾"
-		inlineSearchEdit?.hint = if (type == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
+		val checkedId = if (type == FavouriteContentType.NOVEL) {
+			R.id.button_content_novel
+		} else {
+			R.id.button_content_manga
+		}
+		viewBinding?.toggleContentType?.let { toggle ->
+			if (toggle.checkedButtonId != checkedId) toggle.check(checkedId)
+		}
+		val hint = if (type == FavouriteContentType.NOVEL) {
+			getString(R.string.search_novel)
+		} else {
+			getString(R.string.search_manga)
+		}
+		inlineSearchEdit?.hint = hint
 		if (!isHidden) {
-			activity?.findViewById<SearchBar>(R.id.search_bar)?.hint =
-				if (type == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
+			activity?.findViewById<SearchBar>(R.id.search_bar)?.hint = hint
 		}
 	}
 
@@ -219,7 +219,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			pager.isGone = isEmpty
 			tabs.isGone = isEmpty
 			stubEmpty.isVisible = isEmpty
-			buttonContentType.isVisible = true
+			toggleContentType.isVisible = true
 		}
 	}
 
@@ -247,6 +247,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		val host = activity ?: return
 		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
 		val edit = inlineSearchEdit ?: createInlineSearchEdit(searchBar) ?: return
+		searchSessionActive.value = true
 		inlineSearchActive = true
 		searchBar.isGone = true
 		edit.isVisible = true
@@ -264,15 +265,18 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		}
 	}
 
-	private fun exitInlineSearch(clearQuery: Boolean = true) {
-		val host = activity ?: return
-		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
-		val edit = inlineSearchEdit
+	private fun exitInlineSearch(clearQuery: Boolean = true, endSession: Boolean = true) {
 		inlineSearchActive = false
 		searchBackCallback?.isEnabled = false
+		if (endSession) {
+			searchSessionActive.value = false
+		}
 		if (clearQuery) {
 			searchQuery.value = ""
 		}
+		val host = activity ?: return
+		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
+		val edit = inlineSearchEdit
 		edit?.apply {
 			if (clearQuery) setText("")
 			clearFocus()
@@ -296,7 +300,11 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		val edit = AppCompatEditText(requireContext()).apply {
 			layoutParams = LinearLayout.LayoutParams(searchBar.layoutParams)
 			background = searchBar.background?.constantState?.newDrawable(resources)?.mutate()
-			hint = if (contentTypeStore.selectedType.value == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
+			hint = if (contentTypeStore.selectedType.value == FavouriteContentType.NOVEL) {
+				getString(R.string.search_novel)
+			} else {
+				getString(R.string.search_manga)
+			}
 			setTextColor(searchBar.textView.currentTextColor)
 			setHintTextColor(searchBar.textView.currentHintTextColor)
 			textSize = searchBar.textView.textSize / resources.displayMetrics.scaledDensity
@@ -343,11 +351,10 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	companion object {
-		private const val MENU_MANGA = 1001
-		private const val MENU_NOVELS = 1002
 		private const val STATE_INLINE_SEARCH_ACTIVE = "favourites_inline_search_active"
 		private const val STATE_SEARCH_QUERY = "favourites_search_query"
 		internal val searchScopeActive = MutableStateFlow(false)
+		internal val searchSessionActive = MutableStateFlow(false)
 		internal val searchQuery = MutableStateFlow("")
 	}
 }

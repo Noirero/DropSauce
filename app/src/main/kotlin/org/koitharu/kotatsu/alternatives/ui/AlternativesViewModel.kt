@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.alternatives.domain.AlternativeSearchScope
 import org.koitharu.kotatsu.alternatives.domain.AlternativesUseCase
 import org.koitharu.kotatsu.alternatives.domain.MigrateUseCase
 import org.koitharu.kotatsu.core.model.chaptersCount
@@ -38,7 +39,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AlternativesViewModel @Inject constructor(
-	savedStateHandle: SavedStateHandle,
+	private val savedStateHandle: SavedStateHandle,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val alternativesUseCase: AlternativesUseCase,
 	private val migrateUseCase: MigrateUseCase,
@@ -46,8 +47,16 @@ class AlternativesViewModel @Inject constructor(
 ) : BaseViewModel() {
 
 	val manga = savedStateHandle.require<ParcelableManga>(AppRouter.KEY_MANGA).manga
+	val hasPinnedSources: Boolean = alternativesUseCase.hasPinnedSources()
 
 	private val results = MutableStateFlow<List<MangaAlternativeModel>>(emptyList())
+	private val selectedScope = MutableStateFlow(
+		savedStateHandle.get<String>(STATE_SEARCH_SCOPE)
+			?.let { stored -> AlternativeSearchScope.values().firstOrNull { it.name == stored } }
+			?.takeIf { it != AlternativeSearchScope.PINNED || hasPinnedSources }
+			?: alternativesUseCase.defaultScope(),
+	)
+	val searchScope: StateFlow<AlternativeSearchScope> = selectedScope
 
 	private var migrationJob: Job? = null
 	private var searchJob: Job? = null
@@ -90,6 +99,19 @@ class AlternativesViewModel @Inject constructor(
 		doSearch()
 	}
 
+	fun setSearchScope(scope: AlternativeSearchScope) {
+		val resolved = if (scope == AlternativeSearchScope.PINNED && !hasPinnedSources) {
+			AlternativeSearchScope.ALL_INSTALLED
+		} else {
+			scope
+		}
+		if (selectedScope.value == resolved) return
+		savedStateHandle[STATE_SEARCH_SCOPE] = resolved.name
+		selectedScope.value = resolved
+		results.value = emptyList()
+		doSearch()
+	}
+
 	fun migrate(target: Manga) {
 		if (migrationJob?.isActive == true) {
 			return
@@ -106,7 +128,7 @@ class AlternativesViewModel @Inject constructor(
 			prevJob?.cancelAndJoin()
 			val ref = mangaDetails.getOrDefault(manga)
 			val refCount = ref.chaptersCount()
-			alternativesUseCase.invoke(ref)
+			alternativesUseCase.invoke(ref, selectedScope.value)
 				.collect {
 					val model = MangaAlternativeModel(
 						mangaModel = mangaListMapper.toListModel(it, ListMode.GRID) as MangaGridModel,
@@ -115,5 +137,9 @@ class AlternativesViewModel @Inject constructor(
 					results.append(model)
 				}
 		}
+	}
+
+	private companion object {
+		const val STATE_SEARCH_SCOPE = "alternative_search_scope"
 	}
 }
