@@ -6,9 +6,6 @@ name: Beta Build
 # alongside DropSauce Noirero main. All Beta builds use the repository's permanent signing
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
-  push:
-    branches:
-      - beta
   workflow_dispatch:
 
 permissions:
