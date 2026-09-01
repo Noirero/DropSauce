@@ -15,6 +15,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.ui.categories.edit.FavouritesCategoryEditActivity.Companion.NO_ID
 import org.koitharu.kotatsu.list.domain.ListSortOrder
@@ -25,6 +26,7 @@ class FavouritesCategoryEditViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	private val repository: FavouritesRepository,
 	private val settings: AppSettings,
+	private val contentTypeStore: FavouriteContentTypeStore,
 ) : BaseViewModel() {
 
 	private val categoryId = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -56,13 +58,14 @@ class FavouritesCategoryEditViewModel @Inject constructor(
 		launchLoadingJob(Dispatchers.Default) {
 			check(title.isNotEmpty())
 			if (categoryId == NO_ID) {
-				repository.createCategory(
+				val category = repository.createCategory(
 					title = title,
 					sortOrder = sortOrder,
 					isTrackerEnabled = isTrackerEnabled,
 					isNewChaptersDownloadEnabled = isNewChaptersDownloadEnabled,
 					isVisibleOnShelf = isVisibleOnShelf,
 				)
+				contentTypeStore.setCategoryType(category.id, contentTypeStore.selectedType.value)
 			} else {
 				repository.updateCategory(
 					id = categoryId,

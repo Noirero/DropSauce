@@ -181,6 +181,30 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		get() = prefs.getBoolean(KEY_TITLE_TAP_TO_READ, false)
 		set(value) = prefs.edit { putBoolean(KEY_TITLE_TAP_TO_READ, value) }
 
+	fun getChapterReadOverrides(mangaId: Long): Map<Long, Boolean> {
+		val key = "chapter_read_overrides_$mangaId"
+		return prefs.getStringSet(key, emptySet()).orEmpty().mapNotNull { entry ->
+			val separator = entry.lastIndexOf(':')
+			if (separator <= 0) return@mapNotNull null
+			val chapterId = entry.substring(0, separator).toLongOrNull() ?: return@mapNotNull null
+			val isRead = when (entry.substring(separator + 1)) {
+				"1" -> true
+				"0" -> false
+				else -> return@mapNotNull null
+			}
+			chapterId to isRead
+		}.toMap()
+	}
+
+	fun setChapterReadOverride(mangaId: Long, chapterId: Long, isRead: Boolean) {
+		val key = "chapter_read_overrides_$mangaId"
+		val prefix = "$chapterId:"
+		val values = prefs.getStringSet(key, emptySet()).orEmpty().toMutableSet()
+		values.removeAll { it.startsWith(prefix) }
+		values.add(prefix + if (isRead) "1" else "0")
+		prefs.edit { putStringSet(key, values) }
+	}
+
 	var isDuplicateCheckEnabled: Boolean
 		get() = prefs.getBoolean(KEY_CHECK_DUPLICATES, true)
 		set(value) = prefs.edit { putBoolean(KEY_CHECK_DUPLICATES, value) }

@@ -6,6 +6,7 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +21,7 @@ import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.nav.AppRouter
+import org.koitharu.kotatsu.core.nav.ReaderIntent
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
@@ -32,6 +34,7 @@ class DetailsMenuProvider(
 	private val viewModel: DetailsViewModel,
 	private val snackbarHost: View,
 	private val appShortcutManager: AppShortcutManager,
+	private val onNoteClick: (() -> Unit)? = null,
 ) : MenuProvider, ActivityResultCallback<ActivityResult> {
 
 	private val activityForResultLauncher = activity.registerForActivityResult(
@@ -62,6 +65,16 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_scrobbling).isVisible = viewModel.isScrobblingAvailable
 		menu.findItem(R.id.action_online).isVisible = viewModel.remoteManga.value != null
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
+		menu.findItem(R.id.action_note).isVisible = manga != null && onNoteClick != null
+
+		// Keep the same availability rules that the old Read FAB submenu used for incognito mode.
+		val historyInfo = viewModel.historyInfo.value
+		val isChaptersLoading = viewModel.isLoading.value &&
+			(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+		val isReadActionReady = !isChaptersLoading && historyInfo.isValid
+		menu.findItem(R.id.action_incognito).isVisible =
+			manga != null && isReadActionReady && !historyInfo.isIncognitoMode
+
 		// Novels and local books only — there is nothing to put in an epub for an image manga.
 		menu.findItem(R.id.action_export_epub).isVisible = manga?.isEpub == true
 	}
@@ -119,6 +132,27 @@ class DetailsMenuProvider(
 				}
 			}
 
+			R.id.action_incognito -> {
+				// Re-check availability at click time in case state changed while the menu was open.
+				val historyInfo = viewModel.historyInfo.value
+				val isChaptersLoading = viewModel.isLoading.value &&
+					(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+				if (historyInfo.isIncognitoMode || isChaptersLoading || !historyInfo.isValid) {
+					return true
+				}
+				if (historyInfo.isChapterMissing) {
+					Snackbar.make(snackbarHost, R.string.chapter_is_missing, Snackbar.LENGTH_SHORT).show()
+					return true
+				}
+				val readerIntent = ReaderIntent.Builder(activity)
+					.manga(manga)
+					.branch(viewModel.selectedBranchValue)
+					.incognito()
+					.build()
+				router.openReader(readerIntent)
+				Toast.makeText(activity, R.string.incognito_mode, Toast.LENGTH_SHORT).show()
+			}
+
 			R.id.action_export_epub -> {
 				if (viewModel.getLocalEpubFile() == null) {
 					Snackbar.make(snackbarHost, R.string.export_epub_nothing, Snackbar.LENGTH_LONG).show()
@@ -133,6 +167,10 @@ class DetailsMenuProvider(
 				val original = viewModel.getSourceMangaOrNull() ?: manga
 				val intent = AppRouter.overrideEditIntent(activity, original)
 				activityForResultLauncher.launch(intent)
+			}
+
+			R.id.action_note -> {
+				onNoteClick?.invoke() ?: return false
 			}
 
 			else -> return false

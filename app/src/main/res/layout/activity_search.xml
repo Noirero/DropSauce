@@ -13,9 +13,6 @@
 		app:elevation="0dp"
 		app:liftOnScroll="false">
 
-		<!-- The filter badge is attached with this FrameLayout as its custom parent, so it is drawn
-		     as the frame's foreground instead of inside the menu item's own ViewOverlay - the
-		     overlay clips to the icon's bounds and cuts the badge off. -->
 		<FrameLayout
 			android:id="@+id/toolbarContainer"
 			android:layout_width="match_parent"
@@ -33,6 +30,75 @@
 
 		</FrameLayout>
 
+		<HorizontalScrollView
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:scrollbars="none"
+			android:fillViewport="false">
+
+			<com.google.android.material.chip.ChipGroup
+				android:id="@+id/search_filter_chips"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:paddingStart="16dp"
+				android:paddingEnd="16dp"
+				android:paddingBottom="8dp"
+				app:singleLine="true">
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_search_mode"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="false"
+					android:text="@string/search_mode_all_sources" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_language"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="false"
+					android:text="@string/search_filter_language" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_has_results"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="true"
+					android:checked="true"
+					android:text="@string/search_filter_has_results" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_flat_view"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="true"
+					android:text="@string/search_filter_flat_view" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_hide_library"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="true"
+					android:text="@string/search_filter_hide_library" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_reset_filters"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="false"
+					android:text="@string/search_filter_reset" />
+
+			</com.google.android.material.chip.ChipGroup>
+
+		</HorizontalScrollView>
+
+		<com.google.android.material.progressindicator.LinearProgressIndicator
+			android:id="@+id/progress_search"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:visibility="gone"
+			app:trackThickness="2dp" />
+
 	</com.google.android.material.appbar.AppBarLayout>
 
 	<org.koitharu.kotatsu.core.ui.list.fastscroll.FastScrollRecyclerView
@@ -43,7 +109,6 @@
 		app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 		app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior" />
 
-	<!-- Status bar protection: the same surface-to-transparent fade as the main screen, sized from the top inset. -->
 	<View
 		android:id="@+id/statusBarScrim"
 		android:layout_width="match_parent"

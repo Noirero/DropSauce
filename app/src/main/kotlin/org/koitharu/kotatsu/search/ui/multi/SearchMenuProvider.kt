@@ -29,30 +29,14 @@ class SearchMenuProvider(
 				SearchKind.TAG -> R.id.action_kind_tag
 			},
 		)?.isChecked = true
-		menu.findItem(R.id.action_filter_pinned_only)?.run {
-			isChecked = viewModel.isPinnedOnly
-			// Pinned sources are not searched at all in local-only mode.
-			isEnabled = !viewModel.isLocalOnly
-		}
 		menu.findItem(R.id.action_filter_local_only)?.isChecked = viewModel.isLocalOnly
 	}
 
 	override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-		when (menuItem.itemId) {
-			R.id.action_filter_pinned_only -> {
-				menuItem.isChecked = !menuItem.isChecked
-				viewModel.setPinnedOnly(menuItem.isChecked)
-				return true
-			}
-
-			R.id.action_filter_local_only -> {
-				menuItem.isChecked = !menuItem.isChecked
-				viewModel.setLocalOnly(menuItem.isChecked)
-				// onPrepareMenu only runs when the menu is rebuilt, so without this the pinned item
-				// keeps whatever enabled state it had when the menu was last built.
-				activity.invalidateMenu()
-				return true
-			}
+		if (menuItem.itemId == R.id.action_filter_local_only) {
+			menuItem.isChecked = !menuItem.isChecked
+			viewModel.setLocalOnly(menuItem.isChecked)
+			return true
 		}
 
 		val newKind = when (menuItem.itemId) {

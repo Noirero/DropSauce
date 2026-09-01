@@ -96,6 +96,7 @@ class FavoriteDialog : ComposeAlertDialogFragment() {
 			}
 			Spacer(Modifier.size(16.dp))
 			ExpressivePillButton(text = stringResource(R.string.manage), primary = true) {
+				viewModel.prepareCategoryManagement()
 				dismiss()
 				router.openFavoriteCategories()
 			}

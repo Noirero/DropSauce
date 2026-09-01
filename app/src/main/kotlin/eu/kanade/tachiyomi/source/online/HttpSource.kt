@@ -150,13 +150,22 @@ abstract class HttpSource : CatalogueSource {
 	fun getImageHeaders(page: Page): Headers = imageRequest(page).headers
 
 	/**
-	 * Returns the response of the source image.
-	 * Typically does not need to be overridden.
+	 * Legacy image API retained exactly for older extension APKs that override getImage(Page).
 	 *
 	 * @since extensions-lib 1.5
 	 */
 	open suspend fun getImage(page: Page): Response {
 		return client.newCachelessCallWithProgress(imageRequest(page), page)
+			.awaitSuccess()
+	}
+
+	/**
+	 * Resumable image API compatible with Kahon/Mihon's newer downloader. It is an overload rather
+	 * than a replacement so existing extension binaries keep their original getImage(Page) ABI.
+	 */
+	open suspend fun getImage(page: Page, existingSize: Long): Response {
+		if (existingSize <= 0L) return getImage(page)
+		return client.newCachelessCallWithProgress(imageRequest(page), page, existingSize)
 			.awaitSuccess()
 	}
 

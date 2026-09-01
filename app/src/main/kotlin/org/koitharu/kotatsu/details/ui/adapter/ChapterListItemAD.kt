@@ -46,6 +46,12 @@ fun chapterListItemAD(
 			setOnMenuItemClickListener { menuItem ->
 				if (menuItem.itemId == R.id.action_delete) {
 					onDeleteClick(item)
+					// Reflect the requested deletion immediately instead of keeping a stale
+					// downloaded icon until the chapter list is manually refreshed. The
+					// storage-change event will still reconcile the real state afterwards.
+					anchor.isVisible = false
+					binding.progressBarDownload.isVisible = false
+					binding.imageButtonDownload.isVisible = true
 					true
 				} else {
 					false
@@ -58,51 +64,45 @@ fun chapterListItemAD(
 	bind {
 		binding.textViewTitle.text = item.getTitle(context.resources)
 		binding.textViewDescription.textAndVisible = item.description
-		when {
-			item.isCurrent -> {
-				val accent = accentColorProvider()
-					?: context.getThemeColor(androidx.appcompat.R.attr.colorPrimary)
-				val radius = context.resources.displayMetrics.density * 2f
-				binding.viewCurrentIndicator.background = GradientDrawable().apply {
-					shape = GradientDrawable.RECTANGLE
-					cornerRadius = radius
-					setColor(accent)
-				}
-				binding.viewCurrentIndicator.isVisible = true
-				binding.textViewTitle.drawableStart = null
-				binding.textViewTitle.setTextColor(accent)
-				binding.textViewDescription.setTextColor(accent)
-				binding.textViewTitle.typeface = Typeface.DEFAULT_BOLD
-				binding.textViewDescription.typeface = Typeface.DEFAULT_BOLD
-				binding.textViewTitle.textSize = 17f
-			}
 
-			item.isUnread -> {
-				binding.viewCurrentIndicator.background = null
-				binding.viewCurrentIndicator.isVisible = false
-				binding.textViewTitle.drawableStart = if (item.isNew) {
-					ContextCompat.getDrawable(context, R.drawable.ic_new)
-				} else {
-					null
-				}
-				binding.textViewTitle.setTextColor(context.getThemeColorStateList(android.R.attr.textColorPrimary))
-				binding.textViewDescription.setTextColor(context.getThemeColorStateList(materialR.attr.colorOutline))
-				binding.textViewTitle.typeface = Typeface.DEFAULT
-				binding.textViewDescription.typeface = Typeface.DEFAULT
-				binding.textViewTitle.textSize = 16f
+		// Read state always owns the text colour:
+		// unread = normal/white in dark theme, read = muted grey.
+		// The current-chapter indicator remains visible, but no longer masks a read-state change.
+		if (item.isUnread) {
+			binding.textViewTitle.setTextColor(context.getThemeColorStateList(android.R.attr.textColorPrimary))
+			binding.textViewDescription.setTextColor(context.getThemeColorStateList(materialR.attr.colorOutline))
+			binding.textViewTitle.drawableStart = if (item.isNew) {
+				ContextCompat.getDrawable(context, R.drawable.ic_new)
+			} else {
+				null
 			}
-
-			else -> {
-				binding.viewCurrentIndicator.background = null
-				binding.viewCurrentIndicator.isVisible = false
-				binding.textViewTitle.drawableStart = null
-				binding.textViewTitle.setTextColor(context.getThemeColorStateList(android.R.attr.textColorHint))
-				binding.textViewDescription.setTextColor(context.getThemeColorStateList(android.R.attr.textColorHint))
-				binding.textViewTitle.typeface = Typeface.DEFAULT
-				binding.textViewDescription.typeface = Typeface.DEFAULT
-				binding.textViewTitle.textSize = 16f
-			}
+		} else {
+			binding.textViewTitle.setTextColor(context.getThemeColorStateList(android.R.attr.textColorHint))
+			binding.textViewDescription.setTextColor(context.getThemeColorStateList(android.R.attr.textColorHint))
+			binding.textViewTitle.drawableStart = null
 		}
+
+		if (item.isCurrent) {
+			val accent = accentColorProvider()
+				?: context.getThemeColor(androidx.appcompat.R.attr.colorPrimary)
+			val radius = context.resources.displayMetrics.density * 2f
+			binding.viewCurrentIndicator.background = GradientDrawable().apply {
+				shape = GradientDrawable.RECTANGLE
+				cornerRadius = radius
+				setColor(accent)
+			}
+			binding.viewCurrentIndicator.isVisible = true
+			binding.textViewTitle.typeface = Typeface.DEFAULT_BOLD
+			binding.textViewDescription.typeface = Typeface.DEFAULT_BOLD
+			binding.textViewTitle.textSize = 17f
+		} else {
+			binding.viewCurrentIndicator.background = null
+			binding.viewCurrentIndicator.isVisible = false
+			binding.textViewTitle.typeface = Typeface.DEFAULT
+			binding.textViewDescription.typeface = Typeface.DEFAULT
+			binding.textViewTitle.textSize = 16f
+		}
+
 		binding.imageViewBookmarked.isVisible = item.isBookmarked
 		binding.imageViewBookmarked.imageTintList = accentColorProvider()?.let { ColorStateList.valueOf(it) }
 			?: context.getThemeColorStateList(androidx.appcompat.R.attr.colorPrimary)

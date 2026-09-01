@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings as SystemSettings
+import android.util.AtomicFile
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +32,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -117,6 +119,7 @@ class DownloadsSettingsFragment :
 	private val directoryCount = MutableStateFlow(0)
 	private val pagesDirSummary = MutableStateFlow<String?>(null)
 	private val dozeAvailable = MutableStateFlow(false)
+	private var rebuildDownloadsIndexRunning = false
 
 	private val pickFileTreeLauncher = OpenDocumentTreeHelper(this) {
 		if (it != null) onDirectoryPicked(it)
@@ -331,7 +334,7 @@ class DownloadsSettingsFragment :
 				val keys = oldChaptersJson.keys()
 				while (keys.hasNext()) {
 					val key = keys.next()
-					val chJson = oldChaptersJson.getJSONObject(key)
+					val chJson = oldChaptersJson.optJSONObject(key) ?: continue
 					val fileName = chJson.optString("file").nullIfEmpty() ?: continue
 					val file = File(mangaFolder, fileName)
 					if (!file.exists()) continue
@@ -382,119 +385,148 @@ class DownloadsSettingsFragment :
 		return matched
 	}
 
+	private fun writeIndexAtomically(indexFile: File, content: String) {
+		val atomicFile = AtomicFile(indexFile)
+		val output = atomicFile.startWrite()
+		try {
+			output.write(content.toByteArray(Charsets.UTF_8))
+			atomicFile.finishWrite(output)
+		} catch (e: Exception) {
+			atomicFile.failWrite(output)
+			throw e
+		}
+	}
+
 	private fun rebuildDownloadsIndex() {
+		if (rebuildDownloadsIndexRunning) {
+			Toast.makeText(requireContext(), R.string.rebuild_downloads_index_started, Toast.LENGTH_SHORT).show()
+			return
+		}
+		rebuildDownloadsIndexRunning = true
 		lifecycleScope.launch {
-			withContext(Dispatchers.Main) {
-				Toast.makeText(requireContext(), R.string.rebuild_downloads_index_started, Toast.LENGTH_SHORT).show()
-			}
-			var updatedCount = 0
 			try {
-				val favorites = favouritesRepository.getAllManga()
-				val roots = storageManager.getReadableDirs()
-				for (favorite in favorites) {
-					val safeTitle = favorite.title.toFileNameSafe()
-					for (root in roots) {
-						val mangaFolder = File(root, safeTitle)
-						if (mangaFolder.isDirectory) {
-							val indexFile = File(mangaFolder, "index.json")
-							val oldIndexJson = if (indexFile.isFile) {
-								runCatching { JSONObject(indexFile.readText()) }.getOrNull()
-							} else {
-								null
-							}
+				Toast.makeText(requireContext(), R.string.rebuild_downloads_index_started, Toast.LENGTH_SHORT).show()
+				val updatedCount = withContext(Dispatchers.IO) {
+					var count = 0
+					val favorites = favouritesRepository.getAllManga()
+					val roots = storageManager.getReadableDirs()
+					for (favorite in favorites) {
+						val safeTitle = favorite.title.toFileNameSafe()
+						for (root in roots) {
+							val mangaFolder = File(root, safeTitle)
+							if (!mangaFolder.isDirectory) continue
+							try {
+								val indexFile = File(mangaFolder, "index.json")
+								val oldIndexJson = if (indexFile.isFile) {
+									runCatching { JSONObject(indexFile.readText()) }.getOrNull()
+								} else {
+									null
+								}
 
-							var currentFavorite = favorite
-							var skipFolder = false
+								var currentFavorite = favorite
+								var skipFolder = false
 
-							if (oldIndexJson != null) {
-								val oldId = oldIndexJson.optLong("id", 0L)
-								val oldSource = oldIndexJson.optString("source").nullIfEmpty()
-								if (oldId != 0L && oldId != favorite.id && oldSource != null) {
-									// Conflict detected!
-									if (isSameOrSimilarSource(oldSource, favorite.source.name)) {
-										// Auto resolve by overwriting index with favorite's metadata
-										// Do nothing here, just keep currentFavorite
-									} else {
-										// Totally different source: prompt user
-										val localMangaInfo = runCatching { LocalMangaParser(mangaFolder).getMangaInfo() }.getOrNull()
-										if (localMangaInfo != null) {
-											val choice = showMigrationDialog(
-												favorite.title,
-												localMangaInfo.source.name,
-												favorite.source.name
-											)
-											if (choice == MigrationChoice.MIGRATE) {
-												migrateUseCase(oldManga = favorite, newManga = localMangaInfo)
-												// After migration, the favorite entry in DropSauce uses localMangaInfo's ID & source
-												currentFavorite = localMangaInfo
+								if (oldIndexJson != null) {
+									val oldId = oldIndexJson.optLong("id", 0L)
+									val oldSource = oldIndexJson.optString("source").nullIfEmpty()
+									if (oldId != 0L && oldId != favorite.id && oldSource != null) {
+										// Conflict detected!
+										if (isSameOrSimilarSource(oldSource, favorite.source.name)) {
+											// Auto resolve by overwriting index with favorite's metadata
+											// Do nothing here, just keep currentFavorite
+										} else {
+											// Totally different source: prompt user
+											val localMangaInfo = runCatching { LocalMangaParser(mangaFolder).getMangaInfo() }.getOrNull()
+											if (localMangaInfo != null) {
+												val choice = showMigrationDialog(
+													favorite.title,
+													localMangaInfo.source.name,
+													favorite.source.name
+												)
+												if (choice == MigrationChoice.MIGRATE) {
+													migrateUseCase(oldManga = favorite, newManga = localMangaInfo)
+													// After migration, the favorite entry in DropSauce uses localMangaInfo's ID & source
+													currentFavorite = localMangaInfo
+												} else {
+													skipFolder = true
+												}
 											} else {
 												skipFolder = true
 											}
-										} else {
-											skipFolder = true
 										}
 									}
 								}
-							}
 
-							if (skipFolder) continue
+								if (skipFolder) continue
 
-							// Fetch or retrieve chapters
-							var chapters = mangaDataRepository.findMangaById(currentFavorite.id, withChapters = true)?.chapters.orEmpty()
-							if (chapters.isEmpty()) {
-								runCatchingCancellable {
-									val repo = mangaRepositoryFactory.create(currentFavorite.source)
-									val remote = repo.getDetails(currentFavorite)
-									mangaDataRepository.storeManga(remote, replaceExisting = true, detailsFetched = true)
-									chapters = remote.chapters.orEmpty()
+								// Fetch or retrieve chapters. If neither cache nor source can provide a chapter list,
+								// keep the existing index untouched rather than replacing it with an empty one.
+								var chapters = mangaDataRepository.findMangaById(currentFavorite.id, withChapters = true)?.chapters.orEmpty()
+								if (chapters.isEmpty()) {
+									runCatchingCancellable {
+										val repo = mangaRepositoryFactory.create(currentFavorite.source)
+										val remote = repo.getDetails(currentFavorite)
+										mangaDataRepository.storeManga(remote, replaceExisting = true, detailsFetched = true)
+										chapters = remote.chapters.orEmpty()
+									}.onFailure {
+										it.printStackTraceDebug()
+									}
+								}
+								if (chapters.isEmpty()) continue
+
+								val matched = matchChapters(mangaFolder, chapters, oldIndexJson)
+								// A rebuild must never erase valid mappings just because filenames cannot be
+								// matched confidently. Leave the old index in place and continue scanning.
+								if (matched.isEmpty()) continue
+
+								val newIndex = MangaIndex(null)
+								newIndex.setMangaInfo(currentFavorite)
+
+								val oldCoverEntry = oldIndexJson?.optString("cover_entry")?.nullIfEmpty()
+								val coverName = when {
+									oldCoverEntry != null && File(mangaFolder, oldCoverEntry).exists() -> oldCoverEntry
+									File(mangaFolder, "cover.jpg").exists() -> "cover.jpg"
+									File(mangaFolder, "cover.png").exists() -> "cover.png"
+									else -> null
+								}
+								if (coverName != null) {
+									newIndex.setCoverEntry(coverName)
+								}
+
+								for ((chapter, filename) in matched) {
+									newIndex.addChapter(chapter, filename)
+								}
+
+								runCatching {
+									writeIndexAtomically(indexFile, newIndex.toString())
+									count++
 								}.onFailure {
 									it.printStackTraceDebug()
 								}
-							}
-
-							val matched = matchChapters(mangaFolder, chapters, oldIndexJson)
-
-							val newIndex = MangaIndex(null)
-							newIndex.setMangaInfo(currentFavorite)
-
-							val oldCoverEntry = oldIndexJson?.optString("cover_entry")?.nullIfEmpty()
-							val coverName = when {
-								oldCoverEntry != null && File(mangaFolder, oldCoverEntry).exists() -> oldCoverEntry
-								File(mangaFolder, "cover.jpg").exists() -> "cover.jpg"
-								File(mangaFolder, "cover.png").exists() -> "cover.png"
-								else -> null
-							}
-							if (coverName != null) {
-								newIndex.setCoverEntry(coverName)
-							}
-
-							for ((chapter, filename) in matched) {
-								newIndex.addChapter(chapter, filename)
-							}
-
-							runCatching {
-								indexFile.writeText(newIndex.toString())
-								updatedCount++
-							}.onFailure {
-								it.printStackTraceDebug()
+							} catch (e: CancellationException) {
+								throw e
+							} catch (e: Exception) {
+								e.printStackTraceDebug()
 							}
 						}
 					}
+
+					localMangaIndex.update()
+					count
 				}
 
-				localMangaIndex.update()
-				withContext(Dispatchers.Main) {
-					Toast.makeText(
-						requireContext(),
-						getString(R.string.rebuild_downloads_index_completed, updatedCount),
-						Toast.LENGTH_LONG
-					).show()
-				}
+				Toast.makeText(
+					requireContext(),
+					getString(R.string.rebuild_downloads_index_completed, updatedCount),
+					Toast.LENGTH_LONG
+				).show()
+			} catch (e: CancellationException) {
+				throw e
 			} catch (e: Exception) {
 				e.printStackTraceDebug()
-				withContext(Dispatchers.Main) {
-					Toast.makeText(requireContext(), "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-				}
+				Toast.makeText(requireContext(), "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+			} finally {
+				rebuildDownloadsIndexRunning = false
 			}
 		}
 	}

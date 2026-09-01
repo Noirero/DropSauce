@@ -72,7 +72,7 @@ interface NetworkModule {
 			cookieJar(cookieJar)
 			proxySelector(proxyProvider.selector)
 			proxyAuthenticator(proxyProvider.authenticator)
-			dns(DoHManager(cache, settings))
+			dns(DoHManager(cache, settings, contextProvider.get()))
 			if (settings.isSSLBypassEnabled) {
 				disableCertificateVerification()
 			} else {

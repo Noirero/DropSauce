@@ -16,4 +16,5 @@ enum class DoHProvider {
 	NJALLA,
 	SHECAN,
 	ZERO_MS,
+	CUSTOM,
 }

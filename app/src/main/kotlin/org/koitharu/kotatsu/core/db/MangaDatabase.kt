@@ -52,6 +52,7 @@ import org.koitharu.kotatsu.core.db.migrations.Migration32To33
 import org.koitharu.kotatsu.core.db.migrations.Migration33To34
 import org.koitharu.kotatsu.core.db.migrations.Migration34To35
 import org.koitharu.kotatsu.core.db.migrations.Migration35To36
+import org.koitharu.kotatsu.core.db.migrations.Migration36To37
 import org.koitharu.kotatsu.core.db.migrations.Migration2To3
 import org.koitharu.kotatsu.core.db.migrations.Migration3To4
 import org.koitharu.kotatsu.core.db.migrations.Migration4To5
@@ -79,7 +80,7 @@ import org.koitharu.kotatsu.tracker.data.TrackEntity
 import org.koitharu.kotatsu.tracker.data.TrackLogEntity
 import org.koitharu.kotatsu.tracker.data.TracksDao
 
-const val DATABASE_VERSION = 36
+const val DATABASE_VERSION = 37
 
 @Database(
 	entities = [
@@ -93,72 +94,29 @@ const val DATABASE_VERSION = 36
 abstract class MangaDatabase : RoomDatabase() {
 
 	abstract fun getHistoryDao(): HistoryDao
-
 	abstract fun getTagsDao(): TagsDao
-
 	abstract fun getMangaDao(): MangaDao
-
 	abstract fun getFavouritesDao(): FavouritesDao
-
 	abstract fun getPreferencesDao(): PreferencesDao
-
 	abstract fun getFavouriteCategoriesDao(): FavouriteCategoriesDao
-
 	abstract fun getTracksDao(): TracksDao
-
 	abstract fun getTrackLogsDao(): TrackLogsDao
-
 	abstract fun getSuggestionDao(): SuggestionDao
-
 	abstract fun getBookmarksDao(): BookmarksDao
-
 	abstract fun getScrobblingDao(): ScrobblingDao
-
 	abstract fun getSourcesDao(): MangaSourcesDao
-
 	abstract fun getStatsDao(): StatsDao
-
 	abstract fun getLocalMangaIndexDao(): LocalMangaIndexDao
-
 	abstract fun getChaptersDao(): ChaptersDao
 }
 
 fun getDatabaseMigrations(context: Context): Array<Migration> = arrayOf(
-	Migration1To2(),
-	Migration2To3(),
-	Migration3To4(),
-	Migration4To5(),
-	Migration5To6(),
-	Migration6To7(),
-	Migration7To8(),
-	Migration8To9(),
-	Migration9To10(),
-	Migration10To11(),
-	Migration11To12(),
-	Migration12To13(),
-	Migration13To14(),
-	Migration14To15(),
-	Migration15To16(),
-	Migration16To17(),
-	Migration17To18(),
-	Migration18To19(),
-	Migration19To20(),
-	Migration20To21(),
-	Migration21To22(),
-	Migration22To23(),
-	Migration23To24(),
-	Migration24To25(),
-	Migration25To26(),
-	Migration26To27(),
-	Migration27To28(),
-	Migration28To29(),
-	Migration29To30(),
-	Migration30To31(),
-	Migration31To32(),
-	Migration32To33(),
-	Migration33To34(),
-	Migration34To35(),
-	Migration35To36(),
+	Migration1To2(), Migration2To3(), Migration3To4(), Migration4To5(), Migration5To6(), Migration6To7(),
+	Migration7To8(), Migration8To9(), Migration9To10(), Migration10To11(), Migration11To12(), Migration12To13(),
+	Migration13To14(), Migration14To15(), Migration15To16(), Migration16To17(), Migration17To18(), Migration18To19(),
+	Migration19To20(), Migration20To21(), Migration21To22(), Migration22To23(), Migration23To24(), Migration24To25(),
+	Migration25To26(), Migration26To27(), Migration27To28(), Migration28To29(), Migration29To30(), Migration30To31(),
+	Migration31To32(), Migration32To33(), Migration33To34(), Migration34To35(), Migration35To36(), Migration36To37(),
 )
 
 fun MangaDatabase(context: Context): MangaDatabase = Room

@@ -108,13 +108,35 @@ suspend fun Call.awaitSuccess(): Response {
 	return response
 }
 
-fun OkHttpClient.newCachelessCallWithProgress(request: Request, listener: ProgressListener): Call {
+/** Legacy overload retained for binary/source compatibility with older extensions. */
+fun OkHttpClient.newCachelessCallWithProgress(request: Request, listener: ProgressListener): Call =
+	newCachelessCallWithProgress(request, listener, existingSize = 0L)
+
+/**
+ * Cacheless request with progress and optional HTTP Range resume. The existing size only counts
+ * toward progress when the server actually accepts the range and returns HTTP 206; a normal 200
+ * response is treated as a clean restart.
+ */
+fun OkHttpClient.newCachelessCallWithProgress(
+	request: Request,
+	listener: ProgressListener,
+	existingSize: Long,
+): Call {
 	val progressClient = newBuilder()
 		.cache(null)
 		.addNetworkInterceptor { chain ->
-			val originalResponse = chain.proceed(chain.request())
+			val rangedRequest = chain.request()
+				.newBuilder()
+				.apply {
+					if (existingSize > 0L && chain.request().header("Range") == null) {
+						header("Range", "bytes=$existingSize-")
+					}
+				}
+				.build()
+			val originalResponse = chain.proceed(rangedRequest)
+			val actualExistingSize = if (originalResponse.code == 206) existingSize else 0L
 			originalResponse.newBuilder()
-				.body(ProgressResponseBody(originalResponse.body, listener))
+				.body(ProgressResponseBody(originalResponse.body, listener, actualExistingSize))
 				.build()
 		}
 		.build()

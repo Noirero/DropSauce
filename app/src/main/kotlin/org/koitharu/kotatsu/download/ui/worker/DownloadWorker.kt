@@ -84,6 +84,7 @@ import org.koitharu.kotatsu.local.data.input.LocalMangaParser
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput
 import org.koitharu.kotatsu.local.domain.MangaLock
 import org.koitharu.kotatsu.local.domain.model.LocalManga
+import org.koitharu.kotatsu.mihon.getResumableImageStream
 import org.koitharu.kotatsu.parsers.exception.TooManyRequestExceptions
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
@@ -109,6 +110,8 @@ class DownloadWorker @AssistedInject constructor(
 	private val mangaDataRepository: MangaDataRepository,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val settings: AppSettings,
+	private val performanceSettings: DownloadPerformanceSettings,
+	private val concurrencyController: DownloadConcurrencyController,
 	@LocalStorageChanges private val localStorageChanges: MutableSharedFlow<LocalManga?>,
 	private val slowdownDispatcher: DownloadSlowdownDispatcher,
 	private val imageProxyInterceptor: ImageProxyInterceptor,
@@ -131,15 +134,20 @@ class DownloadWorker @AssistedInject constructor(
 		setForeground(getForegroundInfo())
 		val manga = mangaDataRepository.findMangaById(task.mangaId, withChapters = true) ?: return Result.failure()
 		publishState(DownloadState(manga = manga, isIndeterminate = true).also { lastPublishedState = it })
+		pruneResumeCache()
 		val downloadedIds = getDoneChapters(manga)
 		return try {
 			val pausingHandle = PausingHandle()
 			if (task.isPaused) {
 				pausingHandle.pause()
 			}
+			val sourceKey = getConcurrencySourceKey(manga)
 			withContext(pausingHandle) {
-				downloadMangaImpl(manga, task, downloadedIds)
+				concurrencyController.withSourcePermit(sourceKey, performanceSettings.parallelSourceLimit) {
+					downloadMangaImpl(manga, task, downloadedIds)
+				}
 			}
+			clearResumeMangaDir(manga.id)
 			Result.success(currentState.toWorkData())
 		} catch (_: CancellationException) {
 			withContext(NonCancellable) {
@@ -175,6 +183,11 @@ class DownloadWorker @AssistedInject constructor(
 			id.hashCode(),
 			notificationFactory.create(lastPublishedState),
 		)
+	}
+
+	private suspend fun getConcurrencySourceKey(manga: Manga): String {
+		if (!manga.isLocal) return manga.source.name
+		return localMangaRepository.getRemoteManga(manga)?.source?.name ?: manga.source.name
 	}
 
 	private suspend fun downloadMangaImpl(
@@ -219,32 +232,48 @@ class DownloadWorker @AssistedInject constructor(
 				for ((chapterIndex, chapter) in chapters.withIndex()) {
 					checkIsPaused()
 					if (chaptersToSkip.remove(chapter.value.id)) {
+						clearResumeChapterDir(mangaDetails.id, chapter.value.id)
 						publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
 						continue
 					}
 					val pages = runFailsafe {
 						repo.getPages(chapter.value)
 					} ?: continue
+					val resumeDir = getResumeChapterDir(mangaDetails.id, chapter.value.id)
+					val downloadedPages = arrayOfNulls<DownloadedPage>(pages.size)
 					val pageCounter = AtomicInteger(0)
 					channelFlow {
-						val semaphore = Semaphore(MAX_PAGES_PARALLELISM)
+						val semaphore = Semaphore(performanceSettings.parallelPageLimit)
 						for ((pageIndex, page) in pages.withIndex()) {
 							checkIsPaused()
 							launch {
 								semaphore.withPermit {
-									runFailsafe {
+									val downloadedPage = runFailsafe {
 										val url = repo.getPageUrl(page)
-										val file = cache[url]
-											?: downloadFile(url, destination, repo, page)
-										output.addPage(
-											chapter = chapter,
-											file = file,
-											pageNumber = pageIndex,
-											type = getMediaType(url, file),
-										)
-										if (file.extension == "tmp") {
-											file.deleteAwait()
+										val cachedFile = cache[url]
+										if (cachedFile != null) {
+											DownloadedPage(
+												url = url,
+												file = cachedFile,
+												type = getMediaType(url, cachedFile),
+											)
+										} else {
+											val file = downloadFile(
+												url = url,
+												destination = resumeDir,
+												repo = repo,
+												page = page,
+												resumeKey = buildResumeKey(pageIndex, page),
+											)
+											DownloadedPage(
+												url = url,
+												file = file,
+												type = getMediaType(url, file),
+											)
 										}
+									}
+									if (downloadedPage != null) {
+										downloadedPages[pageIndex] = downloadedPage
 									}
 									send(pageIndex)
 								}
@@ -270,11 +299,25 @@ class DownloadWorker @AssistedInject constructor(
 							),
 						)
 					}
+
+					// Network slots are all free before CBZ/EPUB writes begin. This prevents ZipOutput's
+					// serialization mutex from consuming one of the page-download permits.
+					for ((pageIndex, downloadedPage) in downloadedPages.withIndex()) {
+						checkIsPaused()
+						downloadedPage ?: continue
+						output.addPage(
+							chapter = chapter,
+							file = downloadedPage.file,
+							pageNumber = pageIndex,
+							type = downloadedPage.type,
+						)
+					}
 					if (output.flushChapter(chapter.value)) {
 						runCatchingCancellable {
 							localStorageChanges.emit(LocalMangaParser(output.rootFile).getManga(withDetails = false))
 						}.onFailure(Throwable::printStackTraceDebug)
 					}
+					clearResumeChapterDir(mangaDetails.id, chapter.value.id)
 					publishState(currentState.copy(downloadedChapters = currentState.downloadedChapters + 1))
 				}
 				publishState(currentState.copy(isIndeterminate = true, eta = -1L, isStuck = false))
@@ -319,7 +362,8 @@ class DownloadWorker @AssistedInject constructor(
 		block: suspend () -> R,
 	): R? {
 		checkIsPaused()
-		var countDown = MAX_FAILSAFE_ATTEMPTS
+		var retriesRemaining = MAX_FAILSAFE_RETRIES
+		var ordinaryRetryIndex = 0
 		failsafe@ while (true) {
 			try {
 				return block()
@@ -327,9 +371,9 @@ class DownloadWorker @AssistedInject constructor(
 				val retryDelay = if (e is TooManyRequestExceptions) {
 					e.getRetryDelay()
 				} else {
-					DOWNLOAD_ERROR_DELAY
+					DOWNLOAD_ERROR_DELAY * (1L shl ordinaryRetryIndex.coerceAtMost(MAX_BACKOFF_SHIFT))
 				}
-				if (countDown <= 0 || retryDelay < 0 || retryDelay > MAX_RETRY_DELAY) {
+				if (retriesRemaining <= 0 || retryDelay < 0 || retryDelay > MAX_RETRY_DELAY) {
 					val pausingHandle = PausingHandle.current()
 					if (pausingHandle.skipAllErrors()) {
 						return null
@@ -343,7 +387,8 @@ class DownloadWorker @AssistedInject constructor(
 							isStuck = false,
 						),
 					)
-					countDown = MAX_FAILSAFE_ATTEMPTS
+					retriesRemaining = MAX_FAILSAFE_RETRIES
+					ordinaryRetryIndex = 0
 					pausingHandle.pause()
 					try {
 						pausingHandle.awaitResumed()
@@ -354,7 +399,10 @@ class DownloadWorker @AssistedInject constructor(
 						publishState(currentState.copy(isPaused = false, error = null, errorMessage = null))
 					}
 				} else {
-					countDown--
+					retriesRemaining--
+					if (e !is TooManyRequestExceptions) {
+						ordinaryRetryIndex++
+					}
 					delay(retryDelay)
 				}
 			}
@@ -385,15 +433,27 @@ class DownloadWorker @AssistedInject constructor(
 		destination: File,
 		repo: MangaRepository,
 		page: MangaPage? = null,
+		resumeKey: String? = null,
 	): File {
-		val source = repo.source
+		if (!destination.exists()) {
+			check(destination.mkdirs() || destination.isDirectory) { "Cannot create download directory $destination" }
+		}
+		val readyFile = resumeKey?.let { File(destination, "$it.ready") }
+		if (readyFile != null && readyFile.isFile && readyFile.length() > 0L) {
+			return readyFile
+		}
+		if (readyFile != null && readyFile.exists()) {
+			readyFile.delete()
+		}
+		val partialFile = resumeKey?.let { File(destination, "$it.part") }
+
 		if (url.startsWith("content:", ignoreCase = true) || url.startsWith("file:", ignoreCase = true)) {
 			val uri = url.toUri()
 			val cr = applicationContext.contentResolver
 			val ext = uri.toFileOrNull()?.let {
 				MimeTypes.getNormalizedExtension(it.name)
 			} ?: cr.getType(uri)?.toMimeTypeOrNull()?.let { MimeTypes.getExtension(it) }
-			val file = destination.createTempFile(ext)
+			val file = partialFile ?: destination.createTempFile(ext)
 			try {
 				cr.openSource(uri).use { input ->
 					file.sink(append = false).buffer().use {
@@ -401,43 +461,105 @@ class DownloadWorker @AssistedInject constructor(
 					}
 				}
 			} catch (e: Exception) {
-				file.delete()
+				if (partialFile == null) file.delete()
 				throw e
 			}
-			return file
+			return if (readyFile != null) finalizeResumeFile(file, readyFile) else file
 		}
+
+		val source = repo.source
+		val existingSize = partialFile?.takeIf { it.isFile }?.length() ?: 0L
 		slowdownDispatcher.delay(source)
-		// Mihon extensions must fetch through their own client. For pages, getImageStream() runs the
-		// extension's getImage(): it resolves relative image urls (e.g. MangaDex "/data/..."), runs
-		// decryption/unscrambling overrides, and applies per-source headers (Referer, etc.). For
-		// covers (page == null), getCoverStream() fetches via the extension's client + headers like
-		// Mihon's MangaCoverFetcher — the app's shared client is 403'd by some cover CDNs (e.g.
-		// Comick). Both return null for non-extension sources, falling back to a direct request.
-		val response = (if (page != null) repo.getImageStream(url, page) else repo.getCoverStream(url))
-			?: run {
-				val imageHeaders = page?.let { repo.getImageRequestHeaders(url, it) }
-				val request = PageLoader.createPageRequest(url, source, imageHeaders)
-				imageProxyInterceptor.interceptPageRequest(request, okHttp)
+		// For Mihon pages, the resumable helper still routes through HttpSource.getImage(), keeping
+		// extension-specific headers and decrypt/unscramble transforms. Other repositories fall back
+		// to their ordinary response; HTTP 200 safely overwrites any partial data.
+		val response = (if (page != null) {
+			if (existingSize > 0L) {
+				repo.getResumableImageStream(url, page, existingSize)
+			} else {
+				repo.getImageStream(url, page)
 			}
+		} else {
+			repo.getCoverStream(url)
+		}) ?: run {
+			val imageHeaders = page?.let { repo.getImageRequestHeaders(url, it) }
+			val baseRequest = PageLoader.createPageRequest(url, source, imageHeaders)
+			val request = if (existingSize > 0L) {
+				baseRequest.newBuilder().header("Range", "bytes=$existingSize-").build()
+			} else {
+				baseRequest
+			}
+			imageProxyInterceptor.interceptPageRequest(request, okHttp)
+		}
+
+		if (existingSize > 0L && response.code == HTTP_RANGE_NOT_SATISFIABLE && partialFile != null) {
+			response.closeQuietly()
+			partialFile.delete()
+			return downloadFile(url, destination, repo, page, resumeKey)
+		}
+
 		return response
 			.ensureSuccess()
 			.use { r ->
-				var file: File? = null
+				val body = r.body
+				val file = partialFile ?: destination.createTempFile(
+					ext = MimeTypes.getExtension(body.contentType()?.toMimeType()),
+				)
 				try {
-					r.body.use { body ->
-						file = destination.createTempFile(
-							ext = MimeTypes.getExtension(body.contentType()?.toMimeType())
-						)
-						file.sink(append = false).buffer().use {
-							it.writeAllCancellable(body.source())
-						}
+					val append = existingSize > 0L && r.code == HTTP_PARTIAL_CONTENT
+					file.sink(append = append).buffer().use {
+						it.writeAllCancellable(body.source())
 					}
 				} catch (e: Exception) {
-					file?.delete()
+					// Keep resumable partials across retry/work restarts. One-off cover temp files are
+					// still removed immediately so the visible download directory stays clean.
+					if (partialFile == null) file.delete()
 					throw e
 				}
-				checkNotNull(file)
+				if (readyFile != null) finalizeResumeFile(file, readyFile) else file
 			}
+	}
+
+	private suspend fun finalizeResumeFile(partial: File, ready: File): File = runInterruptible(Dispatchers.IO) {
+		ready.delete()
+		if (!partial.renameTo(ready)) {
+			partial.copyTo(ready, overwrite = true)
+			partial.delete()
+		}
+		ready.setLastModified(System.currentTimeMillis())
+		ready
+	}
+
+	private fun buildResumeKey(pageIndex: Int, page: MangaPage): String = "$pageIndex-${page.id}"
+
+	private fun getResumeChapterDir(mangaId: Long, chapterId: Long): File =
+		File(getResumeMangaDir(mangaId), chapterId.toString()).also { dir ->
+			check(dir.exists() || dir.mkdirs()) { "Cannot create resume directory $dir" }
+		}
+
+	private fun getResumeMangaDir(mangaId: Long): File = File(
+		File(applicationContext.cacheDir, RESUME_CACHE_DIR),
+		mangaId.toString(),
+	)
+
+	private suspend fun clearResumeChapterDir(mangaId: Long, chapterId: Long) = runInterruptible(Dispatchers.IO) {
+		File(getResumeMangaDir(mangaId), chapterId.toString()).deleteRecursively()
+	}
+
+	private suspend fun clearResumeMangaDir(mangaId: Long) = runInterruptible(Dispatchers.IO) {
+		getResumeMangaDir(mangaId).deleteRecursively()
+	}
+
+	private suspend fun pruneResumeCache() = runInterruptible(Dispatchers.IO) {
+		val root = File(applicationContext.cacheDir, RESUME_CACHE_DIR)
+		if (!root.isDirectory) return@runInterruptible
+		val cutoff = System.currentTimeMillis() - RESUME_CACHE_TTL
+		root.walkBottomUp().forEach { file ->
+			when {
+				file.isFile && file.lastModified() < cutoff -> file.delete()
+				file.isDirectory && file != root && file.list()?.isEmpty() == true -> file.delete()
+			}
+		}
 	}
 
 	private fun File.createTempFile(ext: String?) = File(
@@ -605,14 +727,21 @@ class DownloadWorker @AssistedInject constructor(
 			.build()
 	}
 
-	private companion object {
+	private data class DownloadedPage(
+		val url: String,
+		val file: File,
+		val type: MimeType?,
+	)
 
-		const val MAX_FAILSAFE_ATTEMPTS = 2
-		// Mihon's default parallel-page limit is 5. Keeping extension downloads below that makes
-		// DropSauce observably slower even after removing the accidental global rate limiter.
-		const val MAX_PAGES_PARALLELISM = 5
+	private companion object {
+		const val MAX_FAILSAFE_RETRIES = 3
+		const val MAX_BACKOFF_SHIFT = 2
 		const val DOWNLOAD_ERROR_DELAY = 2_000L
 		const val MAX_RETRY_DELAY = 7_200_000L // 2 hours
+		const val HTTP_PARTIAL_CONTENT = 206
+		const val HTTP_RANGE_NOT_SATISFIABLE = 416
+		const val RESUME_CACHE_DIR = "download-resume"
+		const val RESUME_CACHE_TTL = 7L * 24L * 60L * 60L * 1_000L
 		const val TAG = "download"
 	}
 }

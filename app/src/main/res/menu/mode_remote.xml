@@ -21,4 +21,10 @@
 		android:title="@string/save"
 		app:showAsAction="ifRoom|withText" />
 
+	<item
+		android:id="@+id/action_open_browser"
+		android:icon="@drawable/ic_web"
+		android:title="@string/search_open_browser"
+		app:showAsAction="never" />
+
 </menu>

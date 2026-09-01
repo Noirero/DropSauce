@@ -5,6 +5,7 @@ import com.google.android.material.tabs.TabLayoutMediator.TabConfigurationStrate
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.ui.util.PopupMenuMediator
+import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 
 class FavouritesTabConfigurationStrategy(
 	private val adapter: FavouritesContainerAdapter,
@@ -16,8 +17,14 @@ class FavouritesTabConfigurationStrategy(
 		val item = adapter.getItem(position)
 		tab.text = item.title ?: tab.view.context.getString(R.string.all_favourites)
 		tab.tag = item
-		PopupMenuMediator(
-			FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id)
-		).attach(tab.view)
+		tab.getOrCreateBadge().apply {
+			number = item.count
+			isVisible = item.count > 0
+		}
+		if (item.id != LOCAL_FAVOURITES_CATEGORY_ID) {
+			PopupMenuMediator(
+				FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id),
+			).attach(tab.view)
+		}
 	}
 }

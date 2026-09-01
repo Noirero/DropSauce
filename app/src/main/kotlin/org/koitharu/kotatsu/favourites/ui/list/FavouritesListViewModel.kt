@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -24,8 +26,12 @@ import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
+import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
+import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import org.koitharu.kotatsu.history.domain.MarkAsReadUseCase
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -35,20 +41,19 @@ import org.koitharu.kotatsu.list.domain.QuickFilterListener
 import org.koitharu.kotatsu.list.ui.MangaListViewModel
 import org.koitharu.kotatsu.list.ui.model.EmptyState
 import org.koitharu.kotatsu.list.ui.model.ListModel
-import org.koitharu.kotatsu.list.ui.model.TIP_UI_SCALING
-import org.koitharu.kotatsu.list.ui.model.uiScalingTip
+import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.list.ui.model.MangaDetailedListModel
 import org.koitharu.kotatsu.list.ui.model.MangaGridModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
-import org.koitharu.kotatsu.list.ui.model.LoadingState
+import org.koitharu.kotatsu.list.ui.model.TIP_UI_SCALING
 import org.koitharu.kotatsu.list.ui.model.toErrorState
+import org.koitharu.kotatsu.list.ui.model.uiScalingTip
+import org.koitharu.kotatsu.local.data.LocalStorageChanges
+import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.Manga
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
-import org.koitharu.kotatsu.local.data.LocalStorageChanges
-import org.koitharu.kotatsu.local.domain.model.LocalManga
-import kotlinx.coroutines.flow.SharedFlow
 
 private const val PAGE_SIZE = 16
 
@@ -62,6 +67,8 @@ class FavouritesListViewModel @Inject constructor(
 	private val settings: AppSettings,
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
+	private val searchMatcher: FavouritesSearchMatcher,
+	private val contentTypeStore: FavouriteContentTypeStore,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -70,24 +77,24 @@ class FavouritesListViewModel @Inject constructor(
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val isPaginationReady = AtomicBoolean(false)
 
+	private val displayState = combine(
+		FavouritesContainerFragment.searchQuery,
+		contentTypeStore.selectedType,
+		limit,
+	) { query, type, pageLimit -> DisplayState(query, type, pageLimit) }
+
 	override val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE_FAVORITES) { favoritesListMode }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.favoritesListMode)
 
 	val sortOrder: StateFlow<ListSortOrder?> = if (categoryId == NO_ID) {
-		settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) {
-			allFavoritesSortOrder
-		}
+		settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) { allFavoritesSortOrder }
 	} else {
-		repository.observeCategory(categoryId)
-			.withErrorHandling()
-			.map { it?.order }
+		repository.observeCategory(categoryId).withErrorHandling().map { it?.order }
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
 	val pinnedIds: StateFlow<List<Long>> = settings.observeAsFlow(
 		AppSettings.KEY_FAVORITES_PINNED + categoryId,
-	) {
-		getPinnedFavourites(categoryId)
-	}.stateIn(
+	) { getPinnedFavourites(categoryId) }.stateIn(
 		viewModelScope + Dispatchers.Default,
 		SharingStarted.Eagerly,
 		settings.getPinnedFavourites(categoryId),
@@ -96,17 +103,25 @@ class FavouritesListViewModel @Inject constructor(
 	override val content = combine(
 		observeFavorites(),
 		observeListModeWithTriggers(),
-		// Folded into the refresh trigger to stay inside combine's five-flow overload.
 		combine(
 			refreshTrigger,
 			settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_UI_SCALING) },
-		) { _, isScalingTipVisible -> isScalingTipVisible },
+		) { _, visible -> visible },
 		pinnedIds,
-	) { list, mode, isScalingTipVisible, pinned ->
-		// Filters are read here rather than combined in: observeFavorites() already re-queries on every
-		// filter change, and a second input would render the chips one frame ahead of their results.
+		displayState,
+	) { list, mode, scalingTip, pinned, display ->
 		val filters = quickFilter.appliedOptions.value
-		list.mapList(mode, filters, pinned.takeIfDefaultState(filters), isScalingTipVisible)
+		val wantNovel = display.type == FavouriteContentType.NOVEL
+		val typed = list.filter { it.source.isNovelSource == wantNovel }
+		val searched = searchMatcher.filter(typed, display.query)
+		val visible = if (display.query.isBlank()) searched.take(display.limit) else searched
+		visible.mapList(
+			mode,
+			filters,
+			pinned.takeIfDefaultState(filters),
+			scalingTip,
+			display.query.isNotBlank(),
+		)
 	}.distinctUntilChanged().onEach {
 		isPaginationReady.set(true)
 	}.catch {
@@ -126,7 +141,6 @@ class FavouritesListViewModel @Inject constructor(
 
 	override fun clearFilter() = quickFilter.clearFilter()
 
-	/** Shared with History: dismissing it on either screen dismisses it on both. */
 	fun dismissScalingTip() {
 		settings.closeTip(TIP_UI_SCALING)
 	}
@@ -139,9 +153,7 @@ class FavouritesListViewModel @Inject constructor(
 	}
 
 	fun removeFromFavourites(ids: Set<Long>) {
-		if (ids.isEmpty()) {
-			return
-		}
+		if (ids.isEmpty()) return
 		launchJob(Dispatchers.Default) {
 			val handle = if (categoryId == NO_ID) {
 				repository.removeFromFavourites(ids)
@@ -153,9 +165,7 @@ class FavouritesListViewModel @Inject constructor(
 	}
 
 	fun requestMoreItems() {
-		if (isPaginationReady.compareAndSet(true, false)) {
-			limit.value += PAGE_SIZE
-		}
+		if (isPaginationReady.compareAndSet(true, false)) limit.value += PAGE_SIZE
 	}
 
 	private suspend fun List<Manga>.mapList(
@@ -163,27 +173,35 @@ class FavouritesListViewModel @Inject constructor(
 		filters: Set<ListFilterOption>,
 		pinned: List<Long>,
 		isScalingTipVisible: Boolean,
+		isSearchActive: Boolean,
 	): List<ListModel> {
 		if (isEmpty()) {
+			if (isSearchActive) {
+				return listOfNotNull(
+					quickFilter.filterItem(filters),
+					EmptyState(
+						icon = R.drawable.ic_empty_favourites,
+						textPrimary = R.string.nothing_found,
+						textSecondary = R.string.text_empty_holder_secondary_filtered,
+						actionStringRes = 0,
+					),
+				)
+			}
 			return if (filters.isEmpty()) {
-				listOf(getEmptyState(hasFilters = false))
+				listOf(getEmptyState(false))
 			} else {
-				listOfNotNull(quickFilter.filterItem(filters), getEmptyState(hasFilters = true))
+				listOfNotNull(quickFilter.filterItem(filters), getEmptyState(true))
 			}
 		}
 		val result = ArrayList<ListModel>(size + 2)
-		if (isScalingTipVisible) {
-			result += uiScalingTip
-		}
+		if (isScalingTipVisible) result += uiScalingTip
 		quickFilter.filterItem(filters)?.let(result::add)
 		mangaListMapper.toListModelList(result, this, mode, MangaListMapper.NO_FAVORITE)
 		if (pinned.isNotEmpty()) {
 			val pinnedSet = pinned.toSet()
 			for (i in result.indices) {
 				val model = result[i]
-				if (model !is MangaListModel || model.manga.id !in pinnedSet) {
-					continue
-				}
+				if (model !is MangaListModel || model.manga.id !in pinnedSet) continue
 				result[i] = when (model) {
 					is MangaGridModel -> model.copy(isPinned = true)
 					is MangaDetailedListModel -> model.copy(isPinned = true)
@@ -196,11 +214,7 @@ class FavouritesListViewModel @Inject constructor(
 
 	fun setPinned(ids: Set<Long>, isPinned: Boolean) {
 		val current = settings.getPinnedFavourites(categoryId)
-		val updated = if (isPinned) {
-			current + (ids - current.toSet()) // append new pins, keep pin order
-		} else {
-			current - ids
-		}
+		val updated = if (isPinned) current + (ids - current.toSet()) else current - ids
 		settings.setPinnedFavourites(categoryId, updated)
 	}
 
@@ -208,23 +222,30 @@ class FavouritesListViewModel @Inject constructor(
 		combine(
 			sortOrder.filterNotNull(),
 			quickFilter.appliedOptions.combineWithSettings(),
-			limit,
 			pinnedIds,
-		) { order, filters, limit, pinned ->
+		) { order, filters, pinned ->
 			isPaginationReady.set(false)
-			repository.observeAll(order, filters, limit, pinned.takeIfDefaultState(filters))
+			repository.observeAll(
+				order,
+				filters,
+				Int.MAX_VALUE,
+				pinned.takeIfDefaultState(filters),
+			)
 		}.flattenLatest()
 	} else {
 		combine(
 			quickFilter.appliedOptions.combineWithSettings(),
-			limit,
 			pinnedIds,
-		) { filters, limit, pinned ->
-			repository.observeAll(categoryId, filters, limit, pinned.takeIfDefaultState(filters))
+		) { filters, pinned ->
+			repository.observeAll(
+				categoryId,
+				filters,
+				Int.MAX_VALUE,
+				pinned.takeIfDefaultState(filters),
+			)
 		}.flattenLatest()
 	}
 
-	// Pins apply only in the default (unfiltered) state; the global SFW option is a setting, not a user filter
 	private fun List<Long>.takeIfDefaultState(filters: Set<ListFilterOption>): List<Long> =
 		if (filters.all { it == ListFilterOption.SFW }) this else emptyList()
 
@@ -239,12 +260,14 @@ class FavouritesListViewModel @Inject constructor(
 		EmptyState(
 			icon = R.drawable.ic_empty_favourites,
 			textPrimary = R.string.text_empty_holder_primary,
-			textSecondary = if (categoryId == NO_ID) {
-				R.string.you_have_not_favourites_yet
-			} else {
-				R.string.favourites_category_empty
-			},
+			textSecondary = if (categoryId == NO_ID) R.string.you_have_not_favourites_yet else R.string.favourites_category_empty,
 			actionStringRes = 0,
 		)
 	}
+
+	private data class DisplayState(
+		val query: String,
+		val type: FavouriteContentType,
+		val limit: Int,
+	)
 }

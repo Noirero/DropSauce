@@ -11,6 +11,7 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.model.MangaTag
 import org.koitharu.kotatsu.search.domain.SearchKind
+import org.koitharu.kotatsu.search.domain.sanitizeSearchQuery
 
 class SearchSuggestionListenerImpl(
 	private val router: AppRouter,
@@ -23,18 +24,26 @@ class SearchSuggestionListenerImpl(
 	}
 
 	override fun onQueryClick(query: String, kind: SearchKind, submit: Boolean) {
-		if (submit && query.isNotEmpty()) {
-			if (kind == SearchKind.SIMPLE && MangaLinkResolver.isValidLink(query)) {
-				router.openDetails(query.toUri())
+		val cleanQuery = sanitizeSearchQuery(query)
+		if (submit && cleanQuery.isNotEmpty()) {
+			if (viewModel.isFavouritesSearchScope) {
+				// In Favourites the live result list is the search result. Never leave the library and
+				// fan the same query out to every installed extension.
+				searchView.setText(cleanQuery)
+				viewModel.onQueryChanged(cleanQuery)
+				return
+			}
+			if (kind == SearchKind.SIMPLE && MangaLinkResolver.isValidLink(cleanQuery)) {
+				router.openDetails(cleanQuery.toUri())
 			} else {
-				router.openSearch(query, kind)
+				router.openSearch(cleanQuery, kind)
 				if (kind != SearchKind.TAG) {
-					viewModel.saveQuery(query)
+					viewModel.saveQuery(cleanQuery)
 				}
 			}
 			// Deliberately left open: coming back from the results lands on the search bar again.
 		} else {
-			searchView.setText(query)
+			searchView.setText(cleanQuery)
 		}
 	}
 
@@ -63,8 +72,8 @@ class SearchSuggestionListenerImpl(
 		actionId: Int,
 		event: KeyEvent?
 	): Boolean {
-		val query = v?.text?.toString()
-		if (query.isNullOrEmpty()) {
+		val query = sanitizeSearchQuery(v?.text?.toString().orEmpty())
+		if (query.isEmpty()) {
 			return false
 		}
 		onQueryClick(query, SearchKind.SIMPLE, true)

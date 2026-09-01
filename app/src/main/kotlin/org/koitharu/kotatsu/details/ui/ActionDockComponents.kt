@@ -107,12 +107,13 @@ internal fun ReadFab(
 	val enabled = !isChaptersLoading && historyInfo.isValid
 	val label = when {
 		isChaptersLoading -> stringResource(R.string.loading_)
-		historyInfo.isIncognitoMode -> stringResource(R.string.incognito)
 		historyInfo.canContinue -> stringResource(R.string._continue)
 		else -> stringResource(R.string.read)
 	}
-	val canIncognito = !historyInfo.isIncognitoMode
-	val canForget = historyInfo.history != null
+	// The read action is intentionally a single button. Incognito mode now lives in the top-right
+	// overflow menu, so this FAB no longer expands or exposes secondary actions.
+	val canIncognito = false
+	val canForget = false
 	val hasMenu = enabled && (canIncognito || canForget)
 
 	val haptic = rememberHapticEffect()

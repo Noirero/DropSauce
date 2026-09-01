@@ -5,68 +5,144 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import org.koitharu.kotatsu.core.model.chaptersCount
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
+import org.koitharu.kotatsu.search.domain.LANGUAGE_LOCAL
 import org.koitharu.kotatsu.search.domain.SearchKind
+import org.koitharu.kotatsu.search.domain.SearchSourceMode
 import org.koitharu.kotatsu.search.domain.SearchV2Helper
+import org.koitharu.kotatsu.search.domain.matchesPreferredLanguage
+import org.koitharu.kotatsu.search.domain.searchLanguageCode
 import javax.inject.Inject
 
-private const val MAX_PARALLELISM = 4
+private const val MAX_PARALLEL_SOURCES = 5
+private const val MAX_PARALLEL_DETAILS = 5
+private const val MAX_DETAIL_CANDIDATES = 3
+private const val POPULAR_SOURCE_LIMIT = 100
+
+sealed interface AlternativeSearchEvent {
+	data class Result(val manga: Manga) : AlternativeSearchEvent
+	data class SourceFinished(val source: MangaSource, val error: Throwable?) : AlternativeSearchEvent
+}
 
 class AlternativesUseCase @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
 	private val searchHelperFactory: SearchV2Helper.Factory,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
+	private val historyRepository: HistoryRepository,
 ) {
 
-	suspend operator fun invoke(manga: Manga): Flow<Manga> {
-		// Same kind only. A manga migrated onto a novel source (or the reverse) lands in the wrong
-		// reader with content it cannot load, so those are never offered as alternatives.
-		val isNovel = manga.source.isNovelSource
-		val sources = getSources().filter { it != manga.source && it.isNovelSource == isNovel }
-		if (sources.isEmpty()) {
-			return emptyFlow()
+	fun hasPinnedSources(): Boolean = sourcesRepository.getPinnedSources().isNotEmpty()
+
+	fun defaultMode(): SearchSourceMode = if (hasPinnedSources()) {
+		SearchSourceMode.PINNED_ONLY
+	} else {
+		SearchSourceMode.ALL_SOURCES
+	}
+
+	/** Compatibility path for background auto-fix: preserve its old Flow<Manga> contract. */
+	suspend operator fun invoke(manga: Manga): Flow<Manga> =
+		invoke(manga, defaultMode(), emptySet()).transform { event ->
+			if (event is AlternativeSearchEvent.Result) emit(event.manga)
 		}
-		val semaphore = Semaphore(MAX_PARALLELISM)
+
+	fun getAvailableLanguages(manga: Manga): List<String> {
+		val isNovel = manga.source.isNovelSource
+		return sourcesRepository.getEnabledSources()
+			.asSequence()
+			.filter { it != manga.source && it.isNovelSource == isNovel }
+			.map { it.searchLanguageCode() }
+			.filter { it != LANGUAGE_LOCAL }
+			.distinct()
+			.sorted()
+			.toList()
+	}
+
+	suspend fun getSources(
+		manga: Manga,
+		mode: SearchSourceMode,
+		preferredLanguages: Set<String>,
+	): List<MangaSource> {
+		val isNovel = manga.source.isNovelSource
+		val enabled = sourcesRepository.getEnabledSources()
+			.filter { it != manga.source && it.isNovelSource == isNovel }
+		val pinned = sourcesRepository.getPinnedSources().toSet()
+		val popularOrder = historyRepository.getPopularSources(POPULAR_SOURCE_LIMIT)
+			.withIndex().associate { (index, source) -> source to index }
+
+		val scoped = when (mode) {
+			SearchSourceMode.PINNED_ONLY -> enabled.filter { it in pinned }
+			SearchSourceMode.PREFERRED_LANGUAGES -> enabled.filter {
+				it in pinned || it.matchesPreferredLanguage(preferredLanguages)
+			}
+			SearchSourceMode.ALL_SOURCES -> enabled
+		}
+		return scoped.sortedWith(
+			compareBy<MangaSource>(
+				{ if (it in pinned) 0 else 1 },
+				{ if (it.matchesPreferredLanguage(preferredLanguages)) 0 else 1 },
+				{ popularOrder[it] ?: Int.MAX_VALUE },
+			),
+		)
+	}
+
+	suspend operator fun invoke(
+		manga: Manga,
+		mode: SearchSourceMode,
+		preferredLanguages: Set<String>,
+	): Flow<AlternativeSearchEvent> {
+		val sources = getSources(manga, mode, preferredLanguages)
+		if (sources.isEmpty()) return emptyFlow()
+
+		val sourceSemaphore = Semaphore(MAX_PARALLEL_SOURCES)
+		val detailsSemaphore = Semaphore(MAX_PARALLEL_DETAILS)
 		return channelFlow {
 			for (source in sources) {
 				launch {
-					val searchHelper = searchHelperFactory.create(source)
-					val list = runCatchingCancellable {
-						semaphore.withPermit {
-							searchHelper(manga.title, SearchKind.TITLE)?.manga
+					val searchResult = runCatchingCancellable {
+						sourceSemaphore.withPermit {
+							searchHelperFactory.create(source)(manga.title, SearchKind.TITLE)?.manga
 						}
-					}.getOrNull()
-					// A source may return several same-name results; load details for all of them
-					// and offer only the one whose best branch (scanlator) has the most chapters.
-					val candidates = list?.filter { it.id != manga.id }
-					if (candidates.isNullOrEmpty()) {
+					}
+					val list = searchResult.getOrElse { error ->
+						send(AlternativeSearchEvent.SourceFinished(source, error))
 						return@launch
 					}
-					val best = candidates.map { m ->
-						async {
-							runCatchingCancellable {
-								mangaRepositoryFactory.create(m.source).getDetails(m)
-							}.getOrDefault(m)
-						}
-					}.awaitAll().maxByOrNull { it.chaptersCount() }
-					if (best != null) {
-						send(best)
+
+					val candidates = list
+						?.asSequence()
+						?.filter { it.id != manga.id }
+						?.distinctBy { it.dedupeKey() }
+						?.take(MAX_DETAIL_CANDIDATES)
+						?.toList()
+						.orEmpty()
+
+					if (candidates.isNotEmpty()) {
+						val detailed = candidates.map { candidate ->
+							async {
+								detailsSemaphore.withPermit {
+									runCatchingCancellable {
+										mangaRepositoryFactory.create(candidate.source).getDetails(candidate)
+									}.getOrDefault(candidate)
+								}
+							}
+						}.awaitAll().distinctBy { it.dedupeKey() }
+						for (result in detailed) send(AlternativeSearchEvent.Result(result))
 					}
+					send(AlternativeSearchEvent.SourceFinished(source, null))
 				}
 			}
 		}
 	}
 
-	private suspend fun getSources(): List<MangaSource> {
-		return sourcesRepository.getEnabledSources().toList()
-	}
+	private fun Manga.dedupeKey(): Pair<Long, String> = id to title.trim().lowercase()
 }

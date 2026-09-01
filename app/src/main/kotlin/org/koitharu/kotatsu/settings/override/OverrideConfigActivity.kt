@@ -34,21 +34,13 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 	ActivityResultCallback<Uri?> {
 
 	private val viewModel: OverrideConfigViewModel by viewModels()
-
 	private var originalTitle: String? = null
 
 	private val pickCoverFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument(), this)
 	private val pickPageLauncher = registerForActivityResult(PageImagePickContract(), this)
-
-	// The photo picker grants temporary read access (no persistable permission), which lasts long
-	// enough for the cover to be copied into app storage when the override is saved.
 	private val pickCoverGalleryLauncher = registerForActivityResult(
 		ActivityResultContracts.PickVisualMedia(),
-	) { uri ->
-		if (uri != null) {
-			viewModel.updateCover(uri.toString())
-		}
-	}
+	) { uri -> if (uri != null) viewModel.updateCover(uri.toString()) }
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -60,7 +52,10 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 		viewBinding.buttonPickPage.setOnClickListener(this)
 		viewBinding.buttonPickUrl.setOnClickListener(this)
 		viewBinding.buttonResetCover.setOnClickListener(this)
-		viewBinding.layoutName.setEndIconOnClickListener(this)
+		viewBinding.layoutName.setEndIconOnClickListener { viewBinding.editName.text?.clear() }
+		viewBinding.layoutAuthor.setEndIconOnClickListener { viewBinding.editAuthor.text?.clear() }
+		viewBinding.layoutArtist.setEndIconOnClickListener { viewBinding.editArtist.text?.clear() }
+		viewBinding.layoutDescription.setEndIconOnClickListener { viewBinding.editDescription.text?.clear() }
 		viewBinding.editName.doAfterTextChanged { updateOriginalNamePreview() }
 		viewModel.data.filterNotNull().observe(this, ::onDataChanged)
 		viewModel.onSaved.observeEvent(this) { onDataSaved() }
@@ -71,12 +66,7 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
 		val typeMask = WindowInsetsCompat.Type.systemBars()
 		val barsInsets = insets.getInsets(typeMask)
-		viewBinding.root.setPadding(
-			barsInsets.left,
-			barsInsets.top,
-			barsInsets.right,
-			barsInsets.bottom,
-		)
+		viewBinding.root.setPadding(barsInsets.left, barsInsets.top, barsInsets.right, barsInsets.bottom)
 		return insets.consumeAll(typeMask)
 	}
 
@@ -93,43 +83,22 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 		when (v.id) {
 			R.id.button_done -> viewModel.save(
 				title = viewBinding.editName.text?.toString()?.trim(),
+				author = viewBinding.editAuthor.text?.toString()?.trim(),
+				artist = viewBinding.editArtist.text?.toString()?.trim(),
+				description = viewBinding.editDescription.text?.toString()?.trim(),
 			)
-
-			materialR.id.text_input_end_icon -> {
-				if (isCustomNameTyped()) {
-					viewBinding.editName.text?.clear()
-				}
-			}
-
 			R.id.button_reset_cover -> viewModel.updateCover(null)
 			R.id.button_pick_gallery -> {
-				if (!pickCoverGalleryLauncher.tryLaunch(
-						PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-					)
-				) {
-					Snackbar.make(
-						viewBinding.imageViewCover,
-						R.string.operation_not_supported,
-						Snackbar.LENGTH_SHORT,
-					).show()
+				if (!pickCoverGalleryLauncher.tryLaunch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))) {
+					Snackbar.make(viewBinding.imageViewCover, R.string.operation_not_supported, Snackbar.LENGTH_SHORT).show()
 				}
 			}
-
 			R.id.button_pick_file -> {
 				if (!pickCoverFileLauncher.tryLaunch(arrayOf("image/*"))) {
-					Snackbar.make(
-						viewBinding.imageViewCover,
-						R.string.operation_not_supported,
-						Snackbar.LENGTH_SHORT,
-					).show()
+					Snackbar.make(viewBinding.imageViewCover, R.string.operation_not_supported, Snackbar.LENGTH_SHORT).show()
 				}
 			}
-
-			R.id.button_pick_page -> {
-				val manga = viewModel.data.value?.first
-				pickPageLauncher.launch(manga)
-			}
-
+			R.id.button_pick_page -> pickPageLauncher.launch(viewModel.data.value?.first)
 			R.id.button_pick_url -> showCoverUrlDialog()
 		}
 	}
@@ -151,11 +120,8 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 			.setNegativeButton(android.R.string.cancel, null)
 			.setPositiveButton(android.R.string.ok) { _, _ ->
 				val url = editText.text?.toString()?.trim().orEmpty()
-				if (url.isHttpUrl()) {
-					viewModel.updateCover(url)
-				} else {
-					Snackbar.make(viewBinding.imageViewCover, R.string.invalid_url, Snackbar.LENGTH_SHORT).show()
-				}
+				if (url.isHttpUrl()) viewModel.updateCover(url)
+				else Snackbar.make(viewBinding.imageViewCover, R.string.invalid_url, Snackbar.LENGTH_SHORT).show()
 			}
 			.show()
 	}
@@ -165,23 +131,25 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 		originalTitle = manga.title
 		viewBinding.imageViewCover.setImageAsync(override.coverUrl.ifNullOrEmpty { manga.coverUrl }, manga)
 		viewBinding.layoutName.placeholderText = manga.title
+		viewBinding.layoutAuthor.placeholderText = manga.authors.joinToString(", ").takeIf { it.isNotBlank() }
 		if (viewBinding.editName.tag == null) {
 			viewBinding.editName.setText(override.title)
-			viewBinding.editName.tag = true  // Sentinel: field has been initialised; don't overwrite user edits on re-emit.
+			viewBinding.editAuthor.setText(override.author)
+			viewBinding.editArtist.setText(override.artist)
+			viewBinding.editDescription.setText(override.description)
+			viewBinding.editName.tag = true
 		}
 		val hasCustomCover = !override.coverUrl.isNullOrEmpty()
 		viewBinding.buttonResetCover.isEnabled = hasCustomCover
 		viewBinding.layoutOriginalCover.isVisible = hasCustomCover
-		if (hasCustomCover) {
-			viewBinding.imageViewOriginalCover.setImageAsync(manga.coverUrl, manga)
-		}
+		if (hasCustomCover) viewBinding.imageViewOriginalCover.setImageAsync(manga.coverUrl, manga)
 		updateOriginalNamePreview()
 	}
 
 	private fun updateOriginalNamePreview() {
 		val original = originalTitle?.trim().orEmpty()
 		val current = viewBinding.editName.text?.toString()?.trim().orEmpty()
-		val changed = isCustomNameTyped(original, current)
+		val changed = original.isNotEmpty() && current.isNotEmpty() && current != original
 		setNameResetEnabled(changed)
 		viewBinding.textViewOriginalName.isVisible = changed
 		if (changed) {
@@ -192,11 +160,6 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 			)
 		}
 	}
-
-	private fun isCustomNameTyped(
-		original: String = originalTitle?.trim().orEmpty(),
-		current: String = viewBinding.editName.text?.toString()?.trim().orEmpty(),
-	): Boolean = original.isNotEmpty() && current.isNotEmpty() && current != original
 
 	private fun setNameResetEnabled(isEnabled: Boolean) {
 		viewBinding.layoutName.findViewById<View>(materialR.id.text_input_end_icon)?.let { icon ->
@@ -213,9 +176,10 @@ class OverrideConfigActivity : BaseActivity<ActivityOverrideEditBinding>(), View
 	private fun onLoadingStateChanged(isLoading: Boolean) {
 		viewBinding.buttonDone.isEnabled = !isLoading
 		viewBinding.editName.isEnabled = !isLoading
-		if (isLoading) {
-			viewBinding.textViewError.isVisible = false
-		}
+		viewBinding.editAuthor.isEnabled = !isLoading
+		viewBinding.editArtist.isEnabled = !isLoading
+		viewBinding.editDescription.isEnabled = !isLoading
+		if (isLoading) viewBinding.textViewError.isVisible = false
 	}
 
 	private fun onDataSaved() {

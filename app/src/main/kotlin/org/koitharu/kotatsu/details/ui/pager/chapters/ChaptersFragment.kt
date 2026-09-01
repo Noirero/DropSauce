@@ -11,6 +11,7 @@ import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import dagger.hilt.android.AndroidEntryPoint
@@ -112,6 +113,31 @@ class ChaptersFragment :
 			PagerNestedScrollHelper(this).bind(viewLifecycleOwner)
 			adapter = chaptersAdapter
 			ChapterGridSpanHelper.attach(this)
+			ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.RIGHT) {
+				override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
+					val position = viewHolder.bindingAdapterPosition
+					val item = chaptersAdapter?.items?.getOrNull(position) as? ChapterListItem
+					return if (item != null && !item.isGrid) ItemTouchHelper.RIGHT else 0
+				}
+
+				override fun onMove(
+					recyclerView: RecyclerView,
+					viewHolder: RecyclerView.ViewHolder,
+					target: RecyclerView.ViewHolder,
+				): Boolean = false
+
+				override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+					val position = viewHolder.bindingAdapterPosition
+					val adapter = chaptersAdapter ?: return
+					val item = adapter.items.getOrNull(position) as? ChapterListItem
+					if (item != null) {
+						viewModel.toggleChapterReadState(item.chapter.id)
+					}
+					if (position != RecyclerView.NO_POSITION) {
+						adapter.notifyItemChanged(position)
+					}
+				}
+			}).attachToRecyclerView(this)
 		}
 		binding.chipsFilter.onChipClickListener = this
 		viewModel.isLoading.observe(viewLifecycleOwner, this::onLoadingStateChanged)

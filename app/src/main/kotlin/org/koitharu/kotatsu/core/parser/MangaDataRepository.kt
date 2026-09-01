@@ -115,6 +115,9 @@ class MangaDataRepository @Inject constructor(
 					titleOverride = normalizedOverride?.title?.nullIfEmpty(),
 					coverUrlOverride = normalizedOverride?.coverUrl?.nullIfEmpty(),
 					contentRatingOverride = normalizedOverride?.contentRating?.name,
+					authorOverride = normalizedOverride?.author?.nullIfEmpty(),
+					artistOverride = normalizedOverride?.artist?.nullIfEmpty(),
+					descriptionOverride = normalizedOverride?.description?.nullIfEmpty(),
 				),
 			)
 			normalizedOverride
@@ -130,9 +133,7 @@ class MangaDataRepository @Inject constructor(
 	suspend fun findMangaById(mangaId: Long, withChapters: Boolean): Manga? {
 		val chapters = if (withChapters) {
 			db.getChaptersDao().findAll(mangaId).takeUnless { it.isEmpty() }
-		} else {
-			null
-		}
+		} else null
 		return db.getMangaDao().find(mangaId)?.toManga(chapters)
 	}
 
@@ -143,16 +144,11 @@ class MangaDataRepository @Inject constructor(
 	suspend fun resolveIntent(intent: MangaIntent, withChapters: Boolean): Manga? = when {
 		intent.manga != null -> {
 			val direct = intent.manga.copy(source = ResolveMangaSource(intent.manga.source.name))
-			// List/history/favourite items are intentionally lightweight. Prefer the full database
-			// snapshot for every remote manga, not just dynamically loaded extension sources, so the
-			// detail screen can render its previously fetched metadata and chapters immediately.
 			val resolved = if (!direct.isLocal) {
 				findMangaById(direct.id, withChapters)?.let { stored ->
 					stored.copy(source = ResolveMangaSource(stored.source.name))
 				} ?: direct
-			} else {
-				direct
-			}
+			} else direct
 			resolved.withCachedChaptersIfNeeded(withChapters)
 		}
 		intent.mangaId != 0L -> findMangaById(intent.mangaId, withChapters)
@@ -185,9 +181,7 @@ class MangaDataRepository @Inject constructor(
 		val dao = db.getMangaDao()
 		val broken = dao.findAllBySource(LocalMangaSource.name)
 			.filter { x -> x.manga.url.toUri().toFileOrNull()?.exists() == false }
-		if (broken.isNotEmpty()) {
-			dao.delete(broken.map { it.manga })
-		}
+		if (broken.isNotEmpty()) dao.delete(broken.map { it.manga })
 	}
 
 	suspend fun cleanupDatabase() {
@@ -210,14 +204,8 @@ class MangaDataRepository @Inject constructor(
 
 	private suspend fun Manga.withCachedChaptersIfNeeded(flag: Boolean): Manga = if (flag && !isLocal && chapters.isNullOrEmpty()) {
 		val cachedChapters = db.getChaptersDao().findAll(id)
-		if (cachedChapters.isEmpty()) {
-			this
-		} else {
-			copy(chapters = cachedChapters.toMangaChapters())
-		}
-	} else {
-		this
-	}
+		if (cachedChapters.isEmpty()) this else copy(chapters = cachedChapters.toMangaChapters())
+	} else this
 
 	private suspend fun storeMangaLocked(
 		manga: Manga,
@@ -227,18 +215,9 @@ class MangaDataRepository @Inject constructor(
 	) {
 		val mangaDao = db.getMangaDao()
 		val existing = mangaDao.find(manga.id)?.manga
-		if (!replaceExisting && existing != null) {
-			return
-		}
-		// Avoid storing local manga if a remote one is already stored.
-		if (manga.isLocal && existing != null && existing.source != manga.source.name) {
-			return
-		}
-		val override = if (stripAppliedOverride) {
-			db.getPreferencesDao().find(manga.id)?.getOverrideOrNull()
-		} else {
-			null
-		}
+		if (!replaceExisting && existing != null) return
+		if (manga.isLocal && existing != null && existing.source != manga.source.name) return
+		val override = if (stripAppliedOverride) db.getPreferencesDao().find(manga.id)?.getOverrideOrNull() else null
 		val sourceManga = manga.withoutAppliedOverride(existing, override)
 		val tags = sourceManga.tags.toEntities()
 		db.getTagsDao().upsert(tags)
@@ -254,13 +233,9 @@ class MangaDataRepository @Inject constructor(
 	}
 
 	private fun Manga.withoutAppliedOverride(existing: MangaEntity?, override: MangaOverride?): Manga {
-		if (existing == null || override == null) {
-			return this
-		}
+		if (existing == null || override == null) return this
 		var result = this
-		if (!override.title.isNullOrEmpty() && title == override.title) {
-			result = result.copy(title = existing.title)
-		}
+		if (!override.title.isNullOrEmpty() && title == override.title) result = result.copy(title = existing.title)
 		if (!override.coverUrl.isNullOrEmpty()) {
 			result = result.copy(
 				coverUrl = if (coverUrl == override.coverUrl) existing.coverUrl else coverUrl,
@@ -270,32 +245,33 @@ class MangaDataRepository @Inject constructor(
 		if (override.contentRating != null && contentRating == override.contentRating) {
 			result = result.copy(contentRating = ContentRating(existing.contentRating))
 		}
-		// Lightweight list cards do not carry a description. Never let storing one erase the
-		// complete detail snapshot that was fetched from the source.
-		if (description == null && chapters == null && existing.description != null) {
+		if (!override.author.isNullOrEmpty() && authors.joinToString(", ") == override.author) {
+			result = result.copy(authors = existing.authors.toAuthorSet())
+		}
+		if (!override.description.isNullOrEmpty() && description == override.description) {
+			result = result.copy(description = existing.description)
+		}
+		if (result.description == null && chapters == null && existing.description != null) {
 			result = result.copy(description = existing.description)
 		}
 		return result
 	}
 
 	private fun MangaOverride?.normalizedAgainst(source: MangaEntity): MangaOverride? {
-		if (this == null) {
-			return null
-		}
+		if (this == null) return null
 		val normalized = copy(
 			title = title?.trim()?.nullIfEmpty()?.takeUnless { it == source.title },
 			coverUrl = coverUrl?.nullIfEmpty()?.takeUnless { it == source.coverUrl || it == source.largeCoverUrl },
 			contentRating = contentRating?.takeUnless { it == ContentRating(source.contentRating) },
+			author = author?.trim()?.nullIfEmpty()?.takeUnless { it == source.authors.toAuthorSet().joinToString(", ") },
+			artist = artist?.trim()?.nullIfEmpty(),
+			description = description?.trim()?.nullIfEmpty()?.takeUnless { it == source.description?.trim() },
 		)
 		return if (
-			normalized.title.isNullOrEmpty() &&
-			normalized.coverUrl.isNullOrEmpty() &&
-			normalized.contentRating == null
-		) {
-			null
-		} else {
-			normalized
-		}
+			normalized.title.isNullOrEmpty() && normalized.coverUrl.isNullOrEmpty() &&
+			normalized.contentRating == null && normalized.author.isNullOrEmpty() &&
+			normalized.artist.isNullOrEmpty() && normalized.description.isNullOrEmpty()
+		) null else normalized
 	}
 
 	private fun MangaPrefsEntity.getColorFilterOrNull(): ReaderColorFilter? {
@@ -305,23 +281,23 @@ class MangaDataRepository @Inject constructor(
 				contrast = cfContrast,
 				isInverted = cfInvert,
 				isGrayscale = cfGrayscale,
-				isBookBackground = cfBookEffect
+				isBookBackground = cfBookEffect,
 			)
-		} else {
-			null
-		}
+		} else null
 	}
 
 	private fun MangaPrefsEntity.getOverrideOrNull(): MangaOverride? {
-		return if (titleOverride.isNullOrEmpty() && coverUrlOverride.isNullOrEmpty() && contentRatingOverride.isNullOrEmpty()) {
-			null
-		} else {
-			MangaOverride(
-				coverUrl = coverUrlOverride?.nullIfEmpty(),
-				title = titleOverride?.nullIfEmpty(),
-				contentRating = ContentRating(contentRatingOverride),
-			)
-		}
+		return if (
+			titleOverride.isNullOrEmpty() && coverUrlOverride.isNullOrEmpty() && contentRatingOverride.isNullOrEmpty() &&
+			authorOverride.isNullOrEmpty() && artistOverride.isNullOrEmpty() && descriptionOverride.isNullOrEmpty()
+		) null else MangaOverride(
+			coverUrl = coverUrlOverride?.nullIfEmpty(),
+			title = titleOverride?.nullIfEmpty(),
+			contentRating = ContentRating(contentRatingOverride),
+			author = authorOverride?.nullIfEmpty(),
+			artist = artistOverride?.nullIfEmpty(),
+			description = descriptionOverride?.nullIfEmpty(),
+		)
 	}
 
 	private fun newEntity(mangaId: Long) = MangaPrefsEntity(
@@ -335,6 +311,16 @@ class MangaDataRepository @Inject constructor(
 		titleOverride = null,
 		coverUrlOverride = null,
 		contentRatingOverride = null,
+		authorOverride = null,
+		artistOverride = null,
+		descriptionOverride = null,
 		mergeScanlators = false,
 	)
+
+	private fun String?.toAuthorSet(): Set<String> = this
+		?.split('\n')
+		?.map { it.trim() }
+		?.filter { it.isNotEmpty() }
+		?.toSet()
+		.orEmpty()
 }
