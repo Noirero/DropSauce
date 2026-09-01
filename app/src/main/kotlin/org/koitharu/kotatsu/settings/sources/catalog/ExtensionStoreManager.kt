@@ -25,8 +25,8 @@ data class ExtensionStoreState(
 	val store: ExtensionStoreRecord,
 	val health: StoreHealth,
 	val catalog: List<ExternalExtensionRepoEntry> = emptyList(),
-	val contentType: ExtensionStoreContentType = ExtensionStoreContentType.MANGA,
 	val error: Throwable? = null,
+	val contentType: ExtensionStoreContentType = ExtensionStoreContentType.MANGA,
 )
 
 @Singleton
@@ -66,6 +66,10 @@ class ExtensionStoreManager @Inject constructor(
 		}
 	}
 
+	/** Legacy callers keep Manga as their old default; the Manage stores UI always passes a type. */
+	suspend fun validateAndAdd(indexUrl: String): Result<ExtensionStoreRecord> =
+		validateAndAdd(indexUrl, ExtensionStoreContentType.MANGA)
+
 	suspend fun validateAndAdd(
 		indexUrl: String,
 		contentType: ExtensionStoreContentType,
@@ -87,6 +91,10 @@ class ExtensionStoreManager @Inject constructor(
 			}
 		}
 	}
+
+	/** Editing through an old caller keeps the repository's existing explicit media family. */
+	suspend fun editStore(storeId: String, indexUrl: String): Result<ExtensionStoreRecord> =
+		editStore(storeId, indexUrl, registry.contentType(storeId))
 
 	suspend fun editStore(
 		storeId: String,
@@ -182,10 +190,10 @@ class ExtensionStoreManager @Inject constructor(
 				val cached = runCatching { repository.getCachedExtensions(store.indexUrl) }.getOrNull()
 				if (cached != null) {
 					ExtensionStoreState(
-						store,
-						StoreHealth.AVAILABLE,
-						cached.forContentType(contentType),
-						contentType,
+						store = store,
+						health = StoreHealth.AVAILABLE,
+						catalog = cached.forContentType(contentType),
+						contentType = contentType,
 					)
 				} else {
 					previous
@@ -206,7 +214,12 @@ class ExtensionStoreManager @Inject constructor(
 					)
 				},
 				onFailure = { error ->
-					storeStateAfterRefresh(store, contentType, fallbackPrevious, Result.failure(error))
+					storeStateAfterRefresh(
+						store = store,
+						previous = fallbackPrevious,
+						result = Result.failure(error),
+						contentType = contentType,
+					)
 				},
 			)
 		}
@@ -255,11 +268,12 @@ private fun List<ExternalExtensionRepoEntry>.forContentType(
 	ExtensionStoreContentType.ANIME -> this
 }
 
+/** Preserves the old three-argument helper contract while allowing typed callers. */
 fun storeStateAfterRefresh(
 	store: ExtensionStoreRecord,
-	contentType: ExtensionStoreContentType = ExtensionStoreContentType.MANGA,
 	previous: ExtensionStoreState?,
 	result: Result<List<ExternalExtensionRepoEntry>>,
+	contentType: ExtensionStoreContentType = ExtensionStoreContentType.MANGA,
 ): ExtensionStoreState = when {
 	result.isSuccess -> ExtensionStoreState(
 		store = store,
@@ -271,8 +285,8 @@ fun storeStateAfterRefresh(
 		store = store,
 		health = StoreHealth.UNAVAILABLE,
 		catalog = previous?.catalog.orEmpty().forContentType(contentType),
-		contentType = contentType,
 		error = result.exceptionOrNull(),
+		contentType = contentType,
 	)
 }
 
