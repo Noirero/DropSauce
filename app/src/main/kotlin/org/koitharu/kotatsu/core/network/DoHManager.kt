@@ -1,8 +1,12 @@
 package org.koitharu.kotatsu.core.network
 
+import android.content.Context
+import androidx.preference.PreferenceManager
 import okhttp3.Cache
 import okhttp3.Dns
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.dnsoverhttps.DnsOverHttps
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -13,18 +17,22 @@ import java.net.UnknownHostException
 class DoHManager(
 	cache: Cache,
 	private val settings: AppSettings,
+	context: Context,
 ) : Dns {
 
 	private val bootstrapClient = OkHttpClient.Builder().cache(cache).build()
+	private val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
 
 	private var cachedDelegate: Dns? = null
 	private var cachedProvider: DoHProvider? = null
+	private var cachedCustomUrl: String? = null
 
 	override fun lookup(hostname: String): List<InetAddress> {
 		return try {
 			getDelegate().lookup(hostname)
 		} catch (e: UnknownHostException) {
-			// fallback
+			// Keep the existing safety fallback: if the selected DoH resolver is unreachable,
+			// normal system DNS still allows the request to proceed.
 			Dns.SYSTEM.lookup(hostname)
 		}
 	}
@@ -33,15 +41,21 @@ class DoHManager(
 	private fun getDelegate(): Dns {
 		var delegate = cachedDelegate
 		val provider = settings.dnsOverHttps
-		if (delegate == null || provider != cachedProvider) {
-			delegate = createDelegate(provider)
+		val customUrl = if (provider == DoHProvider.CUSTOM) {
+			prefs.getString(KEY_CUSTOM_URL, null)?.trim()?.takeIf { it.isNotEmpty() }
+		} else {
+			null
+		}
+		if (delegate == null || provider != cachedProvider || customUrl != cachedCustomUrl) {
+			delegate = createDelegate(provider, customUrl)
 			cachedDelegate = delegate
 			cachedProvider = provider
+			cachedCustomUrl = customUrl
 		}
 		return delegate
 	}
 
-	private fun createDelegate(provider: DoHProvider): Dns = when (provider) {
+	private fun createDelegate(provider: DoHProvider, customUrl: String?): Dns = when (provider) {
 		DoHProvider.NONE -> Dns.SYSTEM
 		DoHProvider.GOOGLE -> doh(
 			url = "https://dns.google/dns-query",
@@ -146,21 +160,45 @@ class DoHManager(
 			"104.26.1.241",
 			"172.67.69.243",
 		)
+
+		DoHProvider.CUSTOM -> customUrl
+			?.toHttpUrlOrNull()
+			?.takeIf { it.scheme == "https" }
+			?.let { doh(it) }
+			?: Dns.SYSTEM
 	}
 
 	private fun doh(
 		url: String,
 		vararg bootstrapHosts: String,
-	): Dns = DnsOverHttps.Builder().client(bootstrapClient)
-		.url(url.toHttpUrl())
-		.resolvePrivateAddresses(true)
-		.bootstrapDnsHosts(bootstrapHosts.mapNotNull(::tryGetByIp))
-		.build()
+	): Dns = doh(url.toHttpUrl(), *bootstrapHosts)
+
+	private fun doh(
+		url: HttpUrl,
+		vararg bootstrapHosts: String,
+	): Dns {
+		val builder = DnsOverHttps.Builder()
+			.client(bootstrapClient)
+			.url(url)
+			.resolvePrivateAddresses(true)
+		val bootstrap = bootstrapHosts.mapNotNull(::tryGetByIp)
+		// Custom endpoints generally do not have known bootstrap IPs. In that case leave bootstrap
+		// unset so the dedicated bootstrap client resolves the DoH endpoint using system DNS once;
+		// all subsequent target hostname lookups go through the configured HTTPS resolver.
+		if (bootstrap.isNotEmpty()) {
+			builder.bootstrapDnsHosts(bootstrap)
+		}
+		return builder.build()
+	}
 
 	private fun tryGetByIp(ip: String): InetAddress? = try {
 		InetAddress.getByName(ip)
 	} catch (e: UnknownHostException) {
 		e.printStackTraceDebug()
 		null
+	}
+
+	companion object {
+		const val KEY_CUSTOM_URL = "dns_over_https_custom_url"
 	}
 }
