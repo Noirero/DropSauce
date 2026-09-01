@@ -108,7 +108,6 @@ class SearchViewModel @Inject constructor(
 				if (item.id in ids) {
 					result.add(item.manga)
 				}
-			}
 		}
 		return result
 	}
@@ -174,11 +173,12 @@ class SearchViewModel @Inject constructor(
 		searchHelper(query, kind)
 	}.fold(
 		onSuccess = { result ->
-			if (result == null || result.manga.isEmpty()) {
+			val uniqueManga = result?.manga?.distinctBy { it.dedupeKey() }.orEmpty()
+			if (result == null || uniqueManga.isEmpty()) {
 				null
 			} else {
 				val list = mangaListMapper.toListModelList(
-					manga = result.manga,
+					manga = uniqueManga,
 					mode = ListMode.GRID,
 				)
 				SearchResultsListModel(
@@ -200,6 +200,7 @@ class SearchViewModel @Inject constructor(
 	private suspend fun searchHistory(): SearchResultsListModel? = runCatchingCancellable {
 		historyRepository.search(query, kind, Int.MAX_VALUE)
 			.filter { it.source.isNovelSource == isNovelScope }
+			.distinctBy { it.dedupeKey() }
 	}.fold(
 		onSuccess = { result ->
 			if (result.isNotEmpty()) {
@@ -230,6 +231,7 @@ class SearchViewModel @Inject constructor(
 	private suspend fun searchFavorites(): SearchResultsListModel? = runCatchingCancellable {
 		favouritesRepository.search(query, kind, Int.MAX_VALUE)
 			.filter { it.source.isNovelSource == isNovelScope }
+			.distinctBy { it.dedupeKey() }
 	}.fold(
 		onSuccess = { result ->
 			if (result.isNotEmpty()) {
@@ -267,12 +269,13 @@ class SearchViewModel @Inject constructor(
 		searchHelperFactory.create(LocalMangaSource).invoke(query, kind)
 	}.fold(
 		onSuccess = { result ->
-			if (!result?.manga.isNullOrEmpty()) {
+			val uniqueManga = result?.manga?.distinctBy { it.dedupeKey() }.orEmpty()
+			if (result != null && uniqueManga.isNotEmpty()) {
 				SearchResultsListModel(
 					titleResId = 0,
 					source = LocalMangaSource,
 					list = mangaListMapper.toListModelList(
-						manga = result.manga,
+						manga = uniqueManga,
 						mode = ListMode.GRID,
 						flags = MangaListMapper.NO_SAVED,
 					),
@@ -302,4 +305,5 @@ class SearchViewModel @Inject constructor(
 		}
 	}
 
+	private fun Manga.dedupeKey(): Pair<Long, String> = id to title.trim().lowercase()
 }
