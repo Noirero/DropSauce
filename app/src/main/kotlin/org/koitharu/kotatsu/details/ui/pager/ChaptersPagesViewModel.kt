@@ -104,6 +104,7 @@ abstract class ChaptersPagesViewModel(
 	)
 
 	val isDownloadedOnly = MutableStateFlow(false)
+	private val chapterReadOverrides = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
 
 	val newChaptersCount = mangaDetails.flatMapLatest { d ->
 		if (d?.isLocal == false) {
@@ -162,14 +163,15 @@ abstract class ChaptersPagesViewModel(
 
 	val chapters = combine(
 		combine(
-			mangaDetails,
+			mangaDetails.combine(chapterReadOverrides) { manga, overrides -> manga to overrides },
 			readingState.map { it?.chapterId ?: 0L }.distinctUntilChanged(),
 			selectedBranch,
 			newChaptersCount,
 			bookmarks,
 			isChaptersInGridView,
 			isDownloadedOnly,
-		) { manga, currentChapterId, branch, news, bookmarks, grid, downloadedOnly ->
+		) { mangaWithOverrides, currentChapterId, branch, news, bookmarks, grid, downloadedOnly ->
+			val (manga, overrides) = mangaWithOverrides
 			manga?.mapChapters(
 				currentChapterId = currentChapterId,
 				newCount = news,
@@ -177,6 +179,7 @@ abstract class ChaptersPagesViewModel(
 				bookmarks = bookmarks,
 				isGrid = grid,
 				isDownloadedOnly = downloadedOnly,
+				readOverrides = overrides,
 			).orEmpty()
 		},
 		isChaptersReversed,
@@ -210,6 +213,11 @@ abstract class ChaptersPagesViewModel(
 	val isScanlatorsMerged = MutableStateFlow(false)
 
 	init {
+		launchJob(Dispatchers.Default) {
+			mangaDetails.map { it?.id }.distinctUntilChanged().filterNotNull().collect { mangaId ->
+				chapterReadOverrides.value = settings.getChapterReadOverrides(mangaId)
+			}
+		}
 		launchJob(Dispatchers.Default) {
 			localStorageChanges
 				.collect { onDownloadComplete(it) }
@@ -274,6 +282,14 @@ abstract class ChaptersPagesViewModel(
 
 	fun disableChapterJumpDialog() {
 		settings.isChapterJumpDialogEnabled = false
+	}
+
+	fun toggleChapterReadState(chapterId: Long) {
+		val item = chapters.value.firstOrNull { it.chapter.id == chapterId } ?: return
+		val mangaId = mangaDetails.value?.id ?: return
+		val markRead = item.isUnread
+		settings.setChapterReadOverride(mangaId, chapterId, markRead)
+		chapterReadOverrides.update { current -> current + (chapterId to markRead) }
 	}
 
 	fun markChapterAsCurrent(chapterId: Long) {
