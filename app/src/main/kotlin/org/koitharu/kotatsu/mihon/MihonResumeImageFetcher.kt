@@ -11,10 +11,9 @@ import org.koitharu.kotatsu.parsers.model.MangaPage
 
 /**
  * Fetches an image with a byte offset when the repository is backed by a real Mihon HttpSource.
- * Using HttpSource.getImage(page, existingSize) is important: it keeps extension-specific image
- * transforms/decryption and headers while also allowing HTTP Range resume. Repositories that do
- * not expose a Mihon HttpSource fall back to their normal image path and the worker will safely
- * overwrite the partial file if the response is HTTP 200 rather than 206.
+ * Newer sources can use the resumable API directly. If an older extension overrides the legacy
+ * getImage(Page) hook (commonly for decrypt/unscramble work), we deliberately call that override
+ * instead of bypassing its transform; the worker then sees HTTP 200 and safely restarts that page.
  */
 suspend fun MangaRepository.getResumableImageStream(
 	pageUrl: String,
@@ -25,9 +24,28 @@ suspend fun MangaRepository.getResumableImageStream(
 	val mihonRepository = this as? MihonMangaRepository ?: return getImageStream(pageUrl, page)
 	if (mihonRepository.source.isNovel) return getImageStream(pageUrl, page)
 	val httpSource = mihonRepository.mihonSource as? HttpSource ?: return getImageStream(pageUrl, page)
+	val mihonPage = page.toResumeMihonPage(pageUrl)
 	return withContext(Dispatchers.IO) {
-		httpSource.getImage(page.toResumeMihonPage(pageUrl), existingSize)
+		when {
+			httpSource.hasResumableImageOverride() -> httpSource.getImage(mihonPage, existingSize)
+			httpSource.hasLegacyImageOverride() -> httpSource.getImage(mihonPage)
+			else -> httpSource.getImage(mihonPage, existingSize)
+		}
 	}
+}
+
+private fun HttpSource.hasLegacyImageOverride(): Boolean = javaClass.methods.any { method ->
+	method.name == "getImage" &&
+		method.parameterTypes.size == 2 &&
+		method.parameterTypes.firstOrNull() == Page::class.java &&
+		method.declaringClass != HttpSource::class.java
+}
+
+private fun HttpSource.hasResumableImageOverride(): Boolean = javaClass.methods.any { method ->
+	method.name == "getImage" &&
+		method.parameterTypes.size == 3 &&
+		method.parameterTypes.firstOrNull() == Page::class.java &&
+		method.declaringClass != HttpSource::class.java
 }
 
 private fun MangaPage.toResumeMihonPage(imageUrl: String): Page {
