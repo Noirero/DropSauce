@@ -19,4 +19,5 @@
 	<string name="search_filter_reset">Reset filter</string>
 	<string name="search_language_other">Lainnya</string>
 	<string name="search_progress_sources">%1$d/%2$d source · %3$d error</string>
+	<string name="search_paste">Tempel</string>
 </resources>
