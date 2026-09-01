@@ -34,6 +34,14 @@
 		app:showAsAction="never" />
 
 	<item
+		android:id="@+id/action_note"
+		android:icon="@drawable/ic_edit"
+		android:orderInCategory="45"
+		android:title="Note"
+		android:visible="false"
+		app:showAsAction="never" />
+
+	<item
 		android:id="@+id/action_scrobbling"
 		android:icon="@drawable/ic_sync"
 		android:orderInCategory="50"
