@@ -264,6 +264,16 @@ class SearchActivity :
 		return true
 	}
 
+	override fun onPrepareActionMode(
+		controller: ListSelectionController,
+		mode: ActionMode?,
+		menu: Menu,
+	): Boolean {
+		mode?.title = controller.count.toString()
+		menu.findItem(R.id.action_open_browser)?.isEnabled = controller.count == 1
+		return true
+	}
+
 	override fun onActionItemClicked(controller: ListSelectionController, mode: ActionMode?, item: MenuItem): Boolean {
 		return when (item.itemId) {
 			R.id.action_share -> {
@@ -278,6 +288,11 @@ class SearchActivity :
 			}
 			R.id.action_save -> {
 				router.showDownloadDialog(collectSelectedItems(), viewBinding.recyclerView)
+				mode?.finish()
+				true
+			}
+			R.id.action_open_browser -> {
+				collectSelectedItems().singleOrNull()?.let(router::openBrowser)
 				mode?.finish()
 				true
 			}
