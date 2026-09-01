@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -25,6 +26,9 @@ import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
+import org.koitharu.kotatsu.favourites.domain.FavoriteContentTypeStore
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
@@ -65,6 +69,7 @@ class FavouritesListViewModel @Inject constructor(
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
 	private val searchMatcher: FavouritesSearchMatcher,
+	private val contentTypeStore: FavouriteContentTypeStore,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -72,6 +77,12 @@ class FavouritesListViewModel @Inject constructor(
 	private val refreshTrigger = MutableStateFlow(Any())
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val isPaginationReady = AtomicBoolean(false)
+
+	private val displayState = combine(
+		FavouritesContainerFragment.searchQuery,
+		contentTypeStore.selectedType,
+		limit,
+	) { query, type, pageLimit -> DisplayState(query, type, pageLimit) }
 
 	override val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE_FAVORITES) { favoritesListMode }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.favoritesListMode)
@@ -98,15 +109,19 @@ class FavouritesListViewModel @Inject constructor(
 			settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_UI_SCALING) },
 		) { _, visible -> visible },
 		pinnedIds,
-		FavouritesContainerFragment.searchQuery,
-	) { list, mode, scalingTip, pinned, query ->
+		displayState,
+	) { list, mode, scalingTip, pinned, display ->
 		val filters = quickFilter.appliedOptions.value
-		searchMatcher.filter(list, query).mapList(
+		val wantNovel = display.type == FavouriteContentType.NOVEL
+		val typed = list.filter { it.source.isNovelSource == wantNovel }
+		val searched = searchMatcher.filter(typed, display.query)
+		val visible = if (display.query.isBlank()) searched.take(display.limit) else searched
+		visible.mapList(
 			mode,
 			filters,
 			pinned.takeIfDefaultState(filters),
 			scalingTip,
-			query.isNotBlank(),
+			display.query.isNotBlank(),
 		)
 	}.distinctUntilChanged().onEach {
 		isPaginationReady.set(true)
@@ -208,29 +223,25 @@ class FavouritesListViewModel @Inject constructor(
 		combine(
 			sortOrder.filterNotNull(),
 			quickFilter.appliedOptions.combineWithSettings(),
-			limit,
 			pinnedIds,
-			FavouritesContainerFragment.searchQuery,
-		) { order, filters, requestedLimit, pinned, query ->
+		) { order, filters, pinned ->
 			isPaginationReady.set(false)
 			repository.observeAll(
 				order,
 				filters,
-				if (query.isBlank()) requestedLimit else Int.MAX_VALUE,
+				Int.MAX_VALUE,
 				pinned.takeIfDefaultState(filters),
 			)
 		}.flattenLatest()
 	} else {
 		combine(
 			quickFilter.appliedOptions.combineWithSettings(),
-			limit,
 			pinnedIds,
-			FavouritesContainerFragment.searchQuery,
-		) { filters, requestedLimit, pinned, query ->
+		) { filters, pinned ->
 			repository.observeAll(
 				categoryId,
 				filters,
-				if (query.isBlank()) requestedLimit else Int.MAX_VALUE,
+				Int.MAX_VALUE,
 				pinned.takeIfDefaultState(filters),
 			)
 		}.flattenLatest()
@@ -254,4 +265,10 @@ class FavouritesListViewModel @Inject constructor(
 			actionStringRes = 0,
 		)
 	}
+
+	private data class DisplayState(
+		val query: String,
+		val type: FavouriteContentType,
+		val limit: Int,
+	)
 }
