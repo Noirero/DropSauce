@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.AppCompatEditText
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -43,7 +44,10 @@ import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.setTextAndVisible
 import org.koitharu.kotatsu.databinding.FragmentFavouritesContainerBinding
 import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBinding>(),
@@ -51,6 +55,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	RecyclerViewOwner,
 	ViewStub.OnInflateListener,
 	View.OnClickListener {
+
+	@Inject lateinit var contentTypeStore: FavouriteContentTypeStore
 
 	private val viewModel: FavouritesContainerViewModel by viewModels()
 	private var inlineSearchEdit: AppCompatEditText? = null
@@ -78,6 +84,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			FavouritesTabConfigurationStrategy(pagerAdapter, viewModel, router),
 		).attach()
 		binding.stubEmpty.setOnInflateListener(this)
+		binding.buttonContentType.setOnClickListener(::showContentTypeMenu)
 		if (!isHidden) {
 			attachTabsToAppBar()
 			installFavouriteSearchHandler()
@@ -85,6 +92,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		actionModeDelegate.addListener(this)
 		viewModel.categories.observe(viewLifecycleOwner, pagerAdapter)
 		viewModel.isEmpty.observe(viewLifecycleOwner, ::onEmptyStateChanged)
+		contentTypeStore.selectedType.observe(viewLifecycleOwner, ::onContentTypeChanged)
 		addMenuProvider(FavouritesContainerMenuProvider(router))
 		viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
 
@@ -116,9 +124,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			restoreGlobalSearchHandler()
 		} else {
 			installFavouriteSearchHandler()
-			// This tab is kept alive across bottom-nav switches, so its category lists would retain
-			// their previous scroll. Reset every instantiated category page (the visible one plus any
-			// cached offscreen pages) to the top whenever Favourites is reopened, matching the other tabs.
+			onContentTypeChanged(contentTypeStore.selectedType.value)
 			for (page in childFragmentManager.fragments) {
 				val recyclerView = (page as? RecyclerViewOwner)?.recyclerView ?: continue
 				when (val lm = recyclerView.layoutManager) {
@@ -133,6 +139,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = false
 			tabs.setTabsEnabled(false)
+			buttonContentType.isEnabled = false
 		}
 	}
 
@@ -140,6 +147,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = true
 			tabs.setTabsEnabled(true)
+			buttonContentType.isEnabled = true
 		}
 	}
 
@@ -159,11 +167,40 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		}
 	}
 
+	private fun showContentTypeMenu(anchor: View) {
+		PopupMenu(requireContext(), anchor).apply {
+			menu.add(0, MENU_MANGA, 0, getString(R.string.content_type_manga))
+			menu.add(0, MENU_NOVELS, 1, "Novels")
+			setOnMenuItemClickListener { item ->
+				val type = when (item.itemId) {
+					MENU_MANGA -> FavouriteContentType.MANGA
+					MENU_NOVELS -> FavouriteContentType.NOVEL
+					else -> return@setOnMenuItemClickListener false
+				}
+				contentTypeStore.setSelectedType(type)
+				viewBinding?.pager?.setCurrentItem(0, false)
+				true
+			}
+			show()
+		}
+	}
+
+	private fun onContentTypeChanged(type: FavouriteContentType) {
+		val label = if (type == FavouriteContentType.NOVEL) "Novels" else getString(R.string.content_type_manga)
+		viewBinding?.buttonContentType?.text = "$label  ^"
+		inlineSearchEdit?.hint = if (type == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
+		if (!isHidden) {
+			activity?.findViewById<SearchBar>(R.id.search_bar)?.hint =
+				if (type == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
+		}
+	}
+
 	private fun onEmptyStateChanged(isEmpty: Boolean) {
 		viewBinding?.run {
 			pager.isGone = isEmpty
 			tabs.isGone = isEmpty
 			stubEmpty.isVisible = isEmpty
+			buttonContentType.isVisible = true
 		}
 	}
 
@@ -182,6 +219,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		val host = activity ?: return
 		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
 		val searchView = host.findViewById<SearchView>(R.id.search_view) ?: return
+		searchBar.hint = getString(R.string.search_manga)
 		searchBar.setOnClickListener { searchView.show() }
 	}
 
@@ -236,7 +274,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		val edit = AppCompatEditText(requireContext()).apply {
 			layoutParams = LinearLayout.LayoutParams(searchBar.layoutParams)
 			background = searchBar.background?.constantState?.newDrawable(resources)?.mutate()
-			hint = getString(R.string.search_manga)
+			hint = if (contentTypeStore.selectedType.value == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
 			setTextColor(searchBar.textView.currentTextColor)
 			setHintTextColor(searchBar.textView.currentHintTextColor)
 			textSize = searchBar.textView.textSize / resources.displayMetrics.scaledDensity
@@ -255,17 +293,10 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		return edit
 	}
 
-	// The category tabs live in the activity's AppBarLayout while this tab is visible, so they scroll
-	// off-screen together with the search bar instead of being pinned above the (edge-to-edge) lists.
-	// Called by MainActivity at bottom-nav commit time, not from onHiddenChanged: that callback is only
-	// delivered after the tab-switch animation finishes, so the app bar would grow by the tab strip's
-	// height a frame after the crossfade ended and visibly shove the list down.
 	fun attachTabsToAppBar() {
 		val tabs = viewBinding?.tabs ?: return
 		val appBar = (activity as? AppBarOwner)?.appBar ?: return
-		if (tabs.parent === appBar) {
-			return
-		}
+		if (tabs.parent === appBar) return
 		(tabs.parent as? ViewGroup)?.removeView(tabs)
 		appBar.addView(
 			tabs,
@@ -281,14 +312,16 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	fun detachTabsFromAppBar() {
-		val tabs = viewBinding?.tabs ?: return
-		val parent = tabs.parent as? ViewGroup ?: return
-		if (parent !== viewBinding?.root) {
-			parent.removeView(tabs)
-		}
+		val binding = viewBinding ?: return
+		val tabs = binding.tabs
+		if (tabs.parent === binding.layoutContent) return
+		(tabs.parent as? ViewGroup)?.removeView(tabs)
+		binding.layoutContent.addView(tabs, 0)
 	}
 
 	companion object {
+		private const val MENU_MANGA = 1001
+		private const val MENU_NOVELS = 1002
 		internal val searchScopeActive = MutableStateFlow(false)
 		internal val searchQuery = MutableStateFlow("")
 	}
