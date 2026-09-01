@@ -39,7 +39,6 @@
 			android:paddingTop="@dimen/margin_normal"
 			android:paddingBottom="@dimen/screen_padding">
 
-			<!-- Name field at the top so the keyboard doesn't cover it -->
 			<com.google.android.material.textfield.TextInputLayout
 				android:id="@+id/layout_name"
 				style="?textInputOutlinedStyle"
@@ -55,11 +54,9 @@
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
 					android:hint="@string/name"
-					android:imeOptions="actionDone"
+					android:imeOptions="actionNext"
 					android:inputType="textCapSentences"
-					android:maxLength="120"
-					tools:text="@tools:sample/lorem[3]" />
-
+					android:maxLength="120" />
 			</com.google.android.material.textfield.TextInputLayout>
 
 			<TextView
@@ -74,7 +71,67 @@
 				tools:text="Original name: One Piece"
 				tools:visibility="visible" />
 
-			<!-- Cover preview hero (floating, no wrapper) -->
+			<com.google.android.material.textfield.TextInputLayout
+				android:id="@+id/layout_author"
+				style="?textInputOutlinedStyle"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="@dimen/margin_normal"
+				app:endIconContentDescription="@string/reset"
+				app:endIconDrawable="@drawable/ic_revert"
+				app:endIconMode="custom">
+
+				<com.google.android.material.textfield.TextInputEditText
+					android:id="@+id/edit_author"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:hint="@string/override_author"
+					android:imeOptions="actionNext"
+					android:inputType="textCapWords"
+					android:maxLength="240" />
+			</com.google.android.material.textfield.TextInputLayout>
+
+			<com.google.android.material.textfield.TextInputLayout
+				android:id="@+id/layout_artist"
+				style="?textInputOutlinedStyle"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="@dimen/margin_normal"
+				app:endIconContentDescription="@string/reset"
+				app:endIconDrawable="@drawable/ic_revert"
+				app:endIconMode="custom">
+
+				<com.google.android.material.textfield.TextInputEditText
+					android:id="@+id/edit_artist"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:hint="@string/override_artist"
+					android:imeOptions="actionNext"
+					android:inputType="textCapWords"
+					android:maxLength="240" />
+			</com.google.android.material.textfield.TextInputLayout>
+
+			<com.google.android.material.textfield.TextInputLayout
+				android:id="@+id/layout_description"
+				style="?textInputOutlinedStyle"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="@dimen/margin_normal"
+				app:endIconContentDescription="@string/reset"
+				app:endIconDrawable="@drawable/ic_revert"
+				app:endIconMode="custom">
+
+				<com.google.android.material.textfield.TextInputEditText
+					android:id="@+id/edit_description"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:gravity="top|start"
+					android:hint="@string/override_description"
+					android:inputType="textCapSentences|textMultiLine"
+					android:minLines="4"
+					android:maxLines="10" />
+			</com.google.android.material.textfield.TextInputLayout>
+
 			<org.koitharu.kotatsu.image.ui.CoverImageView
 				android:id="@+id/imageView_cover"
 				android:layout_width="172dp"
@@ -99,7 +156,6 @@
 				android:text="@string/change_cover"
 				android:textAppearance="?textAppearanceTitleSmall" />
 
-			<!-- Cover actions -->
 			<com.google.android.material.card.MaterialCardView
 				style="?materialCardViewFilledStyle"
 				android:layout_width="match_parent"
@@ -149,10 +205,8 @@
 							android:layout_height="wrap_content"
 							android:text="@string/pick_cover_url"
 							app:drawableStartCompat="@drawable/ic_web" />
-
 					</LinearLayout>
 
-					<!-- Preview of the original cover that "use default" reverts to -->
 					<LinearLayout
 						android:id="@+id/layout_original_cover"
 						android:layout_width="wrap_content"
@@ -172,7 +226,6 @@
 							android:background="?colorSurfaceContainerHighest"
 							android:scaleType="centerCrop"
 							app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Kotatsu.Cover.Medium"
-							tools:background="@tools:sample/backgrounds/scenic[7]"
 							tools:ignore="ContentDescription" />
 
 						<TextView
@@ -191,14 +244,10 @@
 							android:layout_marginTop="8dp"
 							android:contentDescription="@string/use_default_cover"
 							app:icon="@drawable/ic_revert" />
-
 					</LinearLayout>
-
 				</LinearLayout>
-
 			</com.google.android.material.card.MaterialCardView>
 
-			<!-- Tip -->
 			<TextView
 				android:id="@+id/textView_tip"
 				android:layout_width="match_parent"
@@ -220,12 +269,7 @@
 				android:layout_marginTop="@dimen/margin_normal"
 				android:paddingHorizontal="@dimen/margin_small"
 				android:textColor="?colorError"
-				android:visibility="gone"
-				tools:text="@tools:sample/lorem[4]"
-				tools:visibility="visible" />
-
+				android:visibility="gone" />
 		</LinearLayout>
-
 	</ScrollView>
-
 </LinearLayout>
