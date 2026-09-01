@@ -1,15 +1,12 @@
 name: Beta Build
 
 # Builds a standalone beta APK from the beta branch only when manually requested.
-# Temporary push trigger below is enabled only for this explicitly requested one-time build.
+# Regular commits to beta accumulate fixes without producing an APK automatically.
 # The preview variant keeps a separate applicationId suffix, so Beta can stay installed
 # alongside DropSauce Noirero main. All Beta builds use the repository's permanent signing
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - beta
 
 permissions:
   contents: read
