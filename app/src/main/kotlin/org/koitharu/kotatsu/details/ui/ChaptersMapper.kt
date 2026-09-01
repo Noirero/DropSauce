@@ -46,9 +46,13 @@ fun MangaDetails.mapChapters(
 			// chapter's visible/download-file identity so an existing CBZ is recognised as downloaded.
 			val local = localMap?.remove(chapter.id) ?: localMap?.findAndRemoveEquivalent(chapter)
 			val isCurrent = chapter.id == currentChapterId
+			// Swipe actions operate on the chapter object shown by the adapter. For downloaded chapters
+			// that object may be the local chapter and have a different ID from the remote source chapter.
+			// Accept an override saved under either identity so the visual read state always follows the swipe.
+			val readOverride = readOverrides[local?.id] ?: readOverrides[chapter.id]
 			result += (local ?: chapter).toListItem(
 				isCurrent = isCurrent,
-				isUnread = readOverrides[chapter.id]?.not() ?: (isUnread && !isCurrent),
+				isUnread = readOverride?.not() ?: (isUnread && !isCurrent),
 				isNew = !isCurrent && isUnread && result.size >= newFrom,
 				isDownloaded = local != null,
 				isBookmarked = chapter.id in bookmarked,
