@@ -20,4 +20,5 @@
 	<string name="search_language_other">Lainnya</string>
 	<string name="search_progress_sources">%1$d/%2$d source · %3$d error</string>
 	<string name="search_paste">Tempel</string>
+	<string name="search_open_browser">Buka di browser</string>
 </resources>
