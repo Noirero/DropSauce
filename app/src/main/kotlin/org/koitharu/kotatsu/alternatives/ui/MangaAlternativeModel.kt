@@ -19,7 +19,10 @@ data class MangaAlternativeModel(
 		get() = if (referenceChapters == 0 || chaptersCount == 0) 0 else chaptersCount - referenceChapters
 
 	override fun areItemsTheSame(other: ListModel): Boolean {
-		return other is MangaAlternativeModel && other.manga.id == manga.id
+		return other is MangaAlternativeModel &&
+			other.manga.source == manga.source &&
+			other.manga.id == manga.id &&
+			other.manga.title.equals(manga.title, ignoreCase = true)
 	}
 
 	override fun getChangePayload(previousState: ListModel): Any? = if (previousState is MangaAlternativeModel) {
