@@ -11,97 +11,117 @@ import kotlinx.coroutines.sync.withPermit
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.search.domain.SearchKind
+import org.koitharu.kotatsu.search.domain.SearchSourceMode
 import org.koitharu.kotatsu.search.domain.SearchV2Helper
+import org.koitharu.kotatsu.search.domain.matchesPreferredLanguage
 import javax.inject.Inject
 
 private const val MAX_PARALLEL_SOURCES = 5
 private const val MAX_PARALLEL_DETAILS = 5
 private const val MAX_DETAIL_CANDIDATES = 3
+private const val POPULAR_SOURCE_LIMIT = 100
 
-enum class AlternativeSearchScope {
-	PINNED,
-	ALL_INSTALLED,
+sealed interface AlternativeSearchEvent {
+	data class Result(val manga: Manga) : AlternativeSearchEvent
+	data class SourceFinished(val source: MangaSource, val error: Throwable?) : AlternativeSearchEvent
 }
 
 class AlternativesUseCase @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
 	private val searchHelperFactory: SearchV2Helper.Factory,
 	private val mangaRepositoryFactory: MangaRepository.Factory,
+	private val historyRepository: HistoryRepository,
 ) {
 
 	fun hasPinnedSources(): Boolean = sourcesRepository.getPinnedSources().isNotEmpty()
 
-	fun defaultScope(): AlternativeSearchScope = if (hasPinnedSources()) {
-		AlternativeSearchScope.PINNED
+	fun defaultMode(): SearchSourceMode = if (hasPinnedSources()) {
+		SearchSourceMode.PINNED_ONLY
 	} else {
-		AlternativeSearchScope.ALL_INSTALLED
+		SearchSourceMode.ALL_SOURCES
+	}
+
+	suspend fun getSources(
+		manga: Manga,
+		mode: SearchSourceMode,
+		preferredLanguages: Set<String>,
+	): List<MangaSource> {
+		val isNovel = manga.source.isNovelSource
+		val enabled = sourcesRepository.getEnabledSources()
+			.filter { it != manga.source && it.isNovelSource == isNovel }
+		val pinned = sourcesRepository.getPinnedSources().toSet()
+		val popularOrder = historyRepository.getPopularSources(POPULAR_SOURCE_LIMIT)
+			.withIndex().associate { (index, source) -> source to index }
+
+		val scoped = when (mode) {
+			SearchSourceMode.PINNED_ONLY -> enabled.filter { it in pinned }
+			SearchSourceMode.PREFERRED_LANGUAGES -> enabled.filter {
+				it in pinned || it.matchesPreferredLanguage(preferredLanguages)
+			}
+			SearchSourceMode.ALL_SOURCES -> enabled
+		}
+		return scoped.sortedWith(
+			compareBy<MangaSource>(
+				{ if (it in pinned) 0 else 1 },
+				{ if (it.matchesPreferredLanguage(preferredLanguages)) 0 else 1 },
+				{ popularOrder[it] ?: Int.MAX_VALUE },
+			),
+		)
 	}
 
 	suspend operator fun invoke(
 		manga: Manga,
-		scope: AlternativeSearchScope = defaultScope(),
-	): Flow<Manga> {
-		// Same kind only. A manga migrated onto a novel source (or the reverse) lands in the wrong
-		// reader with content it cannot load, so those are never offered as alternatives.
-		val isNovel = manga.source.isNovelSource
-		val sources = getSources(scope).filter { it != manga.source && it.isNovelSource == isNovel }
-		if (sources.isEmpty()) {
-			return emptyFlow()
-		}
+		mode: SearchSourceMode,
+		preferredLanguages: Set<String>,
+	): Flow<AlternativeSearchEvent> {
+		val sources = getSources(manga, mode, preferredLanguages)
+		if (sources.isEmpty()) return emptyFlow()
 
-		// Keep source and detail requests bounded while allowing multiple genuinely different
-		// matches from the same extension to survive (for example Chinese and Korean originals).
 		val sourceSemaphore = Semaphore(MAX_PARALLEL_SOURCES)
 		val detailsSemaphore = Semaphore(MAX_PARALLEL_DETAILS)
 		return channelFlow {
 			for (source in sources) {
 				launch {
-					val searchHelper = searchHelperFactory.create(source)
-					val list = runCatchingCancellable {
+					val searchResult = runCatchingCancellable {
 						sourceSemaphore.withPermit {
-							searchHelper(manga.title, SearchKind.TITLE)?.manga
+							searchHelperFactory.create(source)(manga.title, SearchKind.TITLE)?.manga
 						}
-					}.getOrNull()
+					}
+					val list = searchResult.getOrElse { error ->
+						send(AlternativeSearchEvent.SourceFinished(source, error))
+						return@launch
+					}
 
-					// SearchV2Helper already sorts by title relevance. Inspect only the strongest matches.
-					// Dedupe only exact source-item/title duplicates: entries with the same id but a different
-					// displayed/original title remain separate so language variants are not collapsed.
 					val candidates = list
 						?.asSequence()
 						?.filter { it.id != manga.id }
 						?.distinctBy { it.dedupeKey() }
 						?.take(MAX_DETAIL_CANDIDATES)
 						?.toList()
-					if (candidates.isNullOrEmpty()) {
-						return@launch
-					}
+						.orEmpty()
 
-					val detailed = candidates.map { candidate ->
-						async {
-							detailsSemaphore.withPermit {
-								runCatchingCancellable {
-									mangaRepositoryFactory.create(candidate.source).getDetails(candidate)
-								}.getOrDefault(candidate)
+					if (candidates.isNotEmpty()) {
+						val detailed = candidates.map { candidate ->
+							async {
+								detailsSemaphore.withPermit {
+									runCatchingCancellable {
+										mangaRepositoryFactory.create(candidate.source).getDetails(candidate)
+									}.getOrDefault(candidate)
+								}
 							}
-						}
-					}.awaitAll().distinctBy { it.dedupeKey() }
-
-					for (result in detailed) {
-						send(result)
+						}.awaitAll().distinctBy { it.dedupeKey() }
+						for (result in detailed) send(AlternativeSearchEvent.Result(result))
 					}
+					send(AlternativeSearchEvent.SourceFinished(source, null))
 				}
 			}
 		}
 	}
 
 	private fun Manga.dedupeKey(): Pair<Long, String> = id to title.trim().lowercase()
-
-	private fun getSources(scope: AlternativeSearchScope): List<MangaSource> = when (scope) {
-		AlternativeSearchScope.PINNED -> sourcesRepository.getPinnedSources().toList()
-		AlternativeSearchScope.ALL_INSTALLED -> sourcesRepository.getEnabledSources()
-	}
 }
