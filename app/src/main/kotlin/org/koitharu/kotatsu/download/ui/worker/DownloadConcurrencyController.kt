@@ -1,9 +1,11 @@
 package org.koitharu.kotatsu.download.ui.worker
 
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +30,11 @@ class DownloadConcurrencyController @Inject constructor() {
 		return try {
 			block()
 		} finally {
-			release(sourceKey)
+			// A cancelled worker must still release its source slot. Without NonCancellable a
+			// cancellation arriving at mutex acquisition can strand the permit until process restart.
+			withContext(NonCancellable) {
+				release(sourceKey)
+			}
 		}
 	}
 
