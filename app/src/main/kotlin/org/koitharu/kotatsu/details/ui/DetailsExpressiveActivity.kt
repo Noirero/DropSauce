@@ -1,13 +1,19 @@
 package org.koitharu.kotatsu.details.ui
 
 import android.app.assist.AssistContent
+import android.content.Context
 import android.os.Bundle
+import android.text.InputType
+import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
@@ -63,6 +69,8 @@ class DetailsExpressiveActivity :
 
 	private val topInset = mutableIntStateOf(0)
 	private val bottomInset = mutableIntStateOf(0)
+	private val mangaNote = mutableStateOf<String?>(null)
+	private val notesPreferences by lazy { getSharedPreferences(NOTES_PREFERENCES, Context.MODE_PRIVATE) }
 	private var isDarkTheme = false
 
 	// Pull-to-refresh is only allowed when the content is scrolled to the top, so the gesture never
@@ -77,6 +85,7 @@ class DetailsExpressiveActivity :
 		WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isDarkTheme
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
 		supportActionBar?.setDisplayShowTitleEnabled(false)
+		mangaNote.value = loadNote()
 		setupContent()
 		setupSwipeRefresh()
 
@@ -85,6 +94,7 @@ class DetailsExpressiveActivity :
 			viewModel = viewModel,
 			snackbarHost = viewBinding.composeView,
 			appShortcutManager = shortcutManager,
+			onNoteClick = ::showNoteDialog,
 		)
 		addMenuProvider(menuProvider)
 
@@ -184,6 +194,7 @@ class DetailsExpressiveActivity :
 
 				DetailsExpressiveScreen(
 					details = details,
+					note = mangaNote.value,
 					tags = tags,
 					historyInfo = history,
 					isLoading = loading,
@@ -271,6 +282,48 @@ class DetailsExpressiveActivity :
 		}.show()
 	}
 
+	private fun loadNote(): String? = notesPreferences
+		.getString(viewModel.mangaId.toString(), null)
+		?.trim()
+		?.takeIf { it.isNotEmpty() }
+
+	private fun saveNote(value: String?) {
+		val note = value?.trim()?.takeIf { it.isNotEmpty() }
+		notesPreferences.edit().apply {
+			if (note == null) {
+				remove(viewModel.mangaId.toString())
+			} else {
+				putString(viewModel.mangaId.toString(), note)
+			}
+		}.apply()
+		mangaNote.value = note
+	}
+
+	private fun showNoteDialog() {
+		val input = EditText(this).apply {
+			setText(mangaNote.value.orEmpty())
+			setSelection(text.length)
+			minLines = 3
+			maxLines = 8
+			gravity = Gravity.TOP or Gravity.START
+			inputType = InputType.TYPE_CLASS_TEXT or
+				InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+				InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+			setHorizontallyScrolling(false)
+		}
+		val dialog = buildAlertDialog(this) {
+			setTitle("Note")
+			setView(input)
+			setPositiveButton(android.R.string.ok) { _, _ -> saveNote(input.text?.toString()) }
+			setNegativeButton(android.R.string.cancel, null)
+			if (!mangaNote.value.isNullOrBlank()) {
+				setNeutralButton(R.string.delete) { _, _ -> saveNote(null) }
+			}
+		}.show()
+		input.requestFocus()
+		dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+	}
+
 	private class PrefetchObserver(
 		private val context: android.content.Context,
 	) : kotlinx.coroutines.flow.FlowCollector<List<ChapterListItem>?> {
@@ -281,5 +334,9 @@ class DetailsExpressiveActivity :
 			val item = value.find { it.isCurrent } ?: value.first()
 			MangaPrefetchService.prefetchPages(context, item.chapter)
 		}
+	}
+
+	private companion object {
+		const val NOTES_PREFERENCES = "manga_notes"
 	}
 }
