@@ -19,7 +19,9 @@ import org.koitharu.kotatsu.search.domain.SearchKind
 import org.koitharu.kotatsu.search.domain.SearchV2Helper
 import javax.inject.Inject
 
-private const val MAX_PARALLELISM = 4
+private const val MAX_PARALLEL_SOURCES = 5
+private const val MAX_PARALLEL_DETAILS = 5
+private const val MAX_DETAIL_CANDIDATES = 3
 
 class AlternativesUseCase @Inject constructor(
 	private val sourcesRepository: MangaSourcesRepository,
@@ -35,27 +37,43 @@ class AlternativesUseCase @Inject constructor(
 		if (sources.isEmpty()) {
 			return emptyFlow()
 		}
-		val semaphore = Semaphore(MAX_PARALLELISM)
+
+		// Kahon uses five parallel migration sources. Keep source searches responsive while also
+		// capping detail requests separately so a source returning many matches cannot flood the
+		// network/client and make the screen feel slower instead of faster.
+		val sourceSemaphore = Semaphore(MAX_PARALLEL_SOURCES)
+		val detailsSemaphore = Semaphore(MAX_PARALLEL_DETAILS)
 		return channelFlow {
 			for (source in sources) {
 				launch {
 					val searchHelper = searchHelperFactory.create(source)
 					val list = runCatchingCancellable {
-						semaphore.withPermit {
+						sourceSemaphore.withPermit {
 							searchHelper(manga.title, SearchKind.TITLE)?.manga
 						}
 					}.getOrNull()
-					// A source may return several same-name results; load details for all of them
-					// and offer only the one whose best branch (scanlator) has the most chapters.
-					val candidates = list?.filter { it.id != manga.id }
+
+					// SearchV2Helper already sorts by title relevance. Inspect only the strongest matches
+					// instead of fetching details for every result a source returns. This keeps the existing
+					// "prefer the branch with more chapters" behaviour without generating dozens of detail
+					// requests for weakly related titles.
+					val candidates = list
+						?.asSequence()
+						?.filter { it.id != manga.id }
+						?.distinctBy { it.id }
+						?.take(MAX_DETAIL_CANDIDATES)
+						?.toList()
 					if (candidates.isNullOrEmpty()) {
 						return@launch
 					}
-					val best = candidates.map { m ->
+
+					val best = candidates.map { candidate ->
 						async {
-							runCatchingCancellable {
-								mangaRepositoryFactory.create(m.source).getDetails(m)
-							}.getOrDefault(m)
+							detailsSemaphore.withPermit {
+								runCatchingCancellable {
+									mangaRepositoryFactory.create(candidate.source).getDetails(candidate)
+								}.getOrDefault(candidate)
+							}
 						}
 					}.awaitAll().maxByOrNull { it.chaptersCount() }
 					if (best != null) {
