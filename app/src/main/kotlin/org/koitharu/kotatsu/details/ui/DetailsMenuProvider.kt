@@ -67,9 +67,7 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
 		menu.findItem(R.id.action_note).isVisible = manga != null && onNoteClick != null
 
-		// Preserve the exact availability rules from the old Read FAB submenu. Incognito used to be
-		// offered only while the read action itself was ready and only when the current reading mode
-		// was not already incognito.
+		// Keep the same availability rules that the old Read FAB submenu used for incognito mode.
 		val historyInfo = viewModel.historyInfo.value
 		val isChaptersLoading = viewModel.isLoading.value &&
 			(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
@@ -131,11 +129,11 @@ class DetailsMenuProvider(
 						Snackbar.make(snackbarHost, R.string.operation_not_supported, Snackbar.LENGTH_SHORT)
 							.show()
 					}
+				}
 			}
 
 			R.id.action_incognito -> {
-				// Re-check the old FAB's availability conditions at click time as well. This protects
-				// against a stale overflow menu if loading/incognito state changes while it is open.
+				// Re-check availability at click time in case state changed while the menu was open.
 				val historyInfo = viewModel.historyInfo.value
 				val isChaptersLoading = viewModel.isLoading.value &&
 					(historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
@@ -146,8 +144,6 @@ class DetailsMenuProvider(
 					Snackbar.make(snackbarHost, R.string.chapter_is_missing, Snackbar.LENGTH_SHORT).show()
 					return true
 				}
-				// This is the same ReaderIntent path the old Read FAB submenu used: same manga,
-				// selected branch and EXTRA_INCOGNITO flag, followed by the same confirmation toast.
 				val readerIntent = ReaderIntent.Builder(activity)
 					.manga(manga)
 					.branch(viewModel.selectedBranchValue)
