@@ -69,6 +69,7 @@ class DetailsExpressiveActions(
 @Composable
 fun DetailsExpressiveScreen(
 	details: MangaDetails?,
+	note: String?,
 	tags: List<ChipsView.ChipModel>,
 	historyInfo: HistoryInfo,
 	isLoading: Boolean,
@@ -169,6 +170,8 @@ fun DetailsExpressiveScreen(
 					Spacer(Modifier.height(8.dp))
 					ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
 
+					note?.trim()?.takeIf { it.isNotEmpty() }?.let { NoteCard(it) }
+
 					DescriptionCard(
 						description = details.displayDescription,
 						manga = manga,
@@ -233,6 +236,17 @@ fun DetailsExpressiveScreen(
 				)
 			}
 		}
+	}
+}
+
+@Composable
+private fun NoteCard(note: String) {
+	SectionCard {
+		Text(
+			text = note,
+			style = MaterialTheme.typography.bodyLarge,
+			color = MaterialTheme.colorScheme.onSurface,
+		)
 	}
 }
 
