@@ -255,6 +255,7 @@ internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagCl
 						color = warningColor ?: accent,
 						modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
 					)
+				}
 			}
 		}
 	}
