@@ -319,7 +319,8 @@ class DetailsExpressiveActivity :
 			if (!mangaNote.value.isNullOrBlank()) {
 				setNeutralButton(R.string.delete) { _, _ -> saveNote(null) }
 			}
-		}.show()
+		}
+		dialog.show()
 		input.requestFocus()
 		dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
 	}
