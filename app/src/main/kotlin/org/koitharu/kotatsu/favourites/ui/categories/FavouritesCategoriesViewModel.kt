@@ -40,13 +40,17 @@ class FavouritesCategoriesViewModel @Inject constructor(
 
 	private var commitJob: Job? = null
 	private val isActionsEnabled = MutableStateFlow(true)
+	private val contentTypeState = combine(
+		contentTypeStore.selectedType,
+		contentTypeStore.novelCategoryIds,
+	) { type, _ -> type }
 
 	val content = combine(
 		repository.observeCategoriesWithCovers(),
 		observeAllCategories(),
 		settings.observeAsFlow(AppSettings.KEY_ALL_FAVOURITES_VISIBLE) { isAllFavouritesVisible },
 		isActionsEnabled,
-		contentTypeStore.selectedType,
+		contentTypeState,
 	) { cats, _, showAll, hasActions, type ->
 		val wantNovel = type == FavouriteContentType.NOVEL
 		val typedCats = cats
@@ -78,17 +82,14 @@ class FavouritesCategoriesViewModel @Inject constructor(
 			val ids = snapshot.mapNotNullTo(ArrayList(snapshot.size)) {
 				(it as? CategoryListModel)?.category?.id
 			}
-			if (ids.isNotEmpty()) {
-				repository.reorderCategories(ids)
-			}
+			if (ids.isNotEmpty()) repository.reorderCategories(ids)
 		}
 	}
 
 	fun setIsVisible(ids: Set<Long>, isVisible: Boolean) {
 		launchJob(Dispatchers.Default) {
-			for (id in ids) {
-				repository.updateCategory(id, isVisible)
-			}
+			for (id in ids) repository.updateCategory(id, isVisible)
+		}
 	}
 
 	fun setActionsEnabled(value: Boolean) {
