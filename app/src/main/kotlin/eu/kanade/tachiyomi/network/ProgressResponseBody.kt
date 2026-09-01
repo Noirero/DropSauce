@@ -12,7 +12,15 @@ import java.io.IOException
 class ProgressResponseBody(
 	private val responseBody: ResponseBody,
 	private val progressListener: ProgressListener,
+	private val existingSize: Long,
 ) : ResponseBody() {
+
+	/** Keep the legacy constructor ABI used by older extension builds. */
+	constructor(
+		responseBody: ResponseBody,
+		progressListener: ProgressListener,
+	) : this(responseBody, progressListener, 0L)
+
 	private val bufferedSource: BufferedSource by lazy {
 		source(responseBody.source()).buffer()
 	}
@@ -31,15 +39,18 @@ class ProgressResponseBody(
 
 	private fun source(source: Source): Source {
 		return object : ForwardingSource(source) {
-			var totalBytesRead = 0L
+			var totalBytesRead = existingSize
 
 			@Throws(IOException::class)
 			override fun read(sink: Buffer, byteCount: Long): Long {
 				val bytesRead = super.read(sink, byteCount)
-				totalBytesRead += if (bytesRead != -1L) bytesRead else 0
+				totalBytesRead += if (bytesRead != -1L) bytesRead else 0L
+				val totalLength = responseBody.contentLength().let { length ->
+					if (length != -1L) length + existingSize else -1L
+				}
 				progressListener.update(
 					totalBytesRead,
-					responseBody.contentLength(),
+					totalLength,
 					bytesRead == -1L,
 				)
 				return bytesRead
