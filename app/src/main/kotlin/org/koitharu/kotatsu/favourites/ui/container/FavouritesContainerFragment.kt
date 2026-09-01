@@ -73,6 +73,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	override fun onViewBindingCreated(binding: FragmentFavouritesContainerBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
+		val shouldRestoreInlineSearch = savedInstanceState?.getBoolean(STATE_INLINE_SEARCH_ACTIVE) == true
+		savedInstanceState?.getString(STATE_SEARCH_QUERY)?.let { searchQuery.value = it }
 		searchScopeActive.value = !isHidden
 		val pagerAdapter = FavouritesContainerAdapter(this)
 		binding.pager.adapter = pagerAdapter
@@ -99,19 +101,36 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		searchBackCallback = object : OnBackPressedCallback(false) {
 			override fun handleOnBackPressed() = exitInlineSearch()
 		}.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
+
+		if (shouldRestoreInlineSearch && !isHidden) {
+			enterInlineSearch()
+		}
+	}
+
+	override fun onSaveInstanceState(outState: Bundle) {
+		outState.putBoolean(STATE_INLINE_SEARCH_ACTIVE, inlineSearchActive)
+		outState.putString(STATE_SEARCH_QUERY, searchQuery.value)
+		super.onSaveInstanceState(outState)
 	}
 
 	override fun onDestroyView() {
-		exitInlineSearch()
+		exitInlineSearch(clearQuery = false)
 		restoreGlobalSearchHandler()
 		inlineSearchEdit?.let { edit -> (edit.parent as? ViewGroup)?.removeView(edit) }
 		inlineSearchEdit = null
 		searchBackCallback = null
 		searchScopeActive.value = false
-		searchQuery.value = ""
 		detachTabsFromAppBar()
 		actionModeDelegate.removeListener(this)
 		super.onDestroyView()
+	}
+
+	override fun onDestroy() {
+		if (activity?.isChangingConfigurations != true) {
+			searchQuery.value = ""
+			searchScopeActive.value = false
+		}
+		super.onDestroy()
 	}
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat = insets
@@ -238,21 +257,24 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			setOnClickListener { exitInlineSearch() }
 		}
 		edit.requestFocus()
+		edit.setSelection(edit.text?.length ?: 0)
 		edit.post {
 			(context?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
 				?.showSoftInput(edit, InputMethodManager.SHOW_IMPLICIT)
 		}
 	}
 
-	private fun exitInlineSearch() {
+	private fun exitInlineSearch(clearQuery: Boolean = true) {
 		val host = activity ?: return
 		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
 		val edit = inlineSearchEdit
 		inlineSearchActive = false
 		searchBackCallback?.isEnabled = false
-		searchQuery.value = ""
+		if (clearQuery) {
+			searchQuery.value = ""
+		}
 		edit?.apply {
-			setText("")
+			if (clearQuery) setText("")
 			clearFocus()
 			isGone = true
 		}
@@ -286,6 +308,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
 			compoundDrawablePadding = resources.getDimensionPixelOffset(R.dimen.margin_small)
 			isGone = true
+			setText(searchQuery.value)
 			doAfterTextChanged { searchQuery.value = it?.toString().orEmpty() }
 		}
 		parent.addView(edit, parent.indexOfChild(searchBar) + 1)
@@ -322,6 +345,8 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	companion object {
 		private const val MENU_MANGA = 1001
 		private const val MENU_NOVELS = 1002
+		private const val STATE_INLINE_SEARCH_ACTIVE = "favourites_inline_search_active"
+		private const val STATE_SEARCH_QUERY = "favourites_search_query"
 		internal val searchScopeActive = MutableStateFlow(false)
 		internal val searchQuery = MutableStateFlow("")
 	}
