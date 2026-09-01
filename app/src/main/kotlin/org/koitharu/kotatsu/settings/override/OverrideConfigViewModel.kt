@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import okio.buffer
 import okio.sink
+import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
@@ -37,6 +38,7 @@ class OverrideConfigViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	@ApplicationContext private val context: Context,
 	private val dataRepository: MangaDataRepository,
+	private val database: MangaDatabase,
 ) : BaseViewModel() {
 
 	private val manga = savedStateHandle.require<ParcelableManga>(AppRouter.KEY_MANGA).manga
@@ -46,24 +48,34 @@ class OverrideConfigViewModel @Inject constructor(
 
 	init {
 		launchLoadingJob(Dispatchers.Default) {
-			// Always use the pristine DB-stored manga so that the editor shows the true
-			// source title/cover, regardless of whether the caller already had an override applied.
 			val sourceManga = dataRepository.findMangaById(manga.id, false) ?: manga
-			data.value = sourceManga to (dataRepository.getOverride(manga.id) ?: emptyOverride())
+			val base = dataRepository.getOverride(manga.id) ?: emptyOverride()
+			val prefs = database.getPreferencesDao().find(manga.id)
+			data.value = sourceManga to base.copy(
+				author = prefs?.authorOverride,
+				artist = prefs?.artistOverride,
+				description = prefs?.descriptionOverride,
+			)
 		}
 	}
 
-	fun save(title: String?) {
+	fun save(title: String?, author: String?, artist: String?, description: String?) {
 		launchLoadingJob(Dispatchers.Default) {
 			val (sourceManga, draftOverride) = checkNotNull(data.value)
 			val previousCover = dataRepository.getOverride(sourceManga.id)?.coverUrl
-			val override = draftOverride.let {
-				it.copy(
-					title = title,
-					coverUrl = it.coverUrl?.cachedFile(),
-				)
-			}
+			val override = draftOverride.copy(
+				title = title,
+				coverUrl = draftOverride.coverUrl?.cachedFile(),
+			)
 			val savedOverride = dataRepository.setOverride(sourceManga, override)
+			// setOverride guarantees the preferences row exists; extended fields intentionally stay
+			// separate because artist is a DropSauce-only metadata field not present in parser Manga.
+			database.getPreferencesDao().updateExtendedOverrides(
+				mangaId = sourceManga.id,
+				author = author.normalizedAgainst(sourceManga.authors.joinToString(", ")),
+				artist = artist?.trim()?.takeIf { it.isNotEmpty() },
+				description = description.normalizedAgainst(sourceManga.description.orEmpty()),
+			)
 			deleteStaleCachedCover(previousCover, savedOverride?.coverUrl)
 			onSaved.call(Unit)
 		}
@@ -71,22 +83,22 @@ class OverrideConfigViewModel @Inject constructor(
 
 	fun updateCover(coverUri: String?) {
 		val snapshot = data.value ?: return
-		data.value = snapshot.first to snapshot.second.copy(
-			coverUrl = coverUri,
-		)
+		data.value = snapshot.first to snapshot.second.copy(coverUrl = coverUri)
+	}
+
+	private fun String?.normalizedAgainst(original: String): String? {
+		val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+		return value.takeUnless { it == original.trim() }
 	}
 
 	private suspend fun String.cachedFile(): String {
 		val uri = toUriOrNull()
 		if (uri == null || uri.isFileUri() || uri.isNetworkUri()) {
-			// Remote (http/https) covers are kept as-is so Discord and lists can load them directly.
 			return this
 		}
 		val cacheDir = context.getExternalFilesDir(DIR_COVERS) ?: return this
 		val cr = context.contentResolver
-		val ext = cr.getType(uri)?.toMimeTypeOrNull()?.let {
-			MimeTypes.getExtension(it)
-		}
+		val ext = cr.getType(uri)?.toMimeTypeOrNull()?.let { MimeTypes.getExtension(it) }
 		val fileName = buildString {
 			append(this@cachedFile.md5())
 			if (!ext.isNullOrEmpty()) {
@@ -97,25 +109,19 @@ class OverrideConfigViewModel @Inject constructor(
 		return withContext(Dispatchers.IO) {
 			val dest = File(cacheDir, fileName)
 			cr.openSource(uri).use { source ->
-				dest.sink().buffer().use { sink ->
-					sink.writeAll(source)
-				}
+				dest.sink().buffer().use { sink -> sink.writeAll(source) }
 			}
 			dest
 		}.toUri().toString()
 	}
 
 	private suspend fun deleteStaleCachedCover(oldCover: String?, newCover: String?) {
-		if (oldCover.isNullOrEmpty() || oldCover == newCover) {
-			return
-		}
+		if (oldCover.isNullOrEmpty() || oldCover == newCover) return
 		withContext(Dispatchers.IO) {
 			runCatching {
 				val cacheDir = context.getExternalFilesDir(DIR_COVERS)?.canonicalFile ?: return@runCatching
 				val file = oldCover.toUriOrNull()?.toFileOrNull()?.canonicalFile ?: return@runCatching
-				if (file.parentFile?.canonicalPath == cacheDir.canonicalPath) {
-					file.delete()
-				}
+				if (file.parentFile?.canonicalPath == cacheDir.canonicalPath) file.delete()
 			}
 		}
 	}
