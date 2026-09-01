@@ -20,4 +20,5 @@
 	<string name="search_language_other">Other</string>
 	<string name="search_progress_sources">%1$d/%2$d sources · %3$d errors</string>
 	<string name="search_paste">Paste</string>
+	<string name="search_open_browser">Open in browser</string>
 </resources>
