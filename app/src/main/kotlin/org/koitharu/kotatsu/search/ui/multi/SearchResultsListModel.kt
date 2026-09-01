@@ -38,8 +38,7 @@ data class SearchResultsListModel(
 		val status = when {
 			isLoading -> "…"
 			error != null -> "⚠"
-			list.isNotEmpty() -> "✓"
-			else -> "0"
+			else -> "✓"
 		}
 		return listOfNotNull(baseTitle, language, if (isLoading) null else list.size.toString(), status)
 			.joinToString(" · ")
