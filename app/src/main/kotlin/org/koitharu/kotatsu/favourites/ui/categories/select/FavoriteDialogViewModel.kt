@@ -15,12 +15,15 @@ import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.ids
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.require
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.ui.categories.select.model.MangaCategoryItem
 import org.koitharu.kotatsu.list.ui.model.EmptyState
@@ -33,10 +36,16 @@ class FavoriteDialogViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	private val favouritesRepository: FavouritesRepository,
 	settings: AppSettings,
+	private val contentTypeStore: FavouriteContentTypeStore,
 ) : BaseViewModel() {
 
 	val manga = savedStateHandle.require<List<ParcelableManga>>(AppRouter.KEY_MANGA_LIST).map {
 		it.manga
+	}
+	private val contentType = if (manga.firstOrNull()?.source?.isNovelSource == true) {
+		FavouriteContentType.NOVEL
+	} else {
+		FavouriteContentType.MANGA
 	}
 
 	private val refreshTrigger = MutableStateFlow(Any())
@@ -44,8 +53,12 @@ class FavoriteDialogViewModel @Inject constructor(
 		favouritesRepository.observeCategories(),
 		refreshTrigger,
 		settings.observeAsFlow(AppSettings.KEY_TRACKER_ENABLED) { isTrackerEnabled },
-	) { categories, _, tracker ->
-		mapList(categories, tracker)
+		contentTypeStore.novelCategoryIds,
+	) { categories, _, tracker, _ ->
+		mapList(
+			categories.filter { contentTypeStore.isCategoryForType(it.id, contentType) },
+			tracker,
+		)
 	}.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState))
 
@@ -58,6 +71,10 @@ class FavoriteDialogViewModel @Inject constructor(
 			}
 			refreshTrigger.value = Any()
 		}
+	}
+
+	fun prepareCategoryManagement() {
+		contentTypeStore.setSelectedType(contentType)
 	}
 
 	private suspend fun mapList(categories: List<FavouriteCategory>, tracker: Boolean): List<ListModel> {
