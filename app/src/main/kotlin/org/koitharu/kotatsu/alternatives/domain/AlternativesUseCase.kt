@@ -5,6 +5,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -47,6 +48,12 @@ class AlternativesUseCase @Inject constructor(
 	} else {
 		SearchSourceMode.ALL_SOURCES
 	}
+
+	/** Compatibility path for background auto-fix: preserve its old Flow<Manga> contract. */
+	suspend operator fun invoke(manga: Manga): Flow<Manga> =
+		invoke(manga, defaultMode(), emptySet()).transform { event ->
+			if (event is AlternativeSearchEvent.Result) emit(event.manga)
+		}
 
 	fun getAvailableLanguages(manga: Manga): List<String> {
 		val isNovel = manga.source.isNovelSource
