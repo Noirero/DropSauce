@@ -263,9 +263,15 @@ class MihonBackupManager @Inject constructor(
 
   private fun buildDiagnostics(backup: MihonBackup, options: Options): RestoreAccumulator {
     val missingSources = if (options.libraryEntries) {
-      backup.backupSources
-        .filter { it.sourceId > 0L && mihonExtensionManager.getMihonMangaSourceById(it.sourceId) == null }
-        .map { source -> source.name.ifBlank { source.sourceId.toString() } }
+      val sourceTitles = backup.backupSources.associate { it.sourceId to it.name }
+      backup.backupManga
+        .asSequence()
+        .map { it.source }
+        .filter { it > 0L }
+        .distinct()
+        .filter { mihonExtensionManager.getMihonMangaSourceById(it) == null }
+        .map { sourceId -> sourceTitles[sourceId].orEmpty().ifBlank { sourceId.toString() } }
+        .toList()
     } else {
       emptyList()
     }
@@ -546,13 +552,35 @@ class MihonBackupManager @Inject constructor(
     pending.flatMapTo(linkedSetOf()) { it.tags }
       .takeIf { it.isNotEmpty() }
       ?.let { db.getTagsDao().upsert(it.toList()) }
-    pending.forEach { item -> db.getMangaDao().upsert(item.manga, item.tags) }
-    pending.forEach { item -> item.track?.let { db.getTracksDao().upsert(it) } }
+
+    // Mihon restores are merges. If a manga already exists locally, keep its live metadata and only
+    // add tags from the backup instead of replacing newer source data with an older backup snapshot.
+    pending.forEach { item ->
+      val existing = db.getMangaDao().find(item.manga.id)
+      if (existing == null) {
+        db.getMangaDao().upsert(item.manga, item.tags)
+      } else {
+        val mergedTags = (existing.tags + item.tags).distinctBy { it.id }
+        db.getMangaDao().upsert(existing.manga, mergedTags)
+      }
+    }
+
+    // Do not reset update tracking when restoring an older backup over an installation that already
+    // knows about newer chapters.
+    pending.forEach { item ->
+      item.track?.let { restoredTrack ->
+        val existingTrack = db.getTracksDao().find(item.manga.id)
+        if (existingTrack == null || restoredTrack.lastChapterDate > existingTrack.lastChapterDate) {
+          db.getTracksDao().upsert(restoredTrack)
+        }
+      }
+    }
     pending.forEach { item -> item.favourites.forEach { db.getFavouritesDao().upsert(it) } }
+    pending.forEach { item -> restoreChapters(item.manga.id, item.chapters) }
 
     // Never move a user backwards when they restore an older backup onto an installation that has
-    // since been read further. When local progress is newer, keep both the current history row and
-    // its chapter snapshot; replacing the chapters first would leave that current chapter missing.
+    // since been read further. This mirrors Mihon's merge-oriented restore behavior instead of
+    // blindly replacing the current checkpoint with the backup checkpoint.
     pending.forEach { item ->
       val existing = db.getHistoryDao().findIncludingDeleted(item.manga.id)
       val shouldRestoreProgress = when {
@@ -561,14 +589,9 @@ class MihonBackupManager @Inject constructor(
         else -> item.history.updatedAt >= existing.updatedAt
       }
       if (shouldRestoreProgress) {
-        db.getChaptersDao().replaceAll(item.manga.id, item.chapters)
         item.history?.let { db.getHistoryDao().upsert(it) }
         item.stats?.let { db.getStatsDao().upsert(it) }
         accumulator.chapterReadOverrides[item.manga.id] = item.readOverrides
-      } else if (db.getChaptersDao().count(item.manga.id) == 0) {
-        // Defensive fallback for a pre-existing history row whose cached chapter list was already
-        // cleaned up. The backup snapshot is still more useful than leaving the entry chapterless.
-        db.getChaptersDao().replaceAll(item.manga.id, item.chapters)
       }
       item.note?.let { accumulator.notes[item.manga.id] = it }
     }
@@ -586,6 +609,54 @@ class MihonBackupManager @Inject constructor(
     }
 
     accumulator.restoredMangaCount += pending.size
+  }
+
+  /**
+   * Merge backup chapters with the chapter list already stored locally.
+   *
+   * A restore must never behave like a source refresh replacement. The previous implementation used
+   * ChaptersDao.replaceAll(), which deleted every local chapter first; restoring an older Mihon
+   * backup therefore erased chapters discovered after that backup was created. Matching chapters
+   * keep the local/live entity, backup-only chapters are restored, and current-only chapters are
+   * appended afterwards (normally these are the newer chapters).
+   */
+  private suspend fun restoreChapters(mangaId: Long, backupChapters: List<ChapterEntity>) {
+    val dao = db.getChaptersDao()
+    val existingChapters = dao.findAll(mangaId)
+    if (existingChapters.isEmpty()) {
+      dao.replaceAll(mangaId, backupChapters)
+      return
+    }
+    if (backupChapters.isEmpty()) {
+      return
+    }
+
+    val existingById = existingChapters.associateBy { it.chapterId }
+    val existingByUrl = existingChapters.associateBy { it.url }
+    val merged = ArrayList<ChapterEntity>(existingChapters.size + backupChapters.size)
+    val seenIds = HashSet<Long>()
+    val seenUrls = HashSet<String>()
+
+    backupChapters.forEach { backupChapter ->
+      val chapter = existingById[backupChapter.chapterId]
+        ?: existingByUrl[backupChapter.url]
+        ?: backupChapter
+      if (seenIds.add(chapter.chapterId) && seenUrls.add(chapter.url)) {
+        merged += chapter
+      }
+    }
+    existingChapters.forEach { chapter ->
+      if (seenIds.add(chapter.chapterId) && seenUrls.add(chapter.url)) {
+        merged += chapter
+      }
+    }
+
+    dao.replaceAll(
+      mangaId,
+      merged.mapIndexed { index, chapter ->
+        if (chapter.index == index) chapter else chapter.copy(index = index)
+      },
+    )
   }
 
   private fun restorePreferences(preferences: List<MihonBackupPreference>) {
