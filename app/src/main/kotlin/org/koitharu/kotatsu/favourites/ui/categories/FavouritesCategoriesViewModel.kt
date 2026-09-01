@@ -15,10 +15,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.FavouriteCategory
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.requireValue
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
+import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.model.Cover
 import org.koitharu.kotatsu.favourites.ui.categories.adapter.AllCategoriesListModel
@@ -32,6 +35,7 @@ import javax.inject.Inject
 class FavouritesCategoriesViewModel @Inject constructor(
 	private val repository: FavouritesRepository,
 	private val settings: AppSettings,
+	private val contentTypeStore: FavouriteContentTypeStore,
 ) : BaseViewModel() {
 
 	private var commitJob: Job? = null
@@ -42,14 +46,22 @@ class FavouritesCategoriesViewModel @Inject constructor(
 		observeAllCategories(),
 		settings.observeAsFlow(AppSettings.KEY_ALL_FAVOURITES_VISIBLE) { isAllFavouritesVisible },
 		isActionsEnabled,
-	) { cats, all, showAll, hasActions ->
-		cats.toUiList(all, showAll, hasActions)
+		contentTypeStore.selectedType,
+	) { cats, _, showAll, hasActions, type ->
+		val wantNovel = type == FavouriteContentType.NOVEL
+		val typedCats = cats
+			.filterKeys { category -> contentTypeStore.isCategoryForType(category.id, type) }
+			.mapValues { (_, covers) -> covers.filter { it.mangaSource.isNovelSource == wantNovel } }
+		val allManga = repository.getAllManga().filter { it.source.isNovelSource == wantNovel }
+		val all = allManga.size to allManga.take(3).map { manga -> Cover(manga.coverUrl, manga.source.name) }
+		typedCats.toUiList(all, showAll, hasActions)
 	}.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState))
 
 	fun deleteCategories(ids: Set<Long>) {
 		launchJob(Dispatchers.Default) {
 			repository.removeCategories(ids)
+			contentTypeStore.removeCategories(ids)
 		}
 	}
 
@@ -77,7 +89,6 @@ class FavouritesCategoriesViewModel @Inject constructor(
 			for (id in ids) {
 				repository.updateCategory(id, isVisible)
 			}
-		}
 	}
 
 	fun setActionsEnabled(value: Boolean) {
