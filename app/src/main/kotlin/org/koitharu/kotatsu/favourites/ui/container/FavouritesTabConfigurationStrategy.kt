@@ -16,6 +16,10 @@ class FavouritesTabConfigurationStrategy(
 		val item = adapter.getItem(position)
 		tab.text = item.title ?: tab.view.context.getString(R.string.all_favourites)
 		tab.tag = item
+		tab.getOrCreateBadge().apply {
+			number = item.count
+			isVisible = true
+		}
 		PopupMenuMediator(
 			FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id)
 		).attach(tab.view)

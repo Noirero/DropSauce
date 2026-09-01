@@ -21,9 +21,12 @@ import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
+import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
+import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.parsers.model.MangaTag
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.search.domain.MangaSearchRepository
+import org.koitharu.kotatsu.search.domain.SearchKind
 import org.koitharu.kotatsu.search.ui.suggestion.model.SearchSuggestionItem
 import javax.inject.Inject
 
@@ -40,6 +43,7 @@ private const val SEARCH_SCOPE_CANDIDATE_MULTIPLIER = 4
 @HiltViewModel
 class SearchSuggestionViewModel @Inject constructor(
 	private val repository: MangaSearchRepository,
+	private val favouritesRepository: FavouritesRepository,
 	private val settings: AppSettings,
 ) : BaseViewModel() {
 
@@ -55,15 +59,23 @@ class SearchSuggestionViewModel @Inject constructor(
 	val isNovelSearchScope: Boolean
 		get() = settings.isGlobalSearchNovelScope
 
+	val isFavouritesSearchScope: Boolean
+		get() = FavouritesContainerFragment.searchScopeActive.value
+
+	private val modeInvalidation = combine(
+		invalidationTrigger,
+		FavouritesContainerFragment.searchScopeActive,
+	) { _, favouritesOnly -> favouritesOnly }
+
 	val suggestion: Flow<List<SearchSuggestionItem>> = combine(
 		query.debounce(DEBOUNCE_TIMEOUT),
 		settings.observeAsFlow(AppSettings.KEY_SEARCH_SUGGESTION_TYPES) { searchSuggestionTypes },
 		settings.observeAsFlow(AppSettings.KEY_QUICK_FILTER) { isQuickFilterEnabled },
-		invalidationTrigger,
+		modeInvalidation,
 		settings.observeAsFlow(AppSettings.KEY_GLOBAL_SEARCH_NOVEL_SCOPE) { isGlobalSearchNovelScope },
 	)
-	{ searchQuery, types, isQuickFilterEnabled, _, isNovelScope ->
-		SearchSuggestionRequest(searchQuery, types, isQuickFilterEnabled, isNovelScope)
+	{ searchQuery, types, isQuickFilterEnabled, favouritesOnly, isNovelScope ->
+		SearchSuggestionRequest(searchQuery, types, isQuickFilterEnabled, isNovelScope, favouritesOnly)
 	}.mapLatest { request ->
 		buildSearchSuggestion(request)
 	}.distinctUntilChanged()
@@ -102,6 +114,9 @@ class SearchSuggestionViewModel @Inject constructor(
 	private suspend fun buildSearchSuggestion(
 		request: SearchSuggestionRequest,
 	): List<SearchSuggestionItem> = coroutineScope {
+		if (request.favouritesOnly) {
+			return@coroutineScope getFavouriteManga(request.query, request.isNovelScope)
+		}
 		listOfNotNull(
 			// The genre chip row under the search bar acts as a quick filter, so it follows the
 			// "Show quick filters" appearance setting in addition to the genre suggestion type.
@@ -143,6 +158,30 @@ class SearchSuggestionViewModel @Inject constructor(
 				null
 			},
 		).flatMap { it.await() }
+	}
+
+	private suspend fun getFavouriteManga(
+		searchQuery: String,
+		isNovelScope: Boolean,
+	): List<SearchSuggestionItem> = runCatchingCancellable {
+		val query = searchQuery.trim()
+		if (query.isEmpty()) {
+			return@runCatchingCancellable emptyList()
+		}
+		val manga = favouritesRepository.search(
+			query,
+			SearchKind.SIMPLE,
+			MAX_MANGA_ITEMS * SEARCH_SCOPE_CANDIDATE_MULTIPLIER,
+		).filter { it.source.isNovelSource == isNovelScope }
+			.take(MAX_MANGA_ITEMS)
+		if (manga.isEmpty()) {
+			emptyList()
+		} else {
+			listOf(SearchSuggestionItem.MangaList(manga))
+		}
+	}.getOrElse { e ->
+		e.printStackTraceDebug()
+		listOf(SearchSuggestionItem.Text(0, e))
 	}
 
 	private suspend fun getAuthors(searchQuery: String): List<SearchSuggestionItem> = runCatchingCancellable {
@@ -242,5 +281,6 @@ class SearchSuggestionViewModel @Inject constructor(
 		val types: Set<SearchSuggestionType>,
 		val isQuickFilterEnabled: Boolean,
 		val isNovelScope: Boolean,
+		val favouritesOnly: Boolean,
 	)
 }

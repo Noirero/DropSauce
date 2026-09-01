@@ -24,6 +24,12 @@ class SearchSuggestionListenerImpl(
 
 	override fun onQueryClick(query: String, kind: SearchKind, submit: Boolean) {
 		if (submit && query.isNotEmpty()) {
+			if (viewModel.isFavouritesSearchScope) {
+				// In Favourites the live result list is the search result. Never leave the library and
+				// fan the same query out to every installed extension.
+				viewModel.onQueryChanged(query)
+				return
+			}
 			if (kind == SearchKind.SIMPLE && MangaLinkResolver.isValidLink(query)) {
 				router.openDetails(query.toUri())
 			} else {

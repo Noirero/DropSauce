@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.BaseFragment
@@ -53,6 +54,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	override fun onViewBindingCreated(binding: FragmentFavouritesContainerBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
+		searchScopeActive.value = !isHidden
 		val pagerAdapter = FavouritesContainerAdapter(this)
 		binding.pager.adapter = pagerAdapter
 		binding.pager.offscreenPageLimit = 1
@@ -74,6 +76,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	override fun onDestroyView() {
+		searchScopeActive.value = false
 		detachTabsFromAppBar()
 		actionModeDelegate.removeListener(this)
 		super.onDestroyView()
@@ -83,6 +86,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	override fun onHiddenChanged(hidden: Boolean) {
 		super.onHiddenChanged(hidden)
+		searchScopeActive.value = !hidden
 		if (!hidden) {
 			// This tab is kept alive across bottom-nav switches, so its category lists would retain
 			// their previous scroll. Reset every instantiated category page (the visible one plus any
@@ -172,5 +176,9 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		if (parent !== viewBinding?.root) {
 			parent.removeView(tabs)
 		}
+	}
+
+	companion object {
+		internal val searchScopeActive = MutableStateFlow(false)
 	}
 }

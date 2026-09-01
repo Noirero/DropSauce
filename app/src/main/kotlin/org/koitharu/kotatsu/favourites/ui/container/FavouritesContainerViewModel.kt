@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -34,26 +35,43 @@ class FavouritesContainerViewModel @Inject constructor(
 		.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
+	private val allFavouritesCount = favouritesRepository.observeMangaCount()
+		.catch { emit(0) }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, 0)
+
+	private val categoryCounts = favouritesRepository.observeCategoriesWithCovers()
+		.map { categories ->
+			categories.entries.associate { (category, covers) -> category.id to covers.size }
+		}
+		.catch { emit(emptyMap()) }
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyMap())
+
 	val categories = combine(
 		categoriesStateFlow.filterNotNull(),
 		observeAllFavouritesVisibility(),
-	) { list, showAll ->
-		list.toUi(showAll)
+		allFavouritesCount,
+		categoryCounts,
+	) { list, showAll, allCount, counts ->
+		list.toUi(showAll, allCount, counts)
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val isEmpty = categoriesStateFlow.map {
 		it?.isEmpty() == true
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, false)
 
-	private fun List<FavouriteCategory>.toUi(showAll: Boolean): List<FavouriteTabModel> {
+	private fun List<FavouriteCategory>.toUi(
+		showAll: Boolean,
+		allCount: Int,
+		counts: Map<Long, Int>,
+	): List<FavouriteTabModel> {
 		if (isEmpty()) {
 			return emptyList()
 		}
 		val result = ArrayList<FavouriteTabModel>(if (showAll) size + 1 else size)
 		if (showAll) {
-			result.add(FavouriteTabModel(NO_ID, null))
+			result.add(FavouriteTabModel(NO_ID, null, allCount))
 		}
-		mapTo(result) { FavouriteTabModel(it.id, it.title) }
+		mapTo(result) { FavouriteTabModel(it.id, it.title, counts[it.id] ?: 0) }
 		return result
 	}
 
