@@ -18,7 +18,7 @@ class FavouritesTabConfigurationStrategy(
 		tab.tag = item
 		tab.getOrCreateBadge().apply {
 			number = item.count
-			isVisible = true
+			isVisible = item.count > 0
 		}
 		PopupMenuMediator(
 			FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id)
