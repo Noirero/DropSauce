@@ -6,6 +6,7 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +21,7 @@ import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.nav.AppRouter
+import org.koitharu.kotatsu.core.nav.ReaderIntent
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
@@ -64,6 +66,7 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_online).isVisible = viewModel.remoteManga.value != null
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
 		menu.findItem(R.id.action_note).isVisible = manga != null && onNoteClick != null
+		menu.findItem(R.id.action_incognito).isVisible = manga != null
 		// Novels and local books only — there is nothing to put in an epub for an image manga.
 		menu.findItem(R.id.action_export_epub).isVisible = manga?.isEpub == true
 	}
@@ -118,6 +121,20 @@ class DetailsMenuProvider(
 						Snackbar.make(snackbarHost, R.string.operation_not_supported, Snackbar.LENGTH_SHORT)
 							.show()
 					}
+			}
+
+			R.id.action_incognito -> {
+				if (viewModel.historyInfo.value.isChapterMissing) {
+					Snackbar.make(snackbarHost, R.string.chapter_is_missing, Snackbar.LENGTH_SHORT).show()
+					return true
+				}
+				val readerIntent = ReaderIntent.Builder(activity)
+					.manga(manga)
+					.branch(viewModel.selectedBranchValue)
+					.incognito()
+					.build()
+				router.openReader(readerIntent)
+				Toast.makeText(activity, R.string.incognito_mode, Toast.LENGTH_SHORT).show()
 			}
 
 			R.id.action_export_epub -> {
