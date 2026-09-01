@@ -1,6 +1,7 @@
 package org.koitharu.kotatsu.mihon
 
 import androidx.core.net.toUri
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.Dispatchers
@@ -26,10 +27,17 @@ suspend fun MangaRepository.getResumableImageStream(
 	val httpSource = mihonRepository.mihonSource as? HttpSource ?: return getImageStream(pageUrl, page)
 	val mihonPage = page.toResumeMihonPage(pageUrl)
 	return withContext(Dispatchers.IO) {
-		when {
-			httpSource.hasResumableImageOverride() -> httpSource.getImage(mihonPage, existingSize)
-			httpSource.hasLegacyImageOverride() -> httpSource.getImage(mihonPage)
-			else -> httpSource.getImage(mihonPage, existingSize)
+		try {
+			when {
+				httpSource.hasResumableImageOverride() -> httpSource.getImage(mihonPage, existingSize)
+				httpSource.hasLegacyImageOverride() -> httpSource.getImage(mihonPage)
+				else -> httpSource.getImage(mihonPage, existingSize)
+			}
+		} catch (e: HttpException) {
+			if (e.code != HTTP_RANGE_NOT_SATISFIABLE) throw e
+			// The remote object changed (or the partial already equals its full size). A clean
+			// request lets DownloadWorker overwrite the stale .part instead of failing the chapter.
+			httpSource.getImage(mihonPage)
 		}
 	}
 }
@@ -71,3 +79,5 @@ private data class MihonResumeRef(
 	val pageUrl: String,
 	val index: Int,
 )
+
+private const val HTTP_RANGE_NOT_SATISFIABLE = 416
