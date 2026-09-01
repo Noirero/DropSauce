@@ -549,11 +549,10 @@ class MihonBackupManager @Inject constructor(
     pending.forEach { item -> db.getMangaDao().upsert(item.manga, item.tags) }
     pending.forEach { item -> item.track?.let { db.getTracksDao().upsert(it) } }
     pending.forEach { item -> item.favourites.forEach { db.getFavouritesDao().upsert(it) } }
-    pending.forEach { item -> db.getChaptersDao().replaceAll(item.manga.id, item.chapters) }
 
     // Never move a user backwards when they restore an older backup onto an installation that has
-    // since been read further. This mirrors Mihon's merge-oriented restore behavior instead of
-    // blindly replacing the current checkpoint with the backup checkpoint.
+    // since been read further. When local progress is newer, keep both the current history row and
+    // its chapter snapshot; replacing the chapters first would leave that current chapter missing.
     pending.forEach { item ->
       val existing = db.getHistoryDao().findIncludingDeleted(item.manga.id)
       val shouldRestoreProgress = when {
@@ -562,9 +561,14 @@ class MihonBackupManager @Inject constructor(
         else -> item.history.updatedAt >= existing.updatedAt
       }
       if (shouldRestoreProgress) {
+        db.getChaptersDao().replaceAll(item.manga.id, item.chapters)
         item.history?.let { db.getHistoryDao().upsert(it) }
         item.stats?.let { db.getStatsDao().upsert(it) }
         accumulator.chapterReadOverrides[item.manga.id] = item.readOverrides
+      } else if (db.getChaptersDao().count(item.manga.id) == 0) {
+        // Defensive fallback for a pre-existing history row whose cached chapter list was already
+        // cleaned up. The backup snapshot is still more useful than leaving the entry chapterless.
+        db.getChaptersDao().replaceAll(item.manga.id, item.chapters)
       }
       item.note?.let { accumulator.notes[item.manga.id] = it }
     }
