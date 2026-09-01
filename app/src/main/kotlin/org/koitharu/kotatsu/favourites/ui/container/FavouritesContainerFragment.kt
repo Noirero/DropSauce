@@ -1,19 +1,29 @@
 package org.koitharu.kotatsu.favourites.ui.container
 
+import android.content.Context
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewStub
+import android.view.inputmethod.InputMethodManager
+import android.widget.LinearLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.view.ActionMode
+import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.search.SearchBar
+import com.google.android.material.search.SearchView
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,8 +42,8 @@ import org.koitharu.kotatsu.core.util.ext.recyclerView
 import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.setTextAndVisible
 import org.koitharu.kotatsu.databinding.FragmentFavouritesContainerBinding
-import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
+import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 
 @AndroidEntryPoint
 class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBinding>(),
@@ -43,6 +53,9 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	View.OnClickListener {
 
 	private val viewModel: FavouritesContainerViewModel by viewModels()
+	private var inlineSearchEdit: AppCompatEditText? = null
+	private var inlineSearchActive = false
+	private var searchBackCallback: OnBackPressedCallback? = null
 
 	override val recyclerView: RecyclerView?
 		get() = (findCurrentFragment() as? RecyclerViewOwner)?.recyclerView
@@ -67,16 +80,27 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		binding.stubEmpty.setOnInflateListener(this)
 		if (!isHidden) {
 			attachTabsToAppBar()
+			installFavouriteSearchHandler()
 		}
 		actionModeDelegate.addListener(this)
 		viewModel.categories.observe(viewLifecycleOwner, pagerAdapter)
 		viewModel.isEmpty.observe(viewLifecycleOwner, ::onEmptyStateChanged)
 		addMenuProvider(FavouritesContainerMenuProvider(router))
 		viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
+
+		searchBackCallback = object : OnBackPressedCallback(false) {
+			override fun handleOnBackPressed() = exitInlineSearch()
+		}.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
 	}
 
 	override fun onDestroyView() {
+		exitInlineSearch()
+		restoreGlobalSearchHandler()
+		inlineSearchEdit?.let { edit -> (edit.parent as? ViewGroup)?.removeView(edit) }
+		inlineSearchEdit = null
+		searchBackCallback = null
 		searchScopeActive.value = false
+		searchQuery.value = ""
 		detachTabsFromAppBar()
 		actionModeDelegate.removeListener(this)
 		super.onDestroyView()
@@ -87,7 +111,11 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	override fun onHiddenChanged(hidden: Boolean) {
 		super.onHiddenChanged(hidden)
 		searchScopeActive.value = !hidden
-		if (!hidden) {
+		if (hidden) {
+			exitInlineSearch()
+			restoreGlobalSearchHandler()
+		} else {
+			installFavouriteSearchHandler()
 			// This tab is kept alive across bottom-nav switches, so its category lists would retain
 			// their previous scroll. Reset every instantiated category page (the visible one plus any
 			// cached offscreen pages) to the top whenever Favourites is reopened, matching the other tabs.
@@ -145,6 +173,88 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		)
 	}
 
+	private fun installFavouriteSearchHandler() {
+		val searchBar = activity?.findViewById<SearchBar>(R.id.search_bar) ?: return
+		searchBar.setOnClickListener { enterInlineSearch() }
+	}
+
+	private fun restoreGlobalSearchHandler() {
+		val host = activity ?: return
+		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
+		val searchView = host.findViewById<SearchView>(R.id.search_view) ?: return
+		searchBar.setOnClickListener { searchView.show() }
+	}
+
+	private fun enterInlineSearch() {
+		if (inlineSearchActive) return
+		val host = activity ?: return
+		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
+		val edit = inlineSearchEdit ?: createInlineSearchEdit(searchBar) ?: return
+		inlineSearchActive = true
+		searchBar.isGone = true
+		edit.isVisible = true
+		searchBackCallback?.isEnabled = true
+		host.findViewById<MaterialButton>(R.id.button_settings)?.apply {
+			setIconResource(R.drawable.ic_arrow_back)
+			contentDescription = getString(R.string.close)
+			setOnClickListener { exitInlineSearch() }
+		}
+		edit.requestFocus()
+		edit.post {
+			(context?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+				?.showSoftInput(edit, InputMethodManager.SHOW_IMPLICIT)
+		}
+	}
+
+	private fun exitInlineSearch() {
+		val host = activity ?: return
+		val searchBar = host.findViewById<SearchBar>(R.id.search_bar) ?: return
+		val edit = inlineSearchEdit
+		inlineSearchActive = false
+		searchBackCallback?.isEnabled = false
+		searchQuery.value = ""
+		edit?.apply {
+			setText("")
+			clearFocus()
+			isGone = true
+		}
+		searchBar.isVisible = true
+		host.findViewById<MaterialButton>(R.id.button_settings)?.apply {
+			setIconResource(R.drawable.ic_settings)
+			contentDescription = getString(R.string.settings)
+			setOnClickListener { router.openSettings() }
+		}
+		if (edit != null) {
+			(host.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+				?.hideSoftInputFromWindow(edit.windowToken, 0)
+		}
+	}
+
+	private fun createInlineSearchEdit(searchBar: SearchBar): AppCompatEditText? {
+		val parent = searchBar.parent as? LinearLayout ?: return null
+		val density = resources.displayMetrics.density
+		val edit = AppCompatEditText(requireContext()).apply {
+			layoutParams = LinearLayout.LayoutParams(searchBar.layoutParams)
+			background = searchBar.background?.constantState?.newDrawable(resources)?.mutate()
+			hint = getString(R.string.search_manga)
+			setTextColor(searchBar.textView.currentTextColor)
+			setHintTextColor(searchBar.textView.currentHintTextColor)
+			textSize = searchBar.textView.textSize / resources.displayMetrics.scaledDensity
+			gravity = Gravity.CENTER_VERTICAL
+			isSingleLine = true
+			maxLines = 1
+			minimumHeight = (56f * density).toInt()
+			setPadding((20f * density).toInt(), 0, (20f * density).toInt(), 0)
+			setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+			compoundDrawablePadding = resources.getDimensionPixelOffset(R.dimen.margin_small)
+			isGone = true
+			doAfterTextChanged { searchQuery.value = it?.toString().orEmpty() }
+		}
+		parent.addView(edit, parent.indexOfChild(searchBar) + 1)
+		inlineSearchEdit = edit
+		return edit
+	}
+
 	// The category tabs live in the activity's AppBarLayout while this tab is visible, so they scroll
 	// off-screen together with the search bar instead of being pinned above the (edge-to-edge) lists.
 	// Called by MainActivity at bottom-nav commit time, not from onHiddenChanged: that callback is only
@@ -180,5 +290,6 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	companion object {
 		internal val searchScopeActive = MutableStateFlow(false)
+		internal val searchQuery = MutableStateFlow("")
 	}
 }
