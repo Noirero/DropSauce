@@ -168,12 +168,13 @@ class SearchSuggestionViewModel @Inject constructor(
 		if (query.isEmpty()) {
 			return@runCatchingCancellable emptyList()
 		}
+		// Favourites are a finite local library, so do not apply the 12-item suggestion cap used by
+		// global search. Every matching favourite can remain reachable from this local search row.
 		val manga = favouritesRepository.search(
 			query,
 			SearchKind.SIMPLE,
-			MAX_MANGA_ITEMS * SEARCH_SCOPE_CANDIDATE_MULTIPLIER,
+			Int.MAX_VALUE,
 		).filter { it.source.isNovelSource == isNovelScope }
-			.take(MAX_MANGA_ITEMS)
 		if (manga.isEmpty()) {
 			emptyList()
 		} else {
