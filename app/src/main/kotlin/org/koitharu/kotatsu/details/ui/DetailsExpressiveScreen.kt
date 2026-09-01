@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,10 +48,6 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaTag
 import org.koitharu.kotatsu.scrobbling.common.domain.model.ScrobblingInfo
 
-/**
- * Navigation/action hooks for the expressive details screen. The activity owns the router
- * and supplies these so the Compose layer stays free of Android navigation plumbing.
- */
 class DetailsExpressiveActions(
 	val onCoverClick: (Manga) -> Unit,
 	val onTitleClick: (String) -> Unit,
@@ -128,119 +125,117 @@ fun DetailsExpressiveScreen(
 					.padding(bottom = bottomContentPadding + DETAIL_DOCK_RESERVE),
 				horizontalAlignment = Alignment.CenterHorizontally,
 			) {
-				// Push the hero clear of the translucent top bar / back button.
-			Spacer(Modifier.height(topInset + if (centered) 84.dp else 72.dp))
+				Spacer(Modifier.height(topInset + if (centered) 84.dp else 72.dp))
 
-			if (manga == null) {
-				LoadingHero()
-			} else {
-				val favLabel = favouriteLabel ?: stringResource(R.string.add_to_favourites)
-				val isFavourite = favouriteCount > 0
-				HeroSection(
-					centered = centered,
-					manga = manga,
-					details = details,
-					sourceTitle = sourceTitle,
-					accent = accentColor,
-					imageLoader = imageLoader,
-					coverUrl = coverUrl,
-					favouriteLabel = favLabel,
-					isFavourite = isFavourite,
-					onFavouriteClick = { actions.onFavoriteClick(manga) },
-					actions = actions,
-				)
-
-				if (centered) {
-					Spacer(Modifier.height(20.dp))
-					FavouriteButton(
-						label = favLabel,
+				if (manga == null) {
+					LoadingHero()
+				} else {
+					val favLabel = favouriteLabel ?: stringResource(R.string.add_to_favourites)
+					val isFavourite = favouriteCount > 0
+					HeroSection(
+						centered = centered,
+						manga = manga,
+						details = details,
+						sourceTitle = sourceTitle,
+						accent = accentColor,
+						imageLoader = imageLoader,
+						coverUrl = coverUrl,
+						favouriteLabel = favLabel,
 						isFavourite = isFavourite,
-						accent = accentColor,
-						onClick = { actions.onFavoriteClick(manga) },
+						onFavouriteClick = { actions.onFavoriteClick(manga) },
+						actions = actions,
 					)
-				}
 
-				Spacer(Modifier.height(8.dp))
-				ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
+					if (centered) {
+						Spacer(Modifier.height(20.dp))
+						FavouriteButton(
+							label = favLabel,
+							isFavourite = isFavourite,
+							accent = accentColor,
+							onClick = { actions.onFavoriteClick(manga) },
+						)
+					}
 
-				DescriptionCard(
-					description = details.description,
-					manga = manga,
-					details = details,
-					accent = accentColor,
-				)
+					details.artist?.let { artist ->
+						Spacer(Modifier.height(12.dp))
+						Text(
+							text = stringResource(R.string.override_artist_display, artist),
+							style = MaterialTheme.typography.labelLarge,
+							color = accentColor,
+							modifier = Modifier.padding(horizontal = SCREEN_PADDING),
+						)
+					}
 
-				TagsSection(tags = tags, accent = accentColor, onTagClick = actions.onTagClick)
+					Spacer(Modifier.height(8.dp))
+					ProgressCard(historyInfo = historyInfo, isLoading = isLoading, accent = accentColor)
 
-				if (scrobblings.isNotEmpty()) {
-					ScrobblingSection(
-						items = scrobblings,
-						imageLoader = imageLoader,
+					DescriptionCard(
+						description = details.displayDescription,
+						manga = manga,
+						details = details,
 						accent = accentColor,
-						onMore = actions.onScrobblingMore,
-						onCardClick = actions.onScrobblingCardClick,
 					)
-				}
 
-				if (related.isNotEmpty()) {
-					RelatedSection(
-						items = related,
-						imageLoader = imageLoader,
-						accent = accentColor,
-						onMore = { actions.onRelatedMore(manga) },
-						onItemClick = actions.onRelatedClick,
-					)
-				}
+					TagsSection(tags = tags, accent = accentColor, onTagClick = actions.onTagClick)
 
-				if (localSize > 0L) {
-					LocalSizeRow(size = localSize, manga = manga, onClick = actions.onLocalClick)
-				}
+					if (scrobblings.isNotEmpty()) {
+						ScrobblingSection(
+							items = scrobblings,
+							imageLoader = imageLoader,
+							accent = accentColor,
+							onMore = actions.onScrobblingMore,
+							onCardClick = actions.onScrobblingCardClick,
+						)
+					}
 
-					Spacer(Modifier.height(28.dp))
+					if (related.isNotEmpty()) {
+						RelatedSection(
+							items = related,
+							imageLoader = imageLoader,
+							accent = accentColor,
+							onMore = { actions.onRelatedMore(manga) },
+							onItemClick = actions.onRelatedClick,
+						)
+					}
+
+					if (localSize > 0L) {
+						LocalSizeRow(size = localSize, manga = manga, onClick = actions.onLocalClick)
+						Spacer(Modifier.height(28.dp))
+					}
 				}
 			}
 
-				// Floating action dock: a "N chapters" pill stacked above the read FAB. Both pin to the
-				// bottom-end and stay clear of the navigation bar; the modal chapters sheet draws its own
-				// scrim over them, so they read as "behind" the sheet without any extra hide/show logic.
-				ActionDock(
-					historyInfo = historyInfo,
-					isLoading = isLoading,
-					accent = accentColor,
-					actions = actions,
-					modifier = Modifier
-						.align(Alignment.BottomEnd)
-						.padding(end = SCREEN_PADDING, bottom = bottomContentPadding + 16.dp)
-						.dockGlow(scheme.surface),
-				)
+			ActionDock(
+				historyInfo = historyInfo,
+				isLoading = isLoading,
+				accent = accentColor,
+				actions = actions,
+				modifier = Modifier
+					.align(Alignment.BottomEnd)
+					.padding(end = SCREEN_PADDING, bottom = bottomContentPadding + 16.dp)
+					.dockGlow(scheme.surface),
+			)
 
-				// Status bar protection, mirroring the View-side scrim in MainActivity. Sits under the
-				// activity's toolbar (that lives in the XML AppBarLayout above this ComposeView).
-				if (topInset > 0.dp) {
-					val stops = StatusBarScrim.alphas
-					Box(
-						modifier = Modifier
-							.align(Alignment.TopCenter)
-							.fillMaxWidth()
-							.height(topInset * StatusBarScrim.HEIGHT_FACTOR)
-							.background(
-								Brush.verticalGradient(
-									*stops.mapIndexed { i, a ->
-										i / (stops.lastIndex.toFloat()) to scheme.surface.copy(alpha = a / 255f)
-									}.toTypedArray(),
-								),
+			if (topInset > 0.dp) {
+				val stops = StatusBarScrim.alphas
+				Box(
+					modifier = Modifier
+						.align(Alignment.TopCenter)
+						.fillMaxWidth()
+						.height(topInset * StatusBarScrim.HEIGHT_FACTOR)
+						.background(
+							Brush.verticalGradient(
+								*stops.mapIndexed { i, a ->
+									i / stops.lastIndex.toFloat() to scheme.surface.copy(alpha = a / 255f)
+								}.toTypedArray(),
 							),
-					)
-				}
+						),
+				)
+			}
 		}
 	}
 }
 
-/**
- * Soft radial halo behind the action dock so the pill and FAB keep contrast over scrolling content.
- * Drawn from the dock's own bounds and deliberately spills past them — a round falloff has no
- * visible edge, unlike a rectangular scrim.
- */
 private fun Modifier.dockGlow(surface: Color) = drawBehind {
 	val rx = size.width * 0.62f
 	val ry = size.height * 0.60f
@@ -252,7 +247,6 @@ private fun Modifier.dockGlow(surface: Color) = drawBehind {
 		center = center,
 		radius = rx,
 	)
-	// Squash the circle into an ellipse so the halo hugs the (wide, short) dock instead of ballooning.
 	scale(scaleX = 1f, scaleY = ry / rx, pivot = center) {
 		drawCircle(brush = brush, radius = rx, center = center)
 	}
@@ -266,29 +260,15 @@ private fun ExpressiveBackdrop(
 	surface: Color,
 	blurAmount: Int,
 ) {
-	val ctx = LocalContext.current
+	val context = LocalContext.current
 	val request = remember(url, manga?.source) {
-		ImageRequest.Builder(ctx)
+		ImageRequest.Builder(context)
 			.data(url)
 			.crossfade(true)
-			.mangaSourceExtra(manga?.source)
+			.apply { if (manga != null) mangaSourceExtra(manga.source) }
 			.build()
 	}
-	Box(
-		modifier = Modifier
-			.fillMaxWidth()
-			.height(480.dp),
-	) {
-		val blurDp = when (blurAmount) {
-			0 -> 0.dp
-			1 -> 20.dp
-			else -> 40.dp
-		}
-		val blurMod = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurDp > 0.dp) {
-			Modifier.blur(blurDp)
-		} else {
-			Modifier
-		}
+	Box(modifier = Modifier.fillMaxSize()) {
 		AsyncImage(
 			model = request,
 			imageLoader = imageLoader,
@@ -296,16 +276,16 @@ private fun ExpressiveBackdrop(
 			contentScale = ContentScale.Crop,
 			modifier = Modifier
 				.fillMaxSize()
-				.then(blurMod),
+				.then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurAmount > 0) Modifier.blur(blurAmount.dp) else Modifier),
 		)
 		Box(
 			modifier = Modifier
 				.fillMaxSize()
 				.background(
 					Brush.verticalGradient(
-						0f to surface.copy(alpha = 0.30f),
-						0.4f to surface.copy(alpha = 0.55f),
-						0.78f to surface.copy(alpha = 0.94f),
+						0f to surface.copy(alpha = 0.50f),
+						0.34f to surface.copy(alpha = 0.78f),
+						0.70f to surface.copy(alpha = 0.94f),
 						1f to surface,
 					),
 				),
