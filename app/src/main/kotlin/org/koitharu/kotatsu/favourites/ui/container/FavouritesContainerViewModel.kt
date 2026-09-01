@@ -20,6 +20,7 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
+import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import javax.inject.Inject
 
@@ -27,6 +28,7 @@ import javax.inject.Inject
 class FavouritesContainerViewModel @Inject constructor(
 	private val settings: AppSettings,
 	private val favouritesRepository: FavouritesRepository,
+	private val searchMatcher: FavouritesSearchMatcher,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
@@ -51,8 +53,26 @@ class FavouritesContainerViewModel @Inject constructor(
 		observeAllFavouritesVisibility(),
 		allFavouritesCount,
 		categoryCounts,
-	) { list, showAll, allCount, counts ->
-		list.toUi(showAll, allCount, counts)
+		FavouritesContainerFragment.searchQuery,
+	) { list, showAll, allCount, counts, query ->
+		if (query.isBlank()) {
+			list.toUi(showAll, allCount, counts)
+		} else {
+			// Search badges represent matches, not the total category size. Build the matching id set
+			// once, then count those ids inside every visible category so users can immediately see
+			// which category contains the result before switching tabs.
+			val matchingIds = searchMatcher.filter(favouritesRepository.getAllManga(), query)
+				.mapTo(HashSet()) { it.id }
+			val filteredCounts = buildMap<Long, Int> {
+				for (category in list) {
+					put(
+						category.id,
+						favouritesRepository.getManga(category.id).count { it.id in matchingIds },
+					)
+				}
+			}
+			list.toUi(showAll, matchingIds.size, filteredCounts)
+		}
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val isEmpty = categoriesStateFlow.map {
