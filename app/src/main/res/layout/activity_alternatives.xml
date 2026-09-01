@@ -35,7 +35,7 @@
 			android:layout_height="wrap_content"
 			android:layout_marginStart="16dp"
 			android:layout_marginEnd="16dp"
-			android:layout_marginBottom="8dp"
+			android:layout_marginBottom="4dp"
 			app:selectionRequired="true"
 			app:singleSelection="true">
 
@@ -46,7 +46,17 @@
 				android:layout_height="40dp"
 				android:layout_weight="1"
 				android:minHeight="0dp"
-				android:text="@string/alternative_search_scope_pinned"
+				android:text="@string/search_mode_pinned_short"
+				android:textAllCaps="false" />
+
+			<com.google.android.material.button.MaterialButton
+				android:id="@+id/button_scope_preferred"
+				style="?attr/materialButtonOutlinedStyle"
+				android:layout_width="0dp"
+				android:layout_height="40dp"
+				android:layout_weight="1"
+				android:minHeight="0dp"
+				android:text="@string/search_mode_preferred_short"
 				android:textAllCaps="false" />
 
 			<com.google.android.material.button.MaterialButton
@@ -56,15 +66,60 @@
 				android:layout_height="40dp"
 				android:layout_weight="1"
 				android:minHeight="0dp"
-				android:text="@string/alternative_search_scope_all"
+				android:text="@string/search_mode_all_short"
 				android:textAllCaps="false" />
 
 		</com.google.android.material.button.MaterialButtonToggleGroup>
 
+		<HorizontalScrollView
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:scrollbars="none">
+
+			<com.google.android.material.chip.ChipGroup
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:paddingStart="16dp"
+				android:paddingEnd="16dp"
+				android:paddingBottom="8dp"
+				app:singleLine="true">
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_alternative_language"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="false"
+					android:text="@string/search_filter_language" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_alternative_has_results"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="true"
+					android:checked="true"
+					android:text="@string/search_filter_has_results" />
+
+				<com.google.android.material.chip.Chip
+					android:id="@+id/chip_alternative_reset"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:checkable="false"
+					android:text="@string/search_filter_reset" />
+
+			</com.google.android.material.chip.ChipGroup>
+		</HorizontalScrollView>
+
+		<com.google.android.material.progressindicator.LinearProgressIndicator
+			android:id="@+id/progress_alternative_search"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:visibility="gone"
+			app:trackThickness="2dp" />
+
 	</com.google.android.material.appbar.AppBarLayout>
 
 	<org.koitharu.kotatsu.core.ui.list.fastscroll.FastScrollRecyclerView
-		android:id="@+id/recyclerView"
+		android:id="@id/recyclerView"
 		android:layout_width="match_parent"
 		android:layout_height="match_parent"
 		android:clipToPadding="false"
