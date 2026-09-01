@@ -1,3 +1,3 @@
 Trigger DropSauce Noirero beta build.
-Build: EPUB translation language choices fix + immediate chapter delete icon refresh.
-Beta rebuild trigger: 2026-09-01 after workflow-generated translation dialog patch.
+Build: chapter swipe-right read/unread toggle + EPUB translation choices + chapter delete UI refresh.
+Beta rebuild trigger: 2026-09-01 after persistent per-chapter read toggle patch.
