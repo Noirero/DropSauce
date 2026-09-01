@@ -6,4 +6,7 @@ data class MangaOverride(
 	val coverUrl: String?,
 	val title: String?,
 	val contentRating: ContentRating?,
+	val author: String? = null,
+	val artist: String? = null,
+	val description: String? = null,
 )
