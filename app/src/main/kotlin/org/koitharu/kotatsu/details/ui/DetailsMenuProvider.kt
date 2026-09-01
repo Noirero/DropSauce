@@ -32,6 +32,7 @@ class DetailsMenuProvider(
 	private val viewModel: DetailsViewModel,
 	private val snackbarHost: View,
 	private val appShortcutManager: AppShortcutManager,
+	private val onNoteClick: (() -> Unit)? = null,
 ) : MenuProvider, ActivityResultCallback<ActivityResult> {
 
 	private val activityForResultLauncher = activity.registerForActivityResult(
@@ -62,6 +63,7 @@ class DetailsMenuProvider(
 		menu.findItem(R.id.action_scrobbling).isVisible = viewModel.isScrobblingAvailable
 		menu.findItem(R.id.action_online).isVisible = viewModel.remoteManga.value != null
 		menu.findItem(R.id.action_stats).isVisible = viewModel.isStatsAvailable.value
+		menu.findItem(R.id.action_note).isVisible = manga != null && onNoteClick != null
 		// Novels and local books only — there is nothing to put in an epub for an image manga.
 		menu.findItem(R.id.action_export_epub).isVisible = manga?.isEpub == true
 	}
@@ -116,7 +118,6 @@ class DetailsMenuProvider(
 						Snackbar.make(snackbarHost, R.string.operation_not_supported, Snackbar.LENGTH_SHORT)
 							.show()
 					}
-				}
 			}
 
 			R.id.action_export_epub -> {
@@ -133,6 +134,10 @@ class DetailsMenuProvider(
 				val original = viewModel.getSourceMangaOrNull() ?: manga
 				val intent = AppRouter.overrideEditIntent(activity, original)
 				activityForResultLauncher.launch(intent)
+			}
+
+			R.id.action_note -> {
+				onNoteClick?.invoke() ?: return false
 			}
 
 			else -> return false
