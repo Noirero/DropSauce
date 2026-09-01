@@ -12,13 +12,40 @@
 		android:layout_height="match_parent"
 		android:orientation="vertical">
 
-		<com.google.android.material.tabs.TabLayout
-			android:id="@+id/tabs"
+		<LinearLayout
+			android:id="@+id/layout_category_header"
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
-			android:background="@null"
-			app:tabGravity="start"
-			app:tabMode="scrollable" />
+			android:gravity="center_vertical"
+			android:orientation="horizontal">
+
+			<com.google.android.material.tabs.TabLayout
+				android:id="@+id/tabs"
+				android:layout_width="0dp"
+				android:layout_height="wrap_content"
+				android:layout_weight="1"
+				android:background="@null"
+				app:tabGravity="start"
+				app:tabMode="scrollable" />
+
+			<com.google.android.material.button.MaterialButton
+				android:id="@+id/button_content_type"
+				style="?attr/materialButtonStyle"
+				android:layout_width="wrap_content"
+				android:layout_height="40dp"
+				android:layout_marginEnd="8dp"
+				android:minWidth="0dp"
+				android:minHeight="0dp"
+				android:paddingHorizontal="12dp"
+				android:text="Manga  ▾"
+				android:textAllCaps="false"
+				android:textColor="?attr/colorOnSurface"
+				app:backgroundTint="?attr/colorSurfaceContainerHigh"
+				app:cornerRadius="20dp"
+				app:elevation="0dp"
+				tools:ignore="HardcodedText" />
+
+		</LinearLayout>
 
 		<androidx.viewpager2.widget.ViewPager2
 			android:id="@+id/pager"
@@ -34,23 +61,5 @@
 			tools:visibility="visible" />
 
 	</LinearLayout>
-
-	<com.google.android.material.button.MaterialButton
-		android:id="@+id/button_content_type"
-		style="?attr/materialButtonStyle"
-		android:layout_width="wrap_content"
-		android:layout_height="48dp"
-		android:layout_gravity="bottom|end"
-		android:layout_marginEnd="20dp"
-		android:layout_marginBottom="92dp"
-		android:minWidth="0dp"
-		android:paddingHorizontal="18dp"
-		android:text="Manga  ^"
-		android:textAllCaps="false"
-		android:textColor="?attr/colorOnSurface"
-		app:backgroundTint="?attr/colorSurfaceContainerHigh"
-		app:cornerRadius="24dp"
-		app:elevation="3dp"
-		tools:ignore="HardcodedText" />
 
 </FrameLayout>

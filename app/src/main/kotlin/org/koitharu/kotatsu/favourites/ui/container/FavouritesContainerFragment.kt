@@ -187,7 +187,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	private fun onContentTypeChanged(type: FavouriteContentType) {
 		val label = if (type == FavouriteContentType.NOVEL) "Novels" else getString(R.string.content_type_manga)
-		viewBinding?.buttonContentType?.text = "$label  ^"
+		viewBinding?.buttonContentType?.text = "$label  ▾"
 		inlineSearchEdit?.hint = if (type == FavouriteContentType.NOVEL) "Cari novel" else getString(R.string.search_manga)
 		if (!isHidden) {
 			activity?.findViewById<SearchBar>(R.id.search_bar)?.hint =
@@ -294,12 +294,12 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	fun attachTabsToAppBar() {
-		val tabs = viewBinding?.tabs ?: return
+		val header = viewBinding?.layoutCategoryHeader ?: return
 		val appBar = (activity as? AppBarOwner)?.appBar ?: return
-		if (tabs.parent === appBar) return
-		(tabs.parent as? ViewGroup)?.removeView(tabs)
+		if (header.parent === appBar) return
+		(header.parent as? ViewGroup)?.removeView(header)
 		appBar.addView(
-			tabs,
+			header,
 			AppBarLayout.LayoutParams(
 				AppBarLayout.LayoutParams.MATCH_PARENT,
 				AppBarLayout.LayoutParams.WRAP_CONTENT,
@@ -313,10 +313,10 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	fun detachTabsFromAppBar() {
 		val binding = viewBinding ?: return
-		val tabs = binding.tabs
-		if (tabs.parent === binding.layoutContent) return
-		(tabs.parent as? ViewGroup)?.removeView(tabs)
-		binding.layoutContent.addView(tabs, 0)
+		val header = binding.layoutCategoryHeader
+		if (header.parent === binding.layoutContent) return
+		(header.parent as? ViewGroup)?.removeView(header)
+		binding.layoutContent.addView(header, 0)
 	}
 
 	companion object {
