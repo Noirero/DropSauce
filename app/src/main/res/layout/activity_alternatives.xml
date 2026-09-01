@@ -43,9 +43,9 @@
 				android:id="@+id/button_scope_pinned"
 				style="?attr/materialButtonOutlinedStyle"
 				android:layout_width="0dp"
-				android:layout_height="40dp"
+				android:layout_height="wrap_content"
 				android:layout_weight="1"
-				android:minHeight="0dp"
+				android:minHeight="48dp"
 				android:text="@string/search_mode_pinned_short"
 				android:textAllCaps="false" />
 
@@ -53,9 +53,9 @@
 				android:id="@+id/button_scope_preferred"
 				style="?attr/materialButtonOutlinedStyle"
 				android:layout_width="0dp"
-				android:layout_height="40dp"
+				android:layout_height="wrap_content"
 				android:layout_weight="1"
-				android:minHeight="0dp"
+				android:minHeight="48dp"
 				android:text="@string/search_mode_preferred_short"
 				android:textAllCaps="false" />
 
@@ -63,9 +63,9 @@
 				android:id="@+id/button_scope_all"
 				style="?attr/materialButtonOutlinedStyle"
 				android:layout_width="0dp"
-				android:layout_height="40dp"
+				android:layout_height="wrap_content"
 				android:layout_weight="1"
-				android:minHeight="0dp"
+				android:minHeight="48dp"
 				android:text="@string/search_mode_all_short"
 				android:textAllCaps="false" />
 
