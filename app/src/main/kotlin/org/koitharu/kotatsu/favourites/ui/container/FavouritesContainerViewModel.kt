@@ -40,11 +40,16 @@ class FavouritesContainerViewModel @Inject constructor(
 		.withErrorHandling()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
+	private val contentTypeState = combine(
+		contentTypeStore.selectedType,
+		contentTypeStore.novelCategoryIds,
+	) { type, _ -> type }
+
 	val categories = combine(
 		categoriesStateFlow.filterNotNull(),
 		observeAllFavouritesVisibility(),
 		favouritesRepository.observeCategoriesWithCovers(),
-		contentTypeStore.selectedType,
+		contentTypeState,
 		FavouritesContainerFragment.searchQuery,
 	) { list, showAll, _, type, query ->
 		val typedCategories = list.filter { contentTypeStore.isCategoryForType(it.id, type) }
@@ -79,9 +84,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	): List<FavouriteTabModel> {
 		if (isEmpty() && !showAll) return emptyList()
 		val result = ArrayList<FavouriteTabModel>(if (showAll) size + 1 else size)
-		if (showAll) {
-			result.add(FavouriteTabModel(NO_ID, null, allCount))
-		}
+		if (showAll) result.add(FavouriteTabModel(NO_ID, null, allCount))
 		mapTo(result) { FavouriteTabModel(it.id, it.title, counts[it.id] ?: 0) }
 		return result
 	}
