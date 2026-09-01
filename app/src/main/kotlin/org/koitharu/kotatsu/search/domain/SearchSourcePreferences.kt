@@ -1,0 +1,124 @@
+package org.koitharu.kotatsu.search.domain
+
+import android.content.Context
+import androidx.core.content.edit
+import dagger.hilt.android.qualifiers.ApplicationContext
+import org.koitharu.kotatsu.core.model.LocalMangaSource
+import org.koitharu.kotatsu.mihon.model.MihonMangaSource
+import org.koitharu.kotatsu.parsers.model.MangaSource
+import java.util.Locale
+import javax.inject.Inject
+import javax.inject.Singleton
+
+enum class SearchSourceMode {
+	PINNED_ONLY,
+	PREFERRED_LANGUAGES,
+	ALL_SOURCES,
+}
+
+@Singleton
+class SearchSourcePreferences @Inject constructor(
+	@ApplicationContext private val context: Context,
+) {
+
+	private val preferences = context.getSharedPreferences(STORAGE_NAME, Context.MODE_PRIVATE)
+
+	val defaultPreferredLanguages: Set<String>
+		get() = linkedSetOf(
+			context.resources.configuration.locales[0]?.language.orEmpty().baseLanguageCode(),
+			"en",
+		).filterTo(LinkedHashSet()) { it.isNotBlank() }
+
+	var preferredLanguages: Set<String>
+		get() = preferences.getStringSet(KEY_LANGUAGES, null)
+			?.mapTo(LinkedHashSet()) { it.baseLanguageCode() }
+			?.filterTo(LinkedHashSet()) { it.isNotBlank() }
+			?.ifEmpty { defaultPreferredLanguages }
+			?: defaultPreferredLanguages
+		set(value) = preferences.edit {
+			putStringSet(KEY_LANGUAGES, value.mapTo(LinkedHashSet()) { it.baseLanguageCode() })
+		}
+
+	var globalMode: SearchSourceMode
+		get() = enumValue(KEY_GLOBAL_MODE, SearchSourceMode.ALL_SOURCES)
+		set(value) = putEnum(KEY_GLOBAL_MODE, value)
+
+	var alternativeMode: SearchSourceMode
+		get() = enumValue(KEY_ALTERNATIVE_MODE, SearchSourceMode.PREFERRED_LANGUAGES)
+		set(value) = putEnum(KEY_ALTERNATIVE_MODE, value)
+
+	var globalHasResultsOnly: Boolean
+		get() = preferences.getBoolean(KEY_GLOBAL_HAS_RESULTS, true)
+		set(value) = preferences.edit { putBoolean(KEY_GLOBAL_HAS_RESULTS, value) }
+
+	var alternativeHasResultsOnly: Boolean
+		get() = preferences.getBoolean(KEY_ALTERNATIVE_HAS_RESULTS, true)
+		set(value) = preferences.edit { putBoolean(KEY_ALTERNATIVE_HAS_RESULTS, value) }
+
+	var globalFlatView: Boolean
+		get() = preferences.getBoolean(KEY_GLOBAL_FLAT_VIEW, false)
+		set(value) = preferences.edit { putBoolean(KEY_GLOBAL_FLAT_VIEW, value) }
+
+	var globalHideLibrary: Boolean
+		get() = preferences.getBoolean(KEY_GLOBAL_HIDE_LIBRARY, false)
+		set(value) = preferences.edit { putBoolean(KEY_GLOBAL_HIDE_LIBRARY, value) }
+
+	fun resetGlobal() {
+		preferences.edit {
+			putString(KEY_GLOBAL_MODE, SearchSourceMode.ALL_SOURCES.name)
+			putStringSet(KEY_LANGUAGES, defaultPreferredLanguages)
+			putBoolean(KEY_GLOBAL_HAS_RESULTS, true)
+			putBoolean(KEY_GLOBAL_FLAT_VIEW, false)
+			putBoolean(KEY_GLOBAL_HIDE_LIBRARY, false)
+		}
+	}
+
+	fun resetAlternative() {
+		preferences.edit {
+			putString(KEY_ALTERNATIVE_MODE, SearchSourceMode.PREFERRED_LANGUAGES.name)
+			putStringSet(KEY_LANGUAGES, defaultPreferredLanguages)
+			putBoolean(KEY_ALTERNATIVE_HAS_RESULTS, true)
+		}
+	}
+
+	private inline fun <reified T : Enum<T>> enumValue(key: String, default: T): T {
+		val raw = preferences.getString(key, null) ?: return default
+		return enumValues<T>().firstOrNull { it.name == raw } ?: default
+	}
+
+	private fun putEnum(key: String, value: Enum<*>) {
+		preferences.edit { putString(key, value.name) }
+	}
+
+	private companion object {
+		const val STORAGE_NAME = "noirero_search_preferences"
+		const val KEY_LANGUAGES = "preferred_languages"
+		const val KEY_GLOBAL_MODE = "global_mode"
+		const val KEY_ALTERNATIVE_MODE = "alternative_mode"
+		const val KEY_GLOBAL_HAS_RESULTS = "global_has_results_only"
+		const val KEY_ALTERNATIVE_HAS_RESULTS = "alternative_has_results_only"
+		const val KEY_GLOBAL_FLAT_VIEW = "global_flat_view"
+		const val KEY_GLOBAL_HIDE_LIBRARY = "global_hide_library"
+	}
+}
+
+fun MangaSource.searchLanguageCode(): String = when (this) {
+	is MihonMangaSource -> language.baseLanguageCode().ifBlank { LANGUAGE_OTHER }
+	LocalMangaSource -> LANGUAGE_LOCAL
+	else -> LANGUAGE_OTHER
+}
+
+fun MangaSource.matchesPreferredLanguage(preferredLanguages: Set<String>): Boolean {
+	val language = searchLanguageCode()
+	// Native parser sources do not expose a reliable language field. Keep them instead of guessing
+	// and accidentally making them disappear from Preferred Languages mode.
+	return language == LANGUAGE_OTHER || language in preferredLanguages
+}
+
+fun String.baseLanguageCode(): String = trim()
+	.lowercase(Locale.ROOT)
+	.substringBefore('-')
+	.substringBefore('_')
+
+const val LANGUAGE_OTHER = "other"
+const val LANGUAGE_LOCAL = "local"
