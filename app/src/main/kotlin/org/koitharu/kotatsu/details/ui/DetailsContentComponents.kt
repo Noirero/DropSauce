@@ -48,9 +48,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
@@ -79,6 +82,8 @@ internal fun DescriptionCard(
 	accent: Color,
 ) {
 	val text = description?.toString()?.trim().orEmpty()
+	val displayText = text.ifEmpty { stringResource(R.string.no_description) }
+	val formattedText = remember(displayText) { formatDescriptionMarkdown(displayText) }
 	// The appearance setting only decides how a long description *starts*; tapping still toggles it
 	// either way, so turning collapsing off doesn't cost you the ability to fold a wall of text away.
 	val collapseEnabled by rememberBooleanPref(AppSettings.KEY_COLLAPSE_DESCRIPTION, true)
@@ -136,7 +141,7 @@ internal fun DescriptionCard(
 				) { expanded = !expanded },
 		) {
 			Text(
-				text = text.ifEmpty { stringResource(R.string.no_description) },
+				text = formattedText,
 				style = MaterialTheme.typography.bodyMedium,
 				color = MaterialTheme.colorScheme.onSurfaceVariant,
 				maxLines = if (expanded) Int.MAX_VALUE else 5,
@@ -157,6 +162,27 @@ internal fun DescriptionCard(
 				)
 			}
 		}
+	}
+}
+
+private fun formatDescriptionMarkdown(text: String) = buildAnnotatedString {
+	var cursor = 0
+	while (cursor < text.length) {
+		val markerStart = text.indexOf("**", cursor)
+		if (markerStart == -1) {
+			append(text.substring(cursor))
+			break
+		}
+		val markerEnd = text.indexOf("**", markerStart + 2)
+		if (markerEnd == -1) {
+			append(text.substring(cursor))
+			break
+		}
+		append(text.substring(cursor, markerStart))
+		withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+			append(text.substring(markerStart + 2, markerEnd))
+		}
+		cursor = markerEnd + 2
 	}
 }
 
@@ -229,7 +255,6 @@ internal fun TagsSection(tags: List<ChipsView.ChipModel>, accent: Color, onTagCl
 						color = warningColor ?: accent,
 						modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
 					)
-				}
 			}
 		}
 	}
