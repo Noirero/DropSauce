@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-	<string name="content_type_novel">Novel</string>
 	<string name="search_novel">Search novels</string>
 	<string name="alternative_search_scope_pinned">Pinned extensions</string>
 	<string name="alternative_search_scope_all">All extensions</string>
