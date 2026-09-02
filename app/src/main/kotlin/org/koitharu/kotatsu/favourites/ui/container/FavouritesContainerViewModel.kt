@@ -124,6 +124,9 @@ class FavouritesContainerViewModel @Inject constructor(
 			localCount = localCount,
 		)
 	}.withErrorHandling()
+		// Room can invalidate the favourites table even when the visible tab models end up identical.
+		// Suppress those no-op emissions so neither the pager nor the tab UI does redundant work.
+		.distinctUntilChanged()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
 
 	val isEmpty = categories.map { it.isEmpty() }
