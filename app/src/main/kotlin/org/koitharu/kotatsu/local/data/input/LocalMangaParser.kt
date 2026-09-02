@@ -478,6 +478,7 @@ class LocalMangaParser(private val uri: Uri) {
 						send(parser)
 					}
 				}
+			}
 		}.flowOn(Dispatchers.Default).firstOrNull()
 
 		private fun Path.isImage(): Boolean = MimeTypes.getMimeTypeFromExtension(name)?.isImage == true
