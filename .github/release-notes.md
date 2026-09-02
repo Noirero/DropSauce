@@ -1,5 +1,6 @@
 ## Changelog 2
 
+- Filter Source di Jelajah kini memiliki ON/OFF semua yang terpisah untuk Languages dan Individual sources; perubahan diproses lokal saat memilih lalu diterapkan sekaligus saat menekan Oke agar toggle tetap responsif.
 - Tombol collapse pada panel Bab/Chapter kembali berfungsi untuk menutup panel tanpa membuat scroll atau swipe daftar chapter menyeret sheet.
 - Disukai kini menampilkan Manga/Novel lebih cepat saat pertama dibuka, termasuk saat informasi unread, progress, dan continue reading diaktifkan.
 - Jelajah kini tidak lagi mengukur dan memuat seluruh daftar source sekaligus; daftar Manga/Novel tetap virtualized sehingga koleksi extension besar tidak membekukan UI atau memicu ANR saat source grid ditampilkan.
