@@ -83,6 +83,11 @@ class AlternativesViewModel @Inject constructor(
 	private val hasResultsOnlyState = MutableStateFlow(searchPreferences.alternativeHasResultsOnly)
 	val hasResultsOnly: StateFlow<Boolean> = hasResultsOnlyState
 
+	private val queryState = MutableStateFlow(
+		savedStateHandle.get<String>(STATE_QUERY)?.trim()?.takeIf { it.isNotEmpty() } ?: manga.title,
+	)
+	val query: StateFlow<String> = queryState
+
 	private val selectedMode = MutableStateFlow(resolveInitialMode())
 	val searchMode: StateFlow<SearchSourceMode> = selectedMode
 
@@ -157,6 +162,14 @@ class AlternativesViewModel @Inject constructor(
 		doSearch()
 	}
 
+	fun search(query: String) {
+		val normalized = query.trim()
+		if (normalized.isEmpty()) return
+		savedStateHandle[STATE_QUERY] = normalized
+		queryState.value = normalized
+		doSearch()
+	}
+
 	fun setSearchMode(mode: SearchSourceMode) {
 		val resolved = if (mode == SearchSourceMode.PINNED_ONLY && !hasPinnedSources) {
 			SearchSourceMode.PREFERRED_LANGUAGES
@@ -205,6 +218,7 @@ class AlternativesViewModel @Inject constructor(
 		val prevJob = searchJob
 		searchJob = launchLoadingJob(Dispatchers.Default) {
 			prevJob?.cancelAndJoin()
+			val activeQuery = queryState.value
 			results.value = emptyList()
 			sourceStatuses.value = emptyMap()
 			progressState.value = AlternativeSearchProgress()
@@ -217,14 +231,14 @@ class AlternativesViewModel @Inject constructor(
 			sourceStatuses.value = sources.associateWith { AlternativeSourceStatus() }
 			progressState.value = AlternativeSearchProgress(total = sources.size)
 
-			alternativesUseCase(ref, selectedMode.value, selectedLanguages.value).collect { event ->
+			alternativesUseCase(ref, selectedMode.value, selectedLanguages.value, activeQuery).collect { event ->
 				when (event) {
 					is AlternativeSearchEvent.Result -> {
 						val model = MangaAlternativeModel(
 							mangaModel = mangaListMapper.toListModel(event.manga, ListMode.GRID) as MangaGridModel,
 							referenceChapters = refCount,
 						)
-						upsertResult(model)
+						upsertResult(model, activeQuery)
 					}
 					is AlternativeSearchEvent.SourceFinished -> {
 						sourceStatuses.update { current ->
@@ -242,7 +256,7 @@ class AlternativesViewModel @Inject constructor(
 		}
 	}
 
-	private fun upsertResult(model: MangaAlternativeModel) {
+	private fun upsertResult(model: MangaAlternativeModel, activeQuery: String) {
 		results.update { current ->
 			val key = model.resultKey()
 			val index = current.indexOfFirst { it.resultKey() == key }
@@ -255,7 +269,7 @@ class AlternativesViewModel @Inject constructor(
 			updated.sortedWith(
 				compareBy<MangaAlternativeModel>(
 					{ sourceRanks[it.manga.source] ?: Int.MAX_VALUE },
-					{ it.manga.title.levenshteinDistance(manga.title) },
+					{ it.manga.title.levenshteinDistance(activeQuery) },
 				).thenByDescending { it.chaptersCount },
 			)
 		}
@@ -278,5 +292,6 @@ class AlternativesViewModel @Inject constructor(
 
 	private companion object {
 		const val STATE_SEARCH_MODE = "alternative_search_mode"
+		const val STATE_QUERY = "alternative_search_query"
 	}
 }
