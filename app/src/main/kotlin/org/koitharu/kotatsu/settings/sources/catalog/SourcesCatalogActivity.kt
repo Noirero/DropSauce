@@ -548,7 +548,10 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 				val previous = installerPreferences.method
 				installerPreferences.select(method)
 				refreshInstallerMethodUi()
-				if (method == ExtensionInstallerMethod.PRIVATE && hadSelection && previous != method) {
+				if (
+					method == ExtensionInstallerMethod.PRIVATE &&
+					(!hadSelection || previous != ExtensionInstallerMethod.PRIVATE)
+				) {
 					offerPrivateMigration()
 				}
 				if (
@@ -1011,7 +1014,16 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 						processDownloadedInstallerQueue()
 					}
 					ShizukuExtensionInstaller.InstallResult.Unavailable -> {
-						finishActiveInstaller(refresh = false, installSucceeded = false)
+						// Shizuku disappeared after the preflight check. Keep this APK and queue entry so
+						// the exact same extension resumes after permission/service is restored.
+						isInstallerActive = false
+						downloadRequestsById[downloadId] = pendingDownload
+						pendingDownloadedInstalls.addFirst(downloadId)
+						activeInstallerPackage = null
+						activeInstallerFileName = null
+						activeInstallerDownloadId = 0L
+						activeInstallerStoreId = null
+						activeInstallerMode = null
 						isInstallerQueuePaused = true
 						showShizukuNotReadyDialog(
 							onReady = {
