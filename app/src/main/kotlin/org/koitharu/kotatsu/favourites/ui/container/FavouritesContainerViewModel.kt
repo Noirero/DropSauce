@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
@@ -58,6 +59,9 @@ class FavouritesContainerViewModel @Inject constructor(
 			SharingStarted.Eagerly,
 			FavouritesContainerFragment.searchQuery.value.trim(),
 		)
+
+	private val favouritesChanges = favouritesRepository.observeFavouritesChanges()
+		.onEach { searchRepository.invalidate() }
 
 	private val categoriesStateFlow = favouritesRepository.observeCategoriesForLibrary()
 		.withErrorHandling()
@@ -108,7 +112,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	 */
 	private val countRequests = combine(
 		categoriesStateFlow.filterNotNull(),
-		favouritesRepository.observeFavouritesChanges(),
+		favouritesChanges,
 		contentTypeState,
 		searchQuery,
 	) { list, _, state, query ->
@@ -182,7 +186,7 @@ class FavouritesContainerViewModel @Inject constructor(
 		type: FavouriteContentType,
 		query: String,
 	): RemoteCounts {
-		val memberships = favouritesRepository.getMemberships()
+		val memberships = searchRepository.getMemberships()
 		val categoryIds = typedCategories.mapTo(HashSet(typedCategories.size)) { it.id }
 		val counts = HashMap<Long, Int>(typedCategories.size)
 		val wantNovel = type == FavouriteContentType.NOVEL
@@ -191,7 +195,7 @@ class FavouritesContainerViewModel @Inject constructor(
 			val allIds = HashSet<Long>()
 			val sourceTypeCache = HashMap<String, Boolean>()
 			for ((index, membership) in memberships.withIndex()) {
-				if (index and CANCELLATION_CHECK_MASK == 0) currentCoroutineContext().ensureActive()
+				if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 				val isNovel = sourceTypeCache.getOrPut(membership.source) {
 					MangaSource(membership.source).isNovelSource
 				}
@@ -212,7 +216,7 @@ class FavouritesContainerViewModel @Inject constructor(
 		}
 		val matchingIds = searchMatcher.matchingIds(searchable, query)
 		for ((index, membership) in memberships.withIndex()) {
-			if (index and CANCELLATION_CHECK_MASK == 0) currentCoroutineContext().ensureActive()
+			if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 			if (membership.mangaId !in matchingIds || membership.categoryId !in categoryIds) continue
 			counts[membership.categoryId] = (counts[membership.categoryId] ?: 0) + 1
 		}
