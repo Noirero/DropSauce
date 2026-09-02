@@ -3,6 +3,7 @@ package org.koitharu.kotatsu
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.acra.ACRA
@@ -17,6 +18,7 @@ class KotatsuApp : BaseApp() {
 
 	@Volatile
 	private var recoveredCrashDialogShown = false
+	private val exitRecoveryComplete = CompletableDeferred<Unit>()
 
 	override fun onCreate() {
 		super.onCreate()
@@ -26,7 +28,11 @@ class KotatsuApp : BaseApp() {
 		// payload. Never do it on the main thread: diagnostics must not make startup jank or create a
 		// new ANR while trying to explain the previous one.
 		processLifecycleScope.launch(Dispatchers.IO) {
-			CrashLogStore.capturePreviousSystemExit(this@KotatsuApp)
+			try {
+				CrashLogStore.capturePreviousSystemExit(this@KotatsuApp)
+			} finally {
+				exitRecoveryComplete.complete(Unit)
+			}
 		}
 		registerActivityLifecycleCallbacks(RecoveredCrashDialogCallbacks())
 	}
@@ -35,6 +41,9 @@ class KotatsuApp : BaseApp() {
 		override fun onActivityResumed(activity: Activity) {
 			if (recoveredCrashDialogShown || activity !is MainActivity) return
 			processLifecycleScope.launch(Dispatchers.IO) {
+				// MainActivity can resume before ApplicationExitInfo recovery finishes. Waiting here avoids
+				// missing an ANR/native-crash report until the user happens to leave and return later.
+				exitRecoveryComplete.await()
 				val log = CrashLogStore.pendingLog(activity) ?: return@launch
 				activity.runOnUiThread {
 					if (recoveredCrashDialogShown || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
