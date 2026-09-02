@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream
 open class BrowserClient(
 	private val callback: BaseBrowserActivity,
 	private val adBlock: AdBlock?,
+	private val additionalHeaders: Map<String, String> = emptyMap(),
 ) : WebViewClient() {
 
 	/**
@@ -43,6 +44,19 @@ open class BrowserClient(
 		callback.onHistoryChanged()
 	}
 
+	@Suppress("DEPRECATION")
+	@Deprecated("Deprecated in Java")
+	override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+		return loadWithAdditionalHeaders(view, url) || super.shouldOverrideUrlLoading(view, url)
+	}
+
+	override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+		if (request?.isForMainFrame == true && loadWithAdditionalHeaders(view, request.url.toString())) {
+			return true
+		}
+		return super.shouldOverrideUrlLoading(view, request)
+	}
+
 	@WorkerThread
 	@Suppress("DEPRECATION")
 	@Deprecated("Deprecated in Java")
@@ -65,6 +79,13 @@ open class BrowserClient(
 		} else {
 			emptyResponse()
 		}
+
+	private fun loadWithAdditionalHeaders(view: WebView?, url: String?): Boolean {
+		if (view == null || url.isNullOrEmpty() || additionalHeaders.isEmpty()) return false
+		if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+		view.loadUrl(url, additionalHeaders)
+		return true
+	}
 
 	private fun emptyResponse(): WebResourceResponse =
 		WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(byteArrayOf()))
