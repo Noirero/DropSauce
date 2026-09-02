@@ -125,6 +125,7 @@ abstract class MangaListFragment :
 
 		viewModel.listMode.observe(viewLifecycleOwner, ::onListModeChanged)
 		viewModel.gridScale.observe(viewLifecycleOwner, ::onGridScaleChanged)
+		viewModel.gridColumns.observe(viewLifecycleOwner, ::onGridColumnsChanged)
 		viewModel.isLoading.observe(viewLifecycleOwner, ::onLoadingStateChanged)
 		viewModel.content.observe(viewLifecycleOwner, ::onListChanged)
 		viewModel.onError.observeEvent(viewLifecycleOwner, SnackbarErrorObserver(binding.recyclerView, this))
@@ -259,6 +260,11 @@ abstract class MangaListFragment :
 	private fun onGridScaleChanged(scale: Float) {
 		spanSizeLookup.invalidateCache()
 		spanResolver?.setGridSize(scale, requireViewBinding().recyclerView)
+	}
+
+	private fun onGridColumnsChanged(columns: Int?) {
+		spanSizeLookup.invalidateCache()
+		spanResolver?.setFixedSpanCount(columns, requireViewBinding().recyclerView)
 	}
 
 	private fun onListModeChanged(mode: ListMode) {
