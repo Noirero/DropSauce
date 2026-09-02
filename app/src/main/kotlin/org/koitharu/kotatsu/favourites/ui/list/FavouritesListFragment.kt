@@ -7,6 +7,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.view.ActionMode
 import androidx.fragment.app.viewModels
+import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
@@ -36,8 +37,11 @@ class FavouritesListFragment : MangaListFragment() {
 		binding.recyclerView.isVP2BugWorkaroundEnabled = true
 		viewModel.gridScale.observe(viewLifecycleOwner) {
 			val adapter = binding.recyclerView.adapter ?: return@observe
-			if (adapter.itemCount > 0) {
-				adapter.notifyItemRangeChanged(0, adapter.itemCount)
+			val layoutManager = binding.recyclerView.layoutManager as? GridLayoutManager ?: return@observe
+			val first = layoutManager.findFirstVisibleItemPosition()
+			val last = layoutManager.findLastVisibleItemPosition()
+			if (first >= 0 && last >= first && first < adapter.itemCount) {
+				adapter.notifyItemRangeChanged(first, (last - first + 1).coerceAtMost(adapter.itemCount - first))
 			}
 		}
 	}
