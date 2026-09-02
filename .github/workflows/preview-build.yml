@@ -7,6 +7,9 @@ name: Beta Build
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - beta
 
 permissions:
   contents: read
@@ -146,12 +149,23 @@ jobs:
             echo "This APK uses the preview applicationId suffix and can be installed alongside DropSauce Noirero main."
             echo "All Beta builds from this workflow use the permanent repository signing key for in-place updates."
             echo "App name: \`DropSauce Noirero Beta\`"
+            echo "Application state: \`d479dddeb97d55c0e7269a338875a14f629125d1\`"
+            echo ""
+            echo "### Ringkasan perubahan"
+            echo ""
+            echo "**Perubahan Beta yang sebelumnya sudah dipromosikan ke Main hingga v0.9.500121:**"
+            echo "- Penghapusan chapter Manga/Novel tepat sasaran, downloader DropSauce, swipe/read-state, Disukai Manga/Novel + Lokal, pencarian, Notes/Markdown, Custom DoH, dan kompatibilitas extension lama."
+            echo ""
+            echo "**Perubahan Beta baru setelah Main v0.9.500121:**"
+            echo "- Restore Tachiyomi/Mihon, progress dan laporan hasil backup/restore, typed extension store, filter SFW/NSFW + override, chapter sheet, Local PDF/Refresh, unified installer, actionable Shizuku errors, serta status live DNS/User-Agent."
+            echo "- Perbaikan resource SFW/NSFW dan struktur listener Shizuku agar build kembali valid."
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| File | \`${DEST}\` |"
             echo "| Branch | \`${GITHUB_REF_NAME}\` |"
             echo "| Commit | \`${SHORT_SHA}\` |"
+            echo "| App state | \`d479dddeb97d55c0e7269a338875a14f629125d1\` |"
             echo "| Size | ${SIZE} |"
             echo "| SHA-256 | \`${SHA256}\` |"
             echo "| SHA-1 | \`${SHA1}\` |"
