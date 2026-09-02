@@ -36,6 +36,7 @@ import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
+import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.history.domain.MarkAsReadUseCase
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.domain.ListSortOrder
@@ -77,6 +78,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val displayPreferences: FavouriteDisplayPreferences,
 	private val localMangaIndex: LocalMangaIndex,
+	private val historyRepository: HistoryRepository,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -294,7 +296,8 @@ class FavouritesListViewModel @Inject constructor(
 					isSaved = isSaved,
 					isLocalSource = isLocalSource,
 					languageLabel = languageLabel,
-					showContinueReading = display.showContinueReading,
+					showContinueReading = display.showContinueReading &&
+						historyRepository.getProgress(model.manga.id, settings.progressIndicatorMode) != null,
 				)
 			}
 		}
