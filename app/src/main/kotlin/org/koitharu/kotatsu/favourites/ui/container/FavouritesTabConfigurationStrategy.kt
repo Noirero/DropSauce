@@ -19,9 +19,9 @@ class FavouritesTabConfigurationStrategy(
 		tab.tag = item
 		tab.getOrCreateBadge().apply {
 			// Material's default badge width abbreviates values above 999 as "999+".
-			// Allow the full category count to stay visible through 99,999 instead.
+			// Show the full category count through 99,999 and clamp anything larger to 99,999.
 			maxCharacterCount = 6
-			number = item.count
+			number = item.count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)
 			isVisible = item.count > 0
 		}
 		if (item.id != LOCAL_FAVOURITES_CATEGORY_ID) {
@@ -29,5 +29,9 @@ class FavouritesTabConfigurationStrategy(
 				FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id),
 			).attach(tab.view)
 		}
+	}
+
+	private companion object {
+		const val MAX_CATEGORY_BADGE_COUNT = 99_999
 	}
 }
