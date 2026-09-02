@@ -137,21 +137,25 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	) {
 		val binding = viewBinding ?: return
 		binding.headerBar.enableHalfExpandedCollapseMode(HALF_EXPANDED_RATIO)
+		// The details chapter panel opens directly at its working height. Keep the dash/collapse row as a
+		// visual header only: it must not resize or collapse the panel when tapped, dragged or scrolled.
+		binding.headerBar.setManualMovementEnabled(false)
 		sheetDialog?.behavior?.apply {
 			isFitToContents = false
 			isHideable = true
-			// Keep all chapter-list gestures inside the content. The header provides the only manual drag
-			// path, restricted to its handle row and to half-expanded <-> collapsed.
+			// Chapter-list gestures stay entirely inside the content. The sheet height is fixed while open;
+			// Back/outside dismissal still works normally through the dialog.
 			isDraggable = false
 			setDraggableOnNestedScroll(false)
 			skipCollapsed = false
 			halfExpandedRatio = HALF_EXPANDED_RATIO
-			if (resetToHalfExpanded && state != BottomSheetBehavior.STATE_COLLAPSED) {
+			if (resetToHalfExpanded) {
 				state = BottomSheetBehavior.STATE_HALF_EXPANDED
 			}
 		}
 		binding.headerBar.doOnLayout { header ->
-			// Leave the drag-handle row visible when collapsed so the existing upward drag can reopen it.
+			// Keep a valid peek height for BottomSheetBehavior bookkeeping, even though this details sheet
+			// no longer exposes a manual path to the collapsed state.
 			sheetDialog?.behavior?.peekHeight = header.height
 		}
 	}
@@ -247,7 +251,7 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	override fun unlock() {
 		super.unlock()
 		if (viewModel is DetailsViewModel) {
-			// BaseAdaptiveSheet unlocks native dragging; restore the chapter sheet's handle-only mode.
+			// BaseAdaptiveSheet unlocks native dragging; restore the fixed details chapter-sheet behaviour.
 			configureDetailsChapterSheet(dialog as? BottomSheetDialog, resetToHalfExpanded = false)
 		}
 		adjustLockState()
