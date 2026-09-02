@@ -44,7 +44,9 @@ class FavouriteUnreadCounter @Inject constructor(
 		// snapshot so a stale id does not suddenly mark the whole title unread.
 		val total = history.chaptersCount.takeIf { it > 0 } ?: chapters.logicalChapterCount()
 		if (total <= 0) return 0
-		val read = ceil(history.percent.coerceIn(0f, 1f) * total).toInt().coerceIn(0, total)
+		val read = ceil(history.percent.coerceIn(0f, 1f).toDouble() * total.toDouble())
+			.toInt()
+			.coerceIn(0, total)
 		return (total - read).coerceAtLeast(0)
 	}
 
