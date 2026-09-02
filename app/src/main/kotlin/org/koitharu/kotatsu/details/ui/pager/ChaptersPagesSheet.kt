@@ -137,14 +137,13 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	) {
 		val binding = viewBinding ?: return
 		binding.headerBar.enableHalfExpandedCollapseMode(HALF_EXPANDED_RATIO)
-		// The details chapter panel opens directly at its working height. Keep the dash/collapse row as a
-		// visual header only: it must not resize or collapse the panel when tapped, dragged or scrolled.
-		binding.headerBar.setManualMovementEnabled(false)
+		// Keep chapter-list gestures inside the content, but leave the header's explicit collapse control
+		// active so the v/^ handle can close and reopen the panel without making the list itself draggable.
+		binding.headerBar.setManualMovementEnabled(true)
 		sheetDialog?.behavior?.apply {
 			isFitToContents = false
 			isHideable = true
-			// Chapter-list gestures stay entirely inside the content. The sheet height is fixed while open;
-			// Back/outside dismissal still works normally through the dialog.
+			// Chapter-list gestures stay entirely inside the content. Only the header handles manual movement.
 			isDraggable = false
 			setDraggableOnNestedScroll(false)
 			skipCollapsed = false
@@ -154,8 +153,7 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 			}
 		}
 		binding.headerBar.doOnLayout { header ->
-			// Keep a valid peek height for BottomSheetBehavior bookkeeping, even though this details sheet
-			// no longer exposes a manual path to the collapsed state.
+			// Leave the header visible at the collapsed position so it can be dragged upward to reopen.
 			sheetDialog?.behavior?.peekHeight = header.height
 		}
 	}
@@ -251,7 +249,7 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	override fun unlock() {
 		super.unlock()
 		if (viewModel is DetailsViewModel) {
-			// BaseAdaptiveSheet unlocks native dragging; restore the fixed details chapter-sheet behaviour.
+			// BaseAdaptiveSheet unlocks native dragging; restore the header-only chapter-sheet movement.
 			configureDetailsChapterSheet(dialog as? BottomSheetDialog, resetToHalfExpanded = false)
 		}
 		adjustLockState()
