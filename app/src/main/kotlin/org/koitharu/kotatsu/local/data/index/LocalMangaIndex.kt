@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koitharu.kotatsu.core.db.MangaDatabase
+import org.koitharu.kotatsu.core.db.entity.toManga
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
@@ -29,6 +30,7 @@ class LocalMangaIndex @Inject constructor(
 
 	private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 	private val mutex = Mutex()
+	private var cachedList: List<LocalManga>? = null
 
 	private var currentVersion: Int
 		get() = prefs.getInt(KEY_VERSION, 0)
@@ -49,6 +51,7 @@ class LocalMangaIndex @Inject constructor(
 				.collect { upsert(it) }
 		}
 		currentVersion = VERSION
+		cachedList = null
 	}
 
 	suspend fun updateIfRequired() {
@@ -73,6 +76,16 @@ class LocalMangaIndex @Inject constructor(
 		}.getOrNull()
 	}
 
+	suspend fun getAll(): List<LocalManga> {
+		updateIfRequired()
+		return mutex.withLock {
+			cachedList ?: db.getLocalMangaIndexDao()
+				.findAll()
+				.map { LocalManga(it.toManga()) }
+				.also { cachedList = it }
+		}
+	}
+
 	suspend operator fun contains(mangaId: Long): Boolean {
 		return db.getLocalMangaIndexDao().findPath(mangaId) != null
 	}
@@ -81,13 +94,16 @@ class LocalMangaIndex @Inject constructor(
 		db.withTransaction {
 			upsert(manga)
 		}
+		cachedList = null
 	}
 
-	suspend fun delete(mangaId: Long) {
+	suspend fun delete(mangaId: Long) = mutex.withLock {
 		db.getLocalMangaIndexDao().delete(mangaId)
+		cachedList = null
 	}
 
 	suspend fun getAvailableTags(skipNsfw: Boolean): List<String> {
+		updateIfRequired()
 		val dao = db.getLocalMangaIndexDao()
 		return if (skipNsfw) {
 			dao.findTags(isNsfw = false)

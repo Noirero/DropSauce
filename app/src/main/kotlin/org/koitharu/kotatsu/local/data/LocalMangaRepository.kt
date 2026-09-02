@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.toCollection
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import org.koitharu.kotatsu.core.model.LocalMangaSource
@@ -48,6 +47,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val MAX_PARALLELISM = 4
+private const val LOCAL_PAGE_SIZE = 100
 private const val FILENAME_SKIP = ".notamanga"
 private const val MAX_MANGA_CHAPTER_FILENAME_LENGTH = 96
 private const val MAX_NOVEL_CHAPTER_FILENAME_LENGTH = 120
@@ -97,8 +97,7 @@ class LocalMangaRepository @Inject constructor(
 	)
 
 	override suspend fun getList(offset: Int, order: SortOrder?, filter: MangaListFilter?): List<Manga> {
-		if (offset > 0) return emptyList()
-		val list = getRawList()
+		val list = localMangaIndex.getAll().toMutableList()
 		if (settings.isNsfwContentDisabled) list.removeAll { it.manga.isNsfw() }
 		if (filter != null) {
 			val query = filter.query
@@ -117,7 +116,12 @@ class LocalMangaRepository @Inject constructor(
 			SortOrder.NEWEST, SortOrder.UPDATED -> list.sortWith(compareBy({ x -> -x.createdAt }, { x -> x.manga.id }))
 			else -> Unit
 		}
-		return list.unwrap()
+		val start = offset.coerceAtLeast(0)
+		if (start >= list.size) {
+			return emptyList()
+		}
+		val end = minOf(start + LOCAL_PAGE_SIZE, list.size)
+		return list.subList(start, end).unwrap()
 	}
 
 	override suspend fun getDetails(manga: Manga): Manga = when {
@@ -228,8 +232,6 @@ class LocalMangaRepository @Inject constructor(
 			}
 		}
 	}
-
-	private suspend fun getRawList(): ArrayList<LocalManga> = getRawListAsFlow().toCollection(ArrayList())
 
 	/**
 	 * Check the deterministic current download path first:

@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.SavedStateHandle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.toChipModel
@@ -30,6 +31,7 @@ import org.koitharu.kotatsu.list.ui.model.QuickFilter
 import org.koitharu.kotatsu.list.ui.model.TipModel
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.data.LocalStorageManager
+import org.koitharu.kotatsu.local.data.index.LocalMangaIndex
 import org.koitharu.kotatsu.local.domain.DeleteLocalMangaUseCase
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -47,6 +49,7 @@ class LocalListViewModel @Inject constructor(
 	exploreRepository: ExploreRepository,
 	@param:LocalStorageChanges private val localStorageChanges: SharedFlow<LocalManga?>,
 	private val localStorageManager: LocalStorageManager,
+	private val localMangaIndex: LocalMangaIndex,
 	sourcesRepository: MangaSourcesRepository,
 	mangaDataRepository: MangaDataRepository,
 ) : RemoteListViewModel(
@@ -63,11 +66,15 @@ class LocalListViewModel @Inject constructor(
 
 	val onMangaRemoved = MutableEventFlow<Unit>()
 	private val showInlineFilter: Boolean = savedStateHandle[AppRouter.KEY_IS_BOTTOMTAB] ?: false
+	private var refreshJob: Job? = null
 
 	init {
 		launchJob(Dispatchers.Default) {
 			localStorageChanges
-				.collect {
+				.collect { changed ->
+					if (changed != null) {
+						localMangaIndex.put(changed)
+					}
 					loadList(filterCoordinator.snapshot(), append = false).join()
 				}
 		}
@@ -99,7 +106,6 @@ class LocalListViewModel @Inject constructor(
 					list.add(0, tip)
 					return
 				}
-			}
 		}
 	}
 
@@ -122,6 +128,16 @@ class LocalListViewModel @Inject constructor(
 	override fun onCleared() {
 		settings.unsubscribe(this)
 		super.onCleared()
+	}
+
+	override fun onRefresh() {
+		if (refreshJob?.isActive == true) {
+			return
+		}
+		refreshJob = launchLoadingJob(Dispatchers.Default) {
+			localMangaIndex.update()
+			loadList(filterCoordinator.snapshot(), append = false).join()
+		}
 	}
 
 	override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
