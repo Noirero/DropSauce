@@ -26,7 +26,7 @@ class FavouritesSearchMatcher @Inject constructor(
 		for ((index, manga) in items.withIndex()) {
 			// Filtering tens of thousands of favourites has very few suspension points. Explicitly check
 			// cancellation so a newer debounced query can abandon the old scan instead of finishing it.
-			if (index and CANCELLATION_CHECK_MASK == 0) currentCoroutineContext().ensureActive()
+			if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 			val override = context.overrides[manga.id]
 			if (
 				manga.title.contains(query, ignoreCase = true) ||
@@ -54,7 +54,7 @@ class FavouritesSearchMatcher @Inject constructor(
 		val context = createContext()
 		val result = HashSet<Long>()
 		for ((index, item) in items.withIndex()) {
-			if (index and CANCELLATION_CHECK_MASK == 0) currentCoroutineContext().ensureActive()
+			if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 			val override = context.overrides[item.mangaId]
 			if (
 				item.title.contains(query, ignoreCase = true) ||
