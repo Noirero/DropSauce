@@ -80,11 +80,13 @@ fun mangaGridItemAD(
 		binding.textViewLanguage.text = item.languageLabel
 		binding.textViewLanguage.isVisible = !item.languageLabel.isNullOrBlank()
 		binding.imageViewContinue.isVisible = item.showContinueReading
-		binding.imageViewContinue.setOnClickListener(if (item.showContinueReading) {
-			{ view -> clickListener.onReadClick(item.toMangaWithOverride(), view) }
+		if (item.showContinueReading) {
+			binding.imageViewContinue.setOnClickListener { view ->
+				clickListener.onReadClick(item.toMangaWithOverride(), view)
+			}
 		} else {
-			null
-		})
+			binding.imageViewContinue.setOnClickListener(null)
+		}
 		binding.layoutIndicators.updateLayoutParams<FrameLayout.LayoutParams> {
 			gravity = Gravity.END or if (isTitleOverCover || item.isPinned) Gravity.TOP else Gravity.BOTTOM
 		}
