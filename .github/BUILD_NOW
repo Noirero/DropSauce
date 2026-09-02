@@ -1,4 +1,4 @@
 Trigger DropSauce Noirero beta build.
-Requested build after Mihon browser-session fixes and crash/ANR logging hardening.
-Target app code base: 011cbf2cc51f6a9ad79d2e1b4503f277db70a71a
+Requested rebuild after fixing compile errors found by Beta Build #40.
+Includes Mihon browser-session fixes and crash/ANR logging hardening.
 Requested: 2026-09-02
