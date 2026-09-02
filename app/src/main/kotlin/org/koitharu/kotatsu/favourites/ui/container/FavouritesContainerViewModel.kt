@@ -22,6 +22,7 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
+import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
@@ -38,6 +39,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	private val searchMatcher: FavouritesSearchMatcher,
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val localFavouritesRepository: LocalFavouritesRepository,
+	private val displayPreferences: FavouriteDisplayPreferences,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
@@ -57,8 +59,13 @@ class FavouritesContainerViewModel @Inject constructor(
 		contentTypeStore.selectedType,
 		contentTypeStore.novelCategoryIds,
 		localFavouritesRepository.items,
-	) { type, _, localManga ->
-		ContentTypeState(type, localManga)
+		displayPreferences.state,
+	) { type, _, localManga, preferences ->
+		ContentTypeState(
+			type = type,
+			localManga = localManga,
+			showCategoryCounts = preferences.getValue(type).showCategoryCounts,
+		)
 	}
 
 	val categories = combine(
@@ -73,6 +80,19 @@ class FavouritesContainerViewModel @Inject constructor(
 		val type = state.type
 		val typedCategories = list.filter { contentTypeStore.isCategoryForType(it.id, type) }
 		val wantNovel = type == FavouriteContentType.NOVEL
+
+		// Category counts are an optional presentation detail. When hidden, do not scan the whole
+		// library and every category just to compute numbers that will never be rendered.
+		if (!state.showCategoryCounts) {
+			return@combine typedCategories.toUi(
+				showAll = showAll,
+				allCount = 0,
+				counts = emptyMap(),
+				includeLocal = !wantNovel,
+				localCount = 0,
+			)
+		}
+
 		val allForType = favouritesRepository.getAllManga().filter { it.source.isNovelSource == wantNovel }
 		val matchingIds = if (query.isBlank()) {
 			allForType.mapTo(HashSet(allForType.size)) { it.id }
@@ -165,5 +185,6 @@ class FavouritesContainerViewModel @Inject constructor(
 	private data class ContentTypeState(
 		val type: FavouriteContentType,
 		val localManga: List<Manga>,
+		val showCategoryCounts: Boolean,
 	)
 }
