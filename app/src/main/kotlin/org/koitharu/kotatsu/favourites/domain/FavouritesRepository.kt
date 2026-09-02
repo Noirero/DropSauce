@@ -67,7 +67,6 @@ class FavouritesRepository @Inject constructor(
 		pinned: List<Long> = emptyList(),
 	): Flow<List<Manga>> {
 		if (ListFilterOption.Downloaded in filterOptions) {
-			// ponytail: pins not applied to the downloaded-only local list
 			return localObserver.observeAll(order, filterOptions, limit)
 		}
 		return db.getFavouritesDao().observeAll(order, filterOptions, limit, pinned)
@@ -352,5 +351,6 @@ class FavouritesRepository @Inject constructor(
 			for (id in ids) {
 				db.getFavouritesDao().recover(mangaId = id, categoryId = categoryId)
 			}
+		}
 	}
 }
