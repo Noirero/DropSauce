@@ -26,7 +26,7 @@ import androidx.appcompat.R as appcompatR
 
 fun mangaGridItemAD(
 	sizeResolver: ItemSizeResolver,
-	clickListener: OnListItemClickListener<MangaListModel>,
+	clickListener: MangaDetailsClickListener,
 	titleClickListener: OnListItemClickListener<MangaListModel>? = null,
 ) = adapterDelegateViewBinding<MangaGridModel, ListModel, ItemMangaGridBinding>(
 	{ inflater, parent -> ItemMangaGridBinding.inflate(inflater, parent, false) },
@@ -38,14 +38,11 @@ fun mangaGridItemAD(
 		binding.textViewTitleOverlay.attachTitleClickToRead(itemView, onTitleClick)
 		binding.textViewTitle.attachTitleClickToRead(itemView, onTitleClick)
 	}
-	// The overlay title is the one that adapts to the grid size (white, on the scrim).
 	sizeResolver.attachToView(itemView, binding.textViewTitleOverlay, binding.progressView)
 
 	val density = context.resources.displayMetrics.density
 	val gridMargin = context.resources.getDimensionPixelOffset(R.dimen.grid_spacing_outer)
 	val gridMarginIncreased = context.resources.getDimensionPixelOffset(R.dimen.grid_spacing_outer_large)
-	// Title scrim: a short, fairly dark fade of a dark shade of the theme accent, just tall enough
-	// for two lines of title, with its bottom corners matching the cover's rounding.
 	val darkAccent = ColorUtils.blendARGB(context.getThemeColor(appcompatR.attr.colorPrimary), Color.BLACK, 0.78f)
 	binding.viewScrim.background = GradientDrawable(
 		GradientDrawable.Orientation.BOTTOM_TOP,
@@ -80,19 +77,24 @@ fun mangaGridItemAD(
 		binding.textViewTitle.isVisible = !item.isTitleHidden && !isTitleOverCover
 		binding.progressView.setProgress(item.progress, PAYLOAD_PROGRESS_CHANGED in payloads)
 		binding.imageViewPin.isVisible = item.isPinned
-		// Pill goes top-right when the title is inside the cover, bottom-right when it's below it.
-		// A pin badge always sits top-right, dragging the pill up with it.
+		binding.textViewLanguage.text = item.languageLabel
+		binding.textViewLanguage.isVisible = !item.languageLabel.isNullOrBlank()
+		binding.imageViewContinue.isVisible = item.showContinueReading
+		binding.imageViewContinue.setOnClickListener(if (item.showContinueReading) {
+			{ view -> clickListener.onReadClick(item.toMangaWithOverride(), view) }
+		} else {
+			null
+		})
 		binding.layoutIndicators.updateLayoutParams<FrameLayout.LayoutParams> {
 			gravity = Gravity.END or if (isTitleOverCover || item.isPinned) Gravity.TOP else Gravity.BOTTOM
 		}
 		with(binding.iconsView) {
 			clearIcons()
 			if (item.isSaved) addIcon(R.drawable.ic_storage)
+			if (item.isLocalSource) addIcon(R.drawable.ic_manga_source)
 			if (item.isFavorite) addIcon(R.drawable.ic_heart_outline)
 			isVisible = iconsCount > 0
 		}
-		// Load at a stable size derived from the grid cell width (not the transient measured view
-		// size), so covers in the ViewPager2-hosted grids stay sharp after rotation/settling.
 		val coverWidth = sizeResolver.cellWidth - coverMargin * 2
 		binding.imageViewCover.exactImageSize = if (coverWidth > 0) {
 			Size(coverWidth, coverWidth * 18 / 13)
@@ -102,8 +104,6 @@ fun mangaGridItemAD(
 		binding.imageViewCover.setImageAsync(item.coverUrl, item.manga)
 		binding.badge.number = item.counter
 		binding.badge.isVisible = item.counter > 0
-		// Counter badge sits at the top-left. Shift the info icons view down if the badge is visible
-		// so they do not overlap.
 		binding.iconsView.updateLayoutParams<FrameLayout.LayoutParams> {
 			topMargin = if (item.counter > 0) {
 				(32f * density).toInt()
