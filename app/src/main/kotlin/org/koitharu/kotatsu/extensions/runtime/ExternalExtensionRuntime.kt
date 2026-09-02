@@ -155,6 +155,7 @@ fun <ResultT, SuccessT, ErrorT, SourceT, CatalogueSourceT : SourceT, WrappedSour
 	sourceId: (SourceT) -> Long,
 	asCatalogueSource: (SourceT) -> CatalogueSourceT?,
 	catalogueSourceName: (CatalogueSourceT) -> String,
+	catalogueSourceLang: (CatalogueSourceT) -> String,
 	buildWrappedSource: (CatalogueSourceT, String, Boolean, Boolean) -> WrappedSourceT,
 	onError: (ErrorT) -> Unit = {},
 	onUntrusted: (String) -> Unit = {},
@@ -190,14 +191,20 @@ fun <ResultT, SuccessT, ErrorT, SourceT, CatalogueSourceT : SourceT, WrappedSour
 		}
 	}
 
-	val nameCount = catalogueSources.groupingBy { catalogueSourceName(it.first) }.eachCount()
+	// A language suffix is a property of siblings shipped by the same APK. Using the source name
+	// globally makes two unrelated extensions with the same display name look like language variants.
+	// Count distinct declared languages so duplicate classes for one language do not create a false
+	// multi-language marker either.
+	val languagesByPackageAndName = catalogueSources
+		.groupBy { (source, pkgName) -> pkgName to catalogueSourceName(source) }
+		.mapValues { (_, sources) -> sources.mapTo(HashSet()) { catalogueSourceLang(it.first) } }
 	val wrappedSourceById = linkedMapOf<Long, WrappedSourceT>()
 	catalogueSources.forEach { (catalogueSource, pkgName, isNsfw) ->
 		wrappedSourceById[sourceId(catalogueSource)] = buildWrappedSource(
 			catalogueSource,
 			pkgName,
 			isNsfw,
-			(nameCount[catalogueSourceName(catalogueSource)] ?: 0) > 1,
+			languagesByPackageAndName[pkgName to catalogueSourceName(catalogueSource)].orEmpty().size > 1,
 		)
 	}
 
@@ -330,6 +337,7 @@ class ExternalExtensionManagerFacade<ResultT, SuccessT, ErrorT, SourceT, Catalog
 				sourceId = sourceId,
 				asCatalogueSource = asCatalogueSource,
 				catalogueSourceName = catalogueSourceName,
+				catalogueSourceLang = catalogueSourceLang,
 				buildWrappedSource = buildWrappedSource,
 				onError = { error ->
 					val throwable = errorThrowable(error)
