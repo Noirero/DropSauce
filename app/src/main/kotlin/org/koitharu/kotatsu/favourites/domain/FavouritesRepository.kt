@@ -20,6 +20,7 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.core.util.ext.mapItems
 import org.koitharu.kotatsu.favourites.data.FavouriteCategoryEntity
 import org.koitharu.kotatsu.favourites.data.FavouriteEntity
+import org.koitharu.kotatsu.favourites.data.FavouriteMembership
 import org.koitharu.kotatsu.favourites.data.toFavouriteCategory
 import org.koitharu.kotatsu.favourites.data.toMangaList
 import org.koitharu.kotatsu.favourites.domain.model.Cover
@@ -41,6 +42,13 @@ class FavouritesRepository @Inject constructor(
 		val entities = db.getFavouritesDao().findAll()
 		return entities.toMangaList()
 	}
+
+	/**
+	 * Lightweight library projection used for category counts. Unlike [getAllManga] / [getManga],
+	 * this does not materialise Manga details or tags and returns every active category membership in
+	 * one query.
+	 */
+	suspend fun getMemberships(): List<FavouriteMembership> = db.getFavouritesDao().findMemberships()
 
 	suspend fun getLastManga(limit: Int): List<Manga> {
 		val entities = db.getFavouritesDao().findLast(limit)
