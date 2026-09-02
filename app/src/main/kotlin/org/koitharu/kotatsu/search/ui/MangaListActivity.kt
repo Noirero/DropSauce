@@ -16,6 +16,7 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePaddingRelative
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.MangaSource
@@ -112,13 +115,26 @@ class MangaListActivity :
 
 	override fun onResume() {
 		super.onResume()
-		// Refresh a stale wrapper after an extension update while retaining the exact source ID.
-		val resolved = sourcesRepository.resolveActiveSource(source)
-		if (resolved.source.name != source.name) {
+		if (!source.name.startsWith("MIHON_")) return
+		val staleSource = source
+		// Cold-start source restoration may begin before extension discovery finishes. Wait away from
+		// the main thread, then replace only the exact source-id wrapper that this screen opened.
+		lifecycleScope.launch {
+			val resolved = withContext(Dispatchers.IO) {
+				sourcesRepository.ensureExternalSourcesReady()
+				sourcesRepository.resolveActiveSource(staleSource)
+			}
+			// A newer resume/refresh may already have installed a fresher wrapper while we were waiting.
+			if (source !== staleSource) return@launch
+			val sourceChanged = resolved.source !== staleSource
+			val languageChanged = resolved.languageSubtitle != activeLanguageName
+			if (!sourceChanged && !languageChanged) return@launch
 			source = resolved.source
 			activeLanguageName = resolved.languageSubtitle
 			applyTitle()
-			reloadList(source)
+			if (sourceChanged) {
+				reloadList(source)
+			}
 		}
 	}
 
@@ -357,33 +373,5 @@ class MangaListActivity :
 
 	private fun findFilterOwner(): FilterCoordinator.Owner? {
 		return supportFragmentManager.findFragmentById(R.id.container) as? FilterCoordinator.Owner
-	}
-
-	private fun setSideFragment(cls: Class<out Fragment>, args: Bundle?) = if (viewBinding.containerSide != null) {
-		supportFragmentManager.commit {
-			setReorderingAllowed(true)
-			replace(R.id.container_side, cls, args)
-		}
-		viewBinding.cardSide?.isVisible = true
-		ViewCompat.requestApplyInsets(viewBinding.root)
-		true
-	} else {
-		false
-	}
-
-	private class ApplyFilterRunnable(
-		private val filterOwner: FilterCoordinator.Owner,
-		private val filter: MangaListFilter?,
-		private val sortOrder: SortOrder?,
-	) : Runnable {
-
-		override fun run() {
-			if (sortOrder != null) {
-				filterOwner.filterCoordinator.setSortOrder(sortOrder)
-			}
-			if (filter != null) {
-				filterOwner.filterCoordinator.setAdjusted(filter)
-			}
-		}
 	}
 }

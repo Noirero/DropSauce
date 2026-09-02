@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.koitharu.kotatsu.core.LocalizedAppContext
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
+import org.koitharu.kotatsu.core.model.MissingMangaSource
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
@@ -31,6 +32,18 @@ data class MihonSourceFilterEntry(
 	val source: MihonMangaSource,
 	val isEnabled: Boolean,
 )
+
+/** Extracts the stable Mihon source id even when the extension has not finished loading yet. */
+internal fun storedMihonSourceId(source: MangaSource): Long? = when (source) {
+	is MangaSourceInfo -> storedMihonSourceId(source.mangaSource)
+	is MihonMangaSource -> source.sourceId
+	is MissingMangaSource -> source.name
+		.takeIf { it.startsWith("MIHON_") }
+		?.removePrefix("MIHON_")
+		?.substringBefore(':')
+		?.toLongOrNull()
+	else -> null
+}
 
 @Singleton
 class MangaSourcesRepository @Inject constructor(
@@ -197,11 +210,17 @@ class MangaSourcesRepository @Inject constructor(
 	 * sibling after restart; favourites/history depend on this preserving the original source id.
 	 */
 	fun resolveActiveSource(source: MangaSource): ResolvedSource {
-		val mihon = source.unwrapMihon() ?: return ResolvedSource(source, null)
-		val manager = mihonExtensionManager ?: return ResolvedSource(source, null)
+		val sourceId = storedMihonSourceId(source) ?: return ResolvedSource(source, null)
+		val fallback = source.unwrapMihon()
+		val manager = mihonExtensionManager
+			?: return ResolvedSource(fallback ?: source, fallback?.languageDisplayName)
 		manager.initialize()
-		val exact = manager.getMihonMangaSourceById(mihon.sourceId) ?: mihon
-		return ResolvedSource(exact, exact.languageDisplayName)
+		val exact = manager.getMihonMangaSourceById(sourceId) ?: fallback
+		return if (exact != null) {
+			ResolvedSource(exact, exact.languageDisplayName)
+		} else {
+			ResolvedSource(source, null)
+		}
 	}
 
 	fun setMihonSourcesEnabled(sourceIds: Collection<Long>, enabled: Boolean) {
