@@ -265,9 +265,10 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	private fun applyCategoryNavigation(options: FavouriteDisplayPreferences.Options) {
 		val binding = viewBinding ?: return
+		val hasCategories = categories.isNotEmpty()
 		val hasMultipleCategories = categories.size > 1
 		binding.tabs.isVisible = !isEmptyState && hasMultipleCategories && options.showCategoryTabs
-		binding.buttonCategoryPicker.isVisible = !isEmptyState && hasMultipleCategories && !options.showCategoryTabs
+		binding.buttonCategoryPicker.isVisible = !isEmptyState && hasCategories && !options.showCategoryTabs
 		for (index in 0 until binding.tabs.tabCount) {
 			val item = categories.getOrNull(index)
 			val badge = binding.tabs.getTabAt(index)?.badge ?: continue
