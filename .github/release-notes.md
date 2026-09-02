@@ -1,0 +1,35 @@
+## Changelog 2
+
+- Extension Mihon kini mempertahankan setiap source sebagai source terpisah berdasarkan ID aslinya, termasuk beberapa source dan beberapa bahasa dalam satu APK.
+- Bahasa source dikenali secara dinamis, termasuk kode regional seperti `pt-BR`, pseudo-language `all` dan `other`, serta kode bahasa baru yang belum dikenal aplikasi.
+- Jelajah → Sumber kini mengelompokkan source berdasarkan bahasa yang tersedia, menempatkan source yang dipin di atas, dan menyediakan filter bahasa serta kontrol aktif/nonaktif untuk setiap source.
+- Pin dan status aktif source disimpan per source ID, sehingga mematikan atau mem-pin satu varian bahasa tidak memengaruhi varian lain dari extension yang sama.
+- Tab Ekstensi tetap menampilkan satu entri per APK dan memperlihatkan daftar bahasa source yang tersedia; update dan uninstall tetap berlaku untuk APK extension tersebut.
+- Favourite, History, Global Search, Temukan Serupa, Alternatives, Migration, backup, dan pemulihan mempertahankan source ID serta jenis konten Manga/Novel yang tepat.
+- Alternatives kini mempunyai query yang dapat diedit, pencarian ulang, judul alternatif, riwayat query sesi, Stop Search, indikator scope Manga/Novel, pilihan Pinned/Preferred/All Sources, dan filter bahasa.
+- Folder download source kini memakai kode bahasa stabil seperti `NHentai (EN)`, `NHentai (RU)`, `SourceABC (PT-BR)`, `ALL`, dan `OTHER` tanpa mengubah struktur judul maupun chapter di bawahnya.
+- Download lama dengan folder source tanpa kode bahasa tetap ditemukan, dibaca, dilanjutkan, dan dihapus tanpa perlu mengunduh ulang atau memindahkan file.
+- Pemindaian download lama tetap mengenali chapter CBZ, ZIP, EPUB, dan PDF.
+- Restore backup Tachiyomi/Mihon diperbarui, tetap berjalan ketika layar ditinggalkan, menampilkan progres, dan memeriksa kembali favourite yang belum pulih.
+- Repository extension dapat diberi jenis Manga, Novel, atau Anime secara eksplisit dan ditampilkan dalam kelompok yang sesuai.
+- Login extension Mihon di browser internal mempertahankan header, cookie, sesi, dan permintaan POST, lalu menyegarkan data chapter setelah kembali ke aplikasi.
+- Library Lokal mendukung chapter PDF, refresh manual, metadata author dari folder, dan pemuatan yang lebih ringan untuk koleksi besar.
+- Favourites/Disukai mempunyai pengaturan tampilan per Manga/Novel, pilihan kartu, ukuran grid, informasi bahasa, unread, download, continue reading, serta pemuatan dan pencarian yang dioptimalkan untuk library besar.
+- Filter SFW/NSFW untuk source Jelajah dapat diatur otomatis maupun manual.
+- Crash dan ANR yang terjadi sebelum aplikasi tertutup dapat dipulihkan pada pembukaan berikutnya, disalin, atau diekspor sebagai berkas teks.
+- Status DNS dan User-Agent aktif dapat dilihat langsung dari pengaturan jaringan.
+
+## Changelog 1
+
+- DropSauce Noirero memakai identitas aplikasi terpisah agar dapat dipasang berdampingan dengan aplikasi utama.
+- Download Manga dan Novel memakai struktur folder source → judul → chapter yang mudah dibaca tanpa kembali ke struktur download Kotatsu.
+- Chapter Manga disimpan sebagai CBZ terpisah dan chapter Novel sebagai EPUB terpisah, dengan dukungan file lokal CBZ, ZIP, EPUB, dan PDF.
+- Penghapusan chapter individual hanya menghapus file chapter yang dipilih, termasuk chapter bernama duplikat dan chapter Novel yang membutuhkan identitas tepat.
+- Download yang sudah ada dapat dikenali berdasarkan folder dan nama file, termasuk file tanpa metadata indeks serta nama halaman angka sederhana.
+- Downloader mendukung beberapa halaman dan source paralel, melanjutkan unduhan gambar, menampilkan progres chapter, dan menyediakan pengaturan batas performa.
+- Disukai dipisahkan antara Manga dan Novel beserta kategori masing-masing, pencarian lokal, badge jumlah, kategori virtual Lokal, dan pin kategori Lokal.
+- Notes per judul, penyuntingan metadata, dan rendering deskripsi Markdown dipertahankan pada halaman detail.
+- Global Search dan Alternatives mempertahankan varian source yang berbeda, mendukung filter bahasa dan scope, serta memprioritaskan source yang dipin.
+- Browser internal tersedia dari hasil pencarian dan Alternatives untuk membuka website source serta melakukan login.
+- Pilihan DNS over HTTPS, custom DNS, dan User-Agent tersedia dari pengaturan jaringan.
+- Terjemahan EPUB online mempertahankan susunan paragraf dan format teks serta menyediakan pilihan bahasa.
