@@ -274,6 +274,7 @@ class FavouritesListViewModel @Inject constructor(
 			val isLocalSource = display.showLocalSource && source.isLocal
 			val languageLabel = if (display.showLanguage) source.getLanguageCode() else null
 			val unreadCount = if (display.showUnread) unreadCounter.getUnreadCount(model.manga.id) else 0
+			val hasReadingHistory = display.showContinueReading && historyRepository.getOne(model.manga) != null
 			result[i] = when (model) {
 				is MangaGridModel -> model.copy(
 					counter = unreadCount,
@@ -283,7 +284,7 @@ class FavouritesListViewModel @Inject constructor(
 					isGridSpacingIncreased = display.gridSpacingIncreased,
 					isLocalSource = isLocalSource,
 					languageLabel = languageLabel,
-					showContinueReading = display.showContinueReading && model.progress != null,
+					showContinueReading = hasReadingHistory,
 				)
 				is MangaDetailedListModel -> model.copy(
 					counter = unreadCount,
@@ -291,7 +292,7 @@ class FavouritesListViewModel @Inject constructor(
 					isPinned = isPinned,
 					isLocalSource = isLocalSource,
 					languageLabel = languageLabel,
-					showContinueReading = display.showContinueReading && model.progress != null,
+					showContinueReading = hasReadingHistory,
 				)
 				is MangaCompactListModel -> model.copy(
 					counter = unreadCount,
@@ -299,8 +300,7 @@ class FavouritesListViewModel @Inject constructor(
 					isSaved = isSaved,
 					isLocalSource = isLocalSource,
 					languageLabel = languageLabel,
-					showContinueReading = display.showContinueReading &&
-						historyRepository.getProgress(model.manga.id, settings.progressIndicatorMode) != null,
+					showContinueReading = hasReadingHistory,
 				)
 			}
 		}
