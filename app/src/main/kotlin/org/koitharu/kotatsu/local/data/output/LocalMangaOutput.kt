@@ -78,8 +78,8 @@ sealed class LocalMangaOutput(
 			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
 			val sourceRoot = getSourceDirectory(contentRoot, manga)
 
-			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat)
-				?: findLegacy(root, manga, targetFormat)
+			getImpl(sourceRoot, manga, onlyIfExists = true, format = targetFormat, prepareForDownload = true)
+				?: findLegacy(root, manga, targetFormat, prepareForDownload = true)
 				?: run {
 					check(sourceRoot.exists() || sourceRoot.mkdirs()) {
 						"Cannot create source directory $sourceRoot"
@@ -87,7 +87,7 @@ sealed class LocalMangaOutput(
 					if (sourceRoot != contentRoot) {
 						File(sourceRoot, SOURCE_DIR_MARKER).createNewFile()
 					}
-					checkNotNull(getImpl(sourceRoot, manga, onlyIfExists = false, format = targetFormat))
+					checkNotNull(getImpl(sourceRoot, manga, onlyIfExists = false, format = targetFormat, prepareForDownload = true))
 				}
 		}
 
@@ -96,11 +96,21 @@ sealed class LocalMangaOutput(
 			val downloadsRoot = File(root, DOWNLOADS_DIR_NAME)
 			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
 			val sourceRoot = getSourceDirectory(contentRoot, manga)
-			getImpl(sourceRoot, manga, onlyIfExists = true, format = DownloadFormat.AUTOMATIC)
-				?: findLegacy(root, manga, DownloadFormat.AUTOMATIC)
+			getImpl(
+				sourceRoot,
+				manga,
+				onlyIfExists = true,
+				format = DownloadFormat.AUTOMATIC,
+				prepareForDownload = false,
+			) ?: findLegacy(root, manga, DownloadFormat.AUTOMATIC, prepareForDownload = false)
 		}
 
-		private suspend fun findLegacy(root: File, manga: Manga, format: DownloadFormat): LocalMangaOutput? {
+		private suspend fun findLegacy(
+			root: File,
+			manga: Manga,
+			format: DownloadFormat,
+			prepareForDownload: Boolean,
+		): LocalMangaOutput? {
 			val isNovel = manga.source.isNovelSource
 			val downloadsRoot = File(root, DOWNLOADS_DIR_NAME)
 			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
@@ -121,7 +131,13 @@ sealed class LocalMangaOutput(
 			if (legacyContentRoot != root) candidates += root
 
 			for (candidate in candidates) {
-				getImpl(candidate, manga, onlyIfExists = true, format = format)?.let { return it }
+				getImpl(
+					candidate,
+					manga,
+					onlyIfExists = true,
+					format = format,
+					prepareForDownload = prepareForDownload,
+				)?.let { return it }
 			}
 			return null
 		}
@@ -148,7 +164,7 @@ sealed class LocalMangaOutput(
 		internal fun mihonSourceBaseName(displayName: String, language: String): String {
 			val rawLanguage = language.trim()
 			if (rawLanguage.isEmpty()) return displayName.trim()
-			val escaped = Regex.escape(rawLanguage.replace('_', '-'))
+			val escaped = rawLanguage.split('-', '_').joinToString("[-_]") { Regex.escape(it) }
 			val suffix = Regex("(?:[_\\s]+$escaped|\\s*\\($escaped\\))[_\\s]*$", RegexOption.IGNORE_CASE)
 			return displayName.replace(suffix, "").trim(' ', '_').ifEmpty { displayName.trim() }
 		}
@@ -175,6 +191,7 @@ sealed class LocalMangaOutput(
 			manga: Manga,
 			onlyIfExists: Boolean,
 			format: DownloadFormat,
+			prepareForDownload: Boolean,
 		): LocalMangaOutput? {
 			mutex.withLock {
 				var i = 0
@@ -209,7 +226,7 @@ sealed class LocalMangaOutput(
 					return when {
 						dir.isDirectory -> {
 							if (canWriteTo(dir, manga) || canAdoptDirectory(dir)) {
-								LocalMangaDirOutput(dir, manga)
+								LocalMangaDirOutput(dir, manga, prepareForDownload)
 							} else {
 								continue
 							}
@@ -224,7 +241,7 @@ sealed class LocalMangaOutput(
 						!onlyIfExists -> when (format) {
 							DownloadFormat.AUTOMATIC -> null
 							DownloadFormat.SINGLE_CBZ -> LocalMangaZipOutput(zip, manga)
-							DownloadFormat.MULTIPLE_CBZ -> LocalMangaDirOutput(dir, manga)
+							DownloadFormat.MULTIPLE_CBZ -> LocalMangaDirOutput(dir, manga, prepareForDownload)
 						}
 
 						else -> null

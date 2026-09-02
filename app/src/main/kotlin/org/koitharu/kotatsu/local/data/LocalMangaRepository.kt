@@ -203,8 +203,14 @@ class LocalMangaRepository @Inject constructor(
 
 	suspend fun getOutputDir(manga: Manga, fallback: File?): File? {
 		val defaultDir = fallback?.takeIfWriteable() ?: storageManager.getDefaultWriteableDir()
-		if (defaultDir != null && LocalMangaOutput.get(defaultDir, manga) != null) return defaultDir
-		return storageManager.getWriteableDirs().firstOrNull { LocalMangaOutput.get(it, manga) != null } ?: defaultDir
+		if (defaultDir != null && hasExistingOutput(defaultDir, manga)) return defaultDir
+		return storageManager.getWriteableDirs().firstOrNull { hasExistingOutput(it, manga) } ?: defaultDir
+	}
+
+	private suspend fun hasExistingOutput(root: File, manga: Manga): Boolean {
+		val output = LocalMangaOutput.get(root, manga) ?: return false
+		output.close()
+		return true
 	}
 
 	suspend fun cleanup(): Boolean {
@@ -405,11 +411,15 @@ class LocalMangaRepository @Inject constructor(
 	private fun File.isDownloadSourceDirectory(): Boolean {
 		if (File(this, LocalMangaOutput.SOURCE_DIR_MARKER).isFile) return true
 		return withChildren { titles ->
-			titles.any { title ->
+			val sample = titles.filterNot { it.isHidden || it.shouldSkip() }
+				.take(LEGACY_SOURCE_PROBE_LIMIT)
+				.toList()
+			if (sample.any { it.isFile && it.isSupportedDownloadArtifact() }) return@withChildren false
+			sample.any { title ->
 				title.isDirectory && title.withChildren { artifacts ->
 					artifacts.any { it.isFile && it.isSupportedDownloadArtifact() }
 				}
-			}
+			} || sample.isNotEmpty() && sample.all { it.isDirectory }
 		}
 	}
 
@@ -421,4 +431,8 @@ class LocalMangaRepository @Inject constructor(
 	private fun Collection<LocalManga>.unwrap(): List<Manga> = map { it.manga }
 
 	private fun File.shouldSkip(): Boolean = isDirectory && File(this, FILENAME_SKIP).exists()
+
+	private companion object {
+		const val LEGACY_SOURCE_PROBE_LIMIT = 8
+	}
 }

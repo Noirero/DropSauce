@@ -24,5 +24,6 @@ class LocalMangaOutputPathTest {
 	fun `existing language suffix is not duplicated`() {
 		assertEquals("NHentai (EN)", LocalMangaOutput.mihonSourceDirectoryName("NHentai EN", "en"))
 		assertEquals("NHentai (PT-BR)", LocalMangaOutput.mihonSourceDirectoryName("NHentai (pt-BR)", "pt-BR"))
+		assertEquals("NHentai (PT-BR)", LocalMangaOutput.mihonSourceDirectoryName("NHentai (PT_BR)", "pt-BR"))
 	}
 }

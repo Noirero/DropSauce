@@ -385,9 +385,7 @@ class ExploreFragment :
 					if (updating) return@setOnCheckedChangeListener
 					viewModel.setMihonSourceEnabled(entry.source.sourceId, checked)
 					val language = entry.source.language.ifBlank { "other" }.lowercase()
-					val siblings = entries.filter {
-						it.source.language.ifBlank { "other" }.equals(language, ignoreCase = true)
-					}
+					val siblings = byLanguage[language].orEmpty()
 					updating = true
 					languageSwitches[language]?.isChecked = siblings.all { sibling ->
 						if (sibling.source.sourceId == entry.source.sourceId) checked

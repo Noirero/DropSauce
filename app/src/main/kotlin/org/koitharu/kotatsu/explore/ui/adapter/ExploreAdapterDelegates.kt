@@ -13,6 +13,7 @@ import org.koitharu.kotatsu.core.model.getSummary
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.model.isExternalSource
 import org.koitharu.kotatsu.core.model.isNovelSource
+import org.koitharu.kotatsu.core.model.unwrap
 import org.koitharu.kotatsu.core.ui.BaseListAdapter
 import org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter
 import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
@@ -29,6 +30,7 @@ import org.koitharu.kotatsu.explore.ui.model.RecommendationsItem
 import org.koitharu.kotatsu.list.ui.adapter.ListItemType
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
+import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.Manga
 
 fun exploreButtonsAD(
@@ -130,7 +132,13 @@ fun exploreSourceGridItemAD(
 	val iconPinned = ContextCompat.getDrawable(context, R.drawable.ic_pin_small)
 
 	bind {
-		val title = item.source.getTitle(context)
+		val baseTitle = item.source.getTitle(context)
+		val mihonSource = item.source.mangaSource.unwrap() as? MihonMangaSource
+		val title = if (mihonSource?.hasLanguageSuffix == true) {
+			"$baseTitle (${mihonSource.languageDisplayName})"
+		} else {
+			baseTitle
+		}
 		itemView.setTooltipCompat(
 			buildSpannedString {
 				bold {

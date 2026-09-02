@@ -71,7 +71,8 @@ class AlternativesViewModel @Inject constructor(
 ) : BaseViewModel() {
 
 	val manga = savedStateHandle.require<ParcelableManga>(AppRouter.KEY_MANGA).manga
-	val hasPinnedSources: Boolean = alternativesUseCase.hasPinnedSources()
+	private val hasPinnedSourcesState = MutableStateFlow(alternativesUseCase.hasPinnedSources())
+	val hasPinnedSources: StateFlow<Boolean> = hasPinnedSourcesState
 
 	private val results = MutableStateFlow<List<MangaAlternativeModel>>(emptyList())
 	private val sourceOrder = MutableStateFlow<List<MangaSource>>(emptyList())
@@ -197,7 +198,7 @@ class AlternativesViewModel @Inject constructor(
 	}
 
 	fun setSearchMode(mode: SearchSourceMode) {
-		val resolved = if (mode == SearchSourceMode.PINNED_ONLY && !hasPinnedSources) {
+		val resolved = if (mode == SearchSourceMode.PINNED_ONLY && !hasPinnedSourcesState.value) {
 			SearchSourceMode.PREFERRED_LANGUAGES
 		} else mode
 		if (selectedMode.value == resolved) return
@@ -256,13 +257,29 @@ class AlternativesViewModel @Inject constructor(
 				val ref = mangaDetails.getOrDefault(manga)
 				titleSuggestionsState.value = buildTitleSuggestions(ref)
 				val refCount = ref.chaptersCount()
+				var sources = alternativesUseCase.getSources(ref, selectedMode.value, selectedLanguages.value)
+				val hasPinned = alternativesUseCase.hasPinnedSources()
+				hasPinnedSourcesState.value = hasPinned
+				if (selectedMode.value == SearchSourceMode.PINNED_ONLY && !hasPinned) {
+					selectedMode.value = SearchSourceMode.PREFERRED_LANGUAGES
+					sources = alternativesUseCase.getSources(
+						ref,
+						SearchSourceMode.PREFERRED_LANGUAGES,
+						selectedLanguages.value,
+					)
+				}
 				availableLanguagesState.value = alternativesUseCase.getAvailableLanguages(ref)
-				val sources = alternativesUseCase.getSources(ref, selectedMode.value, selectedLanguages.value)
 				sourceOrder.value = sources
 				sourceStatuses.value = sources.associateWith { AlternativeSourceStatus() }
 				progressState.value = AlternativeSearchProgress(total = sources.size)
 
-				alternativesUseCase(ref, selectedMode.value, selectedLanguages.value, activeQuery).collect { event ->
+				alternativesUseCase(
+					ref,
+					selectedMode.value,
+					selectedLanguages.value,
+					activeQuery,
+					precomputedSources = sources,
+				).collect { event ->
 					when (event) {
 						is AlternativeSearchEvent.Result -> {
 							val model = MangaAlternativeModel(
@@ -349,9 +366,7 @@ class AlternativesViewModel @Inject constructor(
 		val saved = savedStateHandle.get<String>(STATE_SEARCH_MODE)
 			?.let { raw -> SearchSourceMode.entries.firstOrNull { it.name == raw } }
 		val preferred = saved ?: searchPreferences.alternativeMode
-		return if (preferred == SearchSourceMode.PINNED_ONLY && !hasPinnedSources) {
-			SearchSourceMode.PREFERRED_LANGUAGES
-		} else preferred
+		return preferred
 	}
 
 	private companion object {

@@ -14,6 +14,14 @@ class ExternalExtensionRuntimeTest {
 	}
 
 	@Test
+	fun `regional and unknown language labels stay distinguishable`() {
+		assertTrue(getExternalExtensionLanguageDisplayName("pt-BR").contains("Brasil", ignoreCase = true) ||
+			getExternalExtensionLanguageDisplayName("pt-BR").contains("Brazil", ignoreCase = true))
+		assertTrue(getExternalExtensionLanguageDisplayName("pt-PT") != getExternalExtensionLanguageDisplayName("pt-BR"))
+		assertEquals("X-FUTURE", getExternalExtensionLanguageDisplayName("x-future"))
+	}
+
+	@Test
 	fun `one package keeps same-name language sources separate by id`() {
 		val result = process(listOf(
 			Success("extension.nhentai", listOf(
@@ -38,6 +46,19 @@ class ExternalExtensionRuntimeTest {
 
 		assertFalse(result.wrappedSourceById.getValue(21).hasLanguageSiblings)
 		assertFalse(result.wrappedSourceById.getValue(22).hasLanguageSiblings)
+	}
+
+	@Test
+	fun `equivalent language code spelling does not create false siblings`() {
+		val result = process(listOf(
+			Success("extension.reader", listOf(
+				Source(23, "Reader", "pt-BR"),
+				Source(24, "Reader", "PT_br"),
+			)),
+		))
+
+		assertFalse(result.wrappedSourceById.getValue(23).hasLanguageSiblings)
+		assertFalse(result.wrappedSourceById.getValue(24).hasLanguageSiblings)
 	}
 
 	@Test

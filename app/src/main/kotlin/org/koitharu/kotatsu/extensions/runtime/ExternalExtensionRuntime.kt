@@ -27,12 +27,12 @@ fun getExternalExtensionLangCodeOrNull(lang: String): String? {
 		value.isEmpty() -> null
 		// A code has to look like one. Length alone isn't enough: "ไทย" is three chars and Android turns
 		// any unknown 2-8 letter subtag into the label "Various languages" instead of failing.
-		LANG_CODE_REGEX matches value -> value
+		LANG_CODE_REGEX matches value -> value.replace('_', '-')
 		else -> langCodesByName[value.lowercase(Locale.ROOT)]
 	}
 }
 
-private val LANG_CODE_REGEX = Regex("[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*")
+private val LANG_CODE_REGEX = Regex("[a-zA-Z]{2,3}([_-][a-zA-Z0-9]{2,8})*")
 
 /** Same, falling back to the declared value so an unknown language still filters consistently. */
 fun getExternalExtensionLangCode(lang: String): String = getExternalExtensionLangCodeOrNull(lang) ?: lang
@@ -85,13 +85,23 @@ private val langCodesByName: Map<String, String> by lazy {
 }
 
 fun getExternalExtensionLanguageDisplayName(langCode: String): String {
-	return when (langCode.lowercase(Locale.ROOT)) {
+	val normalized = langCode.trim().replace('_', '-')
+	return when (normalized.lowercase(Locale.ROOT)) {
+		"" -> "Other"
 		"all" -> "All"
 		"other" -> "Other"
-		else -> runCatching { Locale.forLanguageTag(langCode).getDisplayLanguage(Locale.getDefault()) }
+		else -> runCatching {
+			val locale = Locale.forLanguageTag(normalized)
+			val label = if (locale.country.isNotEmpty() || locale.script.isNotEmpty()) {
+				locale.getDisplayName(Locale.getDefault())
+			} else {
+				locale.getDisplayLanguage(Locale.getDefault())
+			}
+			label.takeUnless { it.equals(locale.language, ignoreCase = true) }
+		}
 			.getOrNull()
 			?.takeIf { it.isNotBlank() }
-			?: langCode.uppercase(Locale.ROOT)
+			?: normalized.uppercase(Locale.ROOT)
 	}
 }
 
@@ -101,15 +111,23 @@ fun getExternalExtensionLanguageDisplayName(langCode: String): String {
  * natively (source settings language picker, browse top-bar subheading).
  */
 fun getExternalExtensionLanguageAutonym(langCode: String): String {
-	return when (langCode.lowercase(Locale.ROOT)) {
+	val normalized = langCode.trim().replace('_', '-')
+	return when (normalized.lowercase(Locale.ROOT)) {
+		"" -> "Other"
 		"all" -> "All"
 		"other" -> "Other"
 		else -> runCatching {
-			val locale = Locale.forLanguageTag(langCode)
-			locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercase(locale) }
+			val locale = Locale.forLanguageTag(normalized)
+			val label = if (locale.country.isNotEmpty() || locale.script.isNotEmpty()) {
+				locale.getDisplayName(locale)
+			} else {
+				locale.getDisplayLanguage(locale)
+			}
+			label.takeUnless { it.equals(locale.language, ignoreCase = true) }
+				?.replaceFirstChar { it.uppercase(locale) }
 		}.getOrNull()
 			?.takeIf { it.isNotBlank() }
-			?: langCode.uppercase(Locale.ROOT)
+			?: normalized.uppercase(Locale.ROOT)
 	}
 }
 
@@ -199,7 +217,11 @@ fun <ResultT, SuccessT, ErrorT, SourceT, CatalogueSourceT : SourceT, WrappedSour
 	// multi-language marker either.
 	val languagesByPackageAndName = catalogueSources
 		.groupBy { (source, pkgName) -> pkgName to catalogueSourceName(source) }
-		.mapValues { (_, sources) -> sources.mapTo(HashSet()) { catalogueSourceLang(it.first) } }
+		.mapValues { (_, sources) ->
+			sources.mapTo(HashSet()) {
+				catalogueSourceLang(it.first).trim().replace('_', '-').lowercase(Locale.ROOT)
+			}
+		}
 	val wrappedSourceById = linkedMapOf<Long, WrappedSourceT>()
 	catalogueSources.forEach { (catalogueSource, pkgName, isNsfw) ->
 		wrappedSourceById[sourceId(catalogueSource)] = buildWrappedSource(

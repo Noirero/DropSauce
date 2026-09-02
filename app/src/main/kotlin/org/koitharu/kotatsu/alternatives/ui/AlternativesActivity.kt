@@ -72,7 +72,9 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 
 		setupSearchEditor()
 
-		viewBinding.buttonScopePinned.isEnabled = viewModel.hasPinnedSources
+		viewModel.hasPinnedSources.observe(this) { hasPinned ->
+			viewBinding.buttonScopePinned.isEnabled = hasPinned
+		}
 		viewBinding.toggleSearchScope.addOnButtonCheckedListener { _, checkedId, isChecked ->
 			if (!isChecked) return@addOnButtonCheckedListener
 			viewModel.setSearchMode(

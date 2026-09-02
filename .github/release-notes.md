@@ -1,5 +1,9 @@
 ## Changelog 2
 
+- Filter bahasa pada tab Ekstensi kini mengenali semua bahasa yang benar-benar tersedia di dalam satu APK multi-source, termasuk kode regional.
+- Global Search dan Alternatives menunggu pemuatan extension selesai agar tidak menampilkan hasil kosong palsu saat aplikasi baru dibuka; Alternatives juga tidak lagi menghitung dan memuat daftar source dua kali untuk satu pencarian.
+- Pemeriksaan download lama kini bersifat read-only dan tidak lagi menghapus metadata atau cover hanya karena aplikasi sedang mengecek keberadaan file.
+- Pemindaian folder download legacy dan dialog filter source dioptimalkan agar lebih responsif pada library atau kumpulan extension besar.
 - Extension Mihon kini mempertahankan setiap source sebagai source terpisah berdasarkan ID aslinya, termasuk beberapa source dan beberapa bahasa dalam satu APK.
 - Bahasa source dikenali secara dinamis, termasuk kode regional seperti `pt-BR`, pseudo-language `all` dan `other`, serta kode bahasa baru yang belum dikenal aplikasi.
 - Jelajah → Sumber kini mengelompokkan source berdasarkan bahasa yang tersedia, menempatkan source yang dipin di atas, dan menyediakan filter bahasa serta kontrol aktif/nonaktif untuk setiap source.

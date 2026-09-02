@@ -388,17 +388,18 @@ class SourcesCatalogViewModel @Inject constructor(
 		val updates = ArrayList<SourceCatalogItem.Extension>()
 		val installedItems = ArrayList<SourceCatalogItem.Extension>()
 		for (local in installed) {
+			val packageSources = installedSourcesByPackage[local.pkgName]
 			val owner = storeManager.owner(mode, local)
 			val state = owner?.let { statesById[it.id] }
 			val entry = state
 				?.takeIf { canUseStoreCatalogForUpdates(it.health) }
 				?.catalog
 				?.firstOrNull { it.packageName == local.pkgName && it.isNewerThan(local) }
-			val source = installedSourcesByPackage[local.pkgName]
-				?.firstOrNull { it.language == local.lang }
-				?: installedSourcesByPackage[local.pkgName]?.firstOrNull()
+			val source = packageSources
+				?.firstOrNull { sameLanguageCode(it.language, local.lang) }
+				?: packageSources?.firstOrNull()
 			if (settings.isNsfwContentDisabled && local.isNsfw) continue
-			if (filter.locale != null && local.lang != filter.locale) continue
+			if (!installedExtensionMatchesLanguage(packageSources, local.lang, filter.locale)) continue
 			if (!matchesExtensionQuery(q, local.appName, local.pkgName)) continue
 			val ownerSuffix = owner?.displayName?.let { " • $it" }.orEmpty()
 			if (entry != null) {
@@ -857,15 +858,16 @@ class SourcesCatalogViewModel @Inject constructor(
 		val sourcesByPackage = allMihonSources.value.groupBy { it.pkgName }
 		val items = mihonExtensionLoader.getInstalledExtensions(appContext, privateMode)
 			.mapNotNull { local ->
+				val packageSources = sourcesByPackage[local.pkgName]
 				val owner = storeManager.owner(mode, local) ?: return@mapNotNull null
 				if (owner.id != storeState.store.id) return@mapNotNull null
 				if (settings.isNsfwContentDisabled && local.isNsfw) return@mapNotNull null
-				if (filter.locale != null && local.lang != filter.locale) return@mapNotNull null
+				if (!installedExtensionMatchesLanguage(packageSources, local.lang, filter.locale)) return@mapNotNull null
 				if (!matchesExtensionQuery(query, local.appName, local.pkgName)) return@mapNotNull null
 				val entry = storeState.catalog.firstOrNull { it.packageName == local.pkgName }
-				val source = sourcesByPackage[local.pkgName]
-					?.firstOrNull { it.language == local.lang }
-					?: sourcesByPackage[local.pkgName]?.firstOrNull()
+				val source = packageSources
+					?.firstOrNull { sameLanguageCode(it.language, local.lang) }
+					?: packageSources?.firstOrNull()
 				SourceCatalogItem.Extension(
 					packageName = local.pkgName,
 					title = extensionDisplayName(local.appName),
@@ -1040,6 +1042,23 @@ private fun StringBuilder.appendInstalledSourceLanguages(
 	} else {
 		append(languages.firstOrNull() ?: getExternalExtensionLanguageDisplayName(fallbackLanguage))
 	}
+}
+
+internal fun installedExtensionMatchesLanguage(
+	sources: List<org.koitharu.kotatsu.mihon.model.MihonMangaSource>?,
+	fallbackLanguage: String,
+	selectedLanguage: String?,
+): Boolean {
+	if (selectedLanguage == null) return true
+	return if (sources.isNullOrEmpty()) {
+		sameLanguageCode(fallbackLanguage, selectedLanguage)
+	} else {
+		sources.any { sameLanguageCode(it.language, selectedLanguage) }
+	}
+}
+
+private fun sameLanguageCode(first: String, second: String): Boolean {
+	return first.trim().replace('_', '-').equals(second.trim().replace('_', '-'), ignoreCase = true)
 }
 
 /** Library rows for novel plugins are stored as `LN_<pluginId>`. */

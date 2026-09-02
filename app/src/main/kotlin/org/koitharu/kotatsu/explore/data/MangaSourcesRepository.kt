@@ -328,6 +328,12 @@ class MangaSourcesRepository @Inject constructor(
 		mihonExtensionManager?.loadExtensions()
 	}
 
+	/** Waits for the first extension scan so one-shot searches never capture an empty cold-start list. */
+	suspend fun ensureExternalSourcesReady() {
+		mihonExtensionManager?.ensureReady()
+		lnPluginManager?.initialize()
+	}
+
 	private fun normalizeLegacyPinnedSourceKeys(keys: List<String>, sources: List<MangaSource>): List<String> {
 		var changed = false
 		val normalized = keys.mapNotNull { key ->
