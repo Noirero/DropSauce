@@ -35,6 +35,7 @@ import org.koitharu.kotatsu.favourites.domain.FavouriteUnreadCounter
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
+import org.koitharu.kotatsu.favourites.domain.debounceFavouritesSearch
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import org.koitharu.kotatsu.history.data.HistoryRepository
@@ -92,6 +93,27 @@ class FavouritesListViewModel @Inject constructor(
 	private var lastSortOrder: ListSortOrder? = null
 	private var lastFilters: Set<ListFilterOption>? = null
 	private var lastContentType: FavouriteContentType? = null
+	private var lastSearchQuery = FavouritesContainerFragment.searchQuery.value.trim()
+
+	/**
+	 * Share one debounced query between DB-window decisions and UI filtering. Every genuinely new query
+	 * starts from a small 64-row database window and 16 visible results; the window grows only when the
+	 * current sorted slice does not contain enough matches.
+	 */
+	private val searchQuery = FavouritesContainerFragment.searchQuery
+		.debounceFavouritesSearch()
+		.onEach { query ->
+			if (query != lastSearchQuery) {
+				lastSearchQuery = query
+				limit.value = PAGE_SIZE
+				databaseWindow.value = DATABASE_WINDOW_INITIAL
+			}
+		}
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			lastSearchQuery,
+		)
 
 	private val activeDisplayOptions = combine(
 		contentTypeStore.selectedType,
@@ -99,20 +121,13 @@ class FavouritesListViewModel @Inject constructor(
 	) { type, state -> state.getValue(type) }.distinctUntilChanged()
 
 	private val displayState = combine(
-		FavouritesContainerFragment.searchQuery,
+		searchQuery,
 		contentTypeStore.selectedType,
 		limit,
 		displayPreferences.state,
 	) { query, type, pageLimit, preferences ->
 		DisplayState(query, type, pageLimit, preferences.getValue(type))
 	}
-
-	private val databaseLimit = combine(
-		FavouritesContainerFragment.searchQuery,
-		databaseWindow,
-	) { query, window ->
-		if (query.isBlank()) window else Int.MAX_VALUE
-	}.distinctUntilChanged()
 
 	override val listMode: StateFlow<ListMode> = activeDisplayOptions
 		.map { it.listMode }
@@ -164,16 +179,24 @@ class FavouritesListViewModel @Inject constructor(
 	) { list, _, scalingTip, pinned, display ->
 		val filters = quickFilter.appliedOptions.value
 		val wantNovel = display.type == FavouriteContentType.NOVEL
-		val typed = list.filter { it.source.isNovelSource == wantNovel }
-		val searched = searchMatcher.filter(typed, display.query)
-		if (display.query.isBlank()) {
-			maybeExpandDatabaseWindow(
-				loadedCount = list.size,
-				matchingCount = searched.size,
-				targetCount = display.limit,
-			)
+		// A query change shrinks databaseWindow before Room necessarily returns the smaller list. Limit
+		// the stale snapshot here too, so a new keystroke never scans a previously loaded 16k list once.
+		val currentWindow = databaseWindow.value
+		val candidates = if (currentWindow == Int.MAX_VALUE || list.size <= currentWindow) {
+			list
+		} else {
+			list.take(currentWindow)
 		}
-		val visible = if (display.query.isBlank()) searched.take(display.limit) else searched
+		val typed = candidates.filter { it.source.isNovelSource == wantNovel }
+		val searched = searchMatcher.filter(typed, display.query)
+		maybeExpandDatabaseWindow(
+			loadedCount = candidates.size,
+			matchingCount = searched.size,
+			targetCount = display.limit,
+		)
+		// Search is global within the category, but rendering is progressive. A broad query such as
+		// "a" can match thousands of titles; only the requested page is mapped to cards/read counters.
+		val visible = searched.take(display.limit)
 		visible.mapList(
 			display.options.listMode,
 			filters,
@@ -317,7 +340,7 @@ class FavouritesListViewModel @Inject constructor(
 		sortOrder.filterNotNull(),
 		quickFilter.appliedOptions.combineWithSettings(),
 		pinnedIds,
-		databaseLimit,
+		databaseWindow,
 		contentTypeStore.selectedType,
 	) { order, filters, pinned, queryLimit, contentType ->
 		val configurationChanged =
