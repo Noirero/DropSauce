@@ -97,6 +97,9 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	fun enableHalfExpandedCollapseMode(halfExpandedRatio: Float) {
 		require(halfExpandedRatio in 0f..1f)
 		halfExpandedCollapseRatio = halfExpandedRatio
+		// BottomSheetDragHandleView has its own click-to-toggle behaviour. Disable that in restricted mode
+		// so tapping the dash cannot bypass the half-expanded upper limit and jump to full screen.
+		binding.shDragHandle.isClickable = false
 		updateCollapseButtonVisibility()
 	}
 
@@ -132,12 +135,14 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 				}
 			}
 			MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+				// Once a MOVE has been intercepted, keep the gesture flag alive until onTouchEvent handles UP
+				// and settles the manually moved sheet. For a simple tap, clean up here and leave it to child UI.
 				if (!isIntercepting) {
 					velocityTracker?.recycle()
 					velocityTracker = null
+					dragStartedOnHandle = false
 				}
 				isIntercepting = false
-				dragStartedOnHandle = false
 			}
 		}
 		return false
@@ -245,7 +250,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	}
 
 	override fun onStateChanged(sheet: View, newState: Int) {
-
+		updateCollapseButtonVisibility()
 	}
 
 	fun setTitle(@StringRes resId: Int) {
@@ -344,8 +349,9 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	}
 
 	private fun updateCollapseButtonVisibility() {
+		val behavior = sheetBehavior as? AdaptiveSheetBehavior.Bottom
 		binding.shButtonCollapse.isVisible =
-			halfExpandedCollapseRatio != null && sheetBehavior is AdaptiveSheetBehavior.Bottom
+			halfExpandedCollapseRatio != null && behavior != null && behavior.state != AdaptiveSheetBehavior.STATE_COLLAPSED
 	}
 
 	private fun collapseSheet() {
