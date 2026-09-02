@@ -30,8 +30,9 @@ import org.koitharu.kotatsu.core.util.ext.toListSorted
 import org.koitharu.kotatsu.core.util.ext.toZipUri
 import org.koitharu.kotatsu.local.data.MangaIndex
 import org.koitharu.kotatsu.local.data.hasEpubExtension
-import org.koitharu.kotatsu.local.data.hasZipExtension
 import org.koitharu.kotatsu.local.data.hasMangaContent
+import org.koitharu.kotatsu.local.data.hasPdfExtension
+import org.koitharu.kotatsu.local.data.hasZipExtension
 import org.koitharu.kotatsu.local.data.isEpubFile
 import org.koitharu.kotatsu.local.data.isZipArchive
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput.Companion.ENTRY_NAME_INDEX
@@ -49,7 +50,7 @@ import java.io.File
  * |--- index.json (optional)
  * |--- Page 1.png
  * |--- Page 2.png
- * |---Chapter 1/(dir or zip, optional)
+ * |---Chapter 1/(dir or zip/pdf, optional)
  * |------Page 1.1.png
  * :
  * L--- Page x.png
@@ -107,20 +108,26 @@ class LocalMangaParser(private val uri: Uri) {
 			} else {
 				val nameMetadata = rootFile.localNameMetadata()
 				val title = nameMetadata?.title ?: rootFile.name.fileNameToTitle()
+				val imageCover = fileSystem.findFirstImageUri(rootPath)?.toString()
+				val pdfCover = if (imageCover == null) {
+					rootFile.findFirstPdf()?.let { LocalPdfCache.renderCover(it)?.toUri()?.toString() }
+				} else {
+					null
+				}
 				Manga(
 					id = rootFile.absolutePath.longHashCode(),
 					title = title,
 					url = rootFile.toUri().toString(),
 					publicUrl = rootFile.toUri().toString(),
 					source = LocalMangaSource,
-					coverUrl = fileSystem.findFirstImageUri(rootPath)?.toString(),
+					coverUrl = imageCover ?: pdfCover,
 					chapters = if (withDetails) {
 						val chapters = fileSystem.listRecursively(rootPath)
 							.mapNotNullTo(HashSet()) { path ->
 								when {
 									!fileSystem.isRegularFile(path) -> null
 									path.isImage() -> path.parent
-									hasZipExtension(path.name) -> path
+									hasZipExtension(path.name) || hasPdfExtension(path.name) -> path
 									else -> null
 								}
 							}.sortedWith(compareBy(AlphanumComparator()) { x -> x.toString() })
@@ -281,6 +288,16 @@ class LocalMangaParser(private val uri: Uri) {
 				),
 			)
 		}
+		chapter.url.toUri().localPdfFileOrNull()?.let { pdf ->
+			return@runInterruptible LocalPdfCache.renderPages(pdf).mapIndexed { index, pageFile ->
+				MangaPage(
+					id = "${chapter.id}:$index".longHashCode(),
+					url = pageFile.toUri().toString(),
+					preview = null,
+					source = LocalMangaSource,
+				)
+			}
+		}
 		val chapterUri = chapter.url.toUri().resolve()
 		chapterUri.resolveFsAndPath().use { (fileSystem, rootPath) ->
 			val index = MangaIndex.read(fileSystem, rootPath / ENTRY_NAME_INDEX)
@@ -319,6 +336,20 @@ class LocalMangaParser(private val uri: Uri) {
 		return builder.build()
 	}
 
+	private fun Uri.localPdfFileOrNull(): File? {
+		if (!isFileUri()) {
+			return null
+		}
+		val base = File(requireNotNull(path) { "Uri path is null: $this" })
+		val relativePath = fragment
+		val file = if (!relativePath.isNullOrBlank() && base.isDirectory) {
+			File(base, relativePath)
+		} else {
+			base
+		}
+		return file.takeIf { it.isFile && hasPdfExtension(it.name) }
+	}
+
 	private fun FileSystem.findFirstImageUri(
 		rootPath: Path,
 		recursive: Boolean = false
@@ -353,6 +384,26 @@ class LocalMangaParser(private val uri: Uri) {
 	}.onFailure { e ->
 		e.printStackTraceDebug()
 	}.getOrNull()
+
+	private fun File.findFirstPdf(depth: Int = 3): File? {
+		if (!isDirectory || depth < 0) {
+			return null
+		}
+		val children = listFiles()
+			?.filterNot { it.isHidden }
+			?.sortedWith(compareBy(AlphanumComparator()) { it.name })
+			.orEmpty()
+		children.firstOrNull { it.isFile && hasPdfExtension(it.name) }?.let { return it }
+		if (depth == 0) {
+			return null
+		}
+		for (child in children) {
+			if (child.isDirectory) {
+				child.findFirstPdf(depth - 1)?.let { return it }
+			}
+		}
+		return null
+	}
 
 	private fun Path.userFriendlyName(): String = name.substringBeforeLast('.')
 		.replace('_', ' ')
@@ -427,7 +478,6 @@ class LocalMangaParser(private val uri: Uri) {
 						send(parser)
 					}
 				}
-			}
 		}.flowOn(Dispatchers.Default).firstOrNull()
 
 		private fun Path.isImage(): Boolean = MimeTypes.getMimeTypeFromExtension(name)?.isImage == true
