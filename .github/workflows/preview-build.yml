@@ -7,9 +7,6 @@ name: Beta Build
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - beta
 
 permissions:
   contents: read
@@ -149,38 +146,12 @@ jobs:
             echo "This APK uses the preview applicationId suffix and can be installed alongside DropSauce Noirero main."
             echo "All Beta builds from this workflow use the permanent repository signing key for in-place updates."
             echo "App name: \`DropSauce Noirero Beta\`"
-            echo "Application state: \`d91d3220a784becfec521a7d8c696b9925abcddb\`"
-            echo ""
-            echo "### Ringkasan perubahan"
-            echo ""
-            echo "**Perubahan Beta yang sebelumnya sudah dipromosikan ke Main hingga v0.9.500121:**"
-            echo "- Penghapusan chapter Manga/Novel dibuat tepat sasaran, termasuk chapter duplikat dan identitas chapter Novel."
-            echo "- Downloader mempertahankan struktur DropSauce, dengan paralelisme/resume dan deteksi file download yang sudah ada."
-            echo "- Swipe/read-state chapter diperbaiki."
-            echo "- Disukai dipisah Manga/Novel, ditambah kategori Lokal, pin, badge, serta perbaikan search/state."
-            echo "- Global/Alternative Search ditingkatkan dengan pinned source, filter bahasa, progress, ranking, cache, clipboard, dan browser action."
-            echo "- Notes, Markdown/detail UI, Custom DoH, serta kompatibilitas extension lama diperbaiki."
-            echo ""
-            echo "**Perubahan Beta baru setelah Main v0.9.500121:**"
-            echo "- Restore backup Tachiyomi/Mihon diperbaiki agar job tetap berjalan saat halaman ditinggalkan, favourite/kategori diverifikasi, dan merge/progress lebih aman."
-            echo "- Backup/restore kini memiliki progress di halaman serta dialog hasil selesai, batal, atau gagal dengan lokasi error yang relevan."
-            echo "- Extension repository/store memakai tipe media eksplisit dan dikelompokkan Manga/Novel/Anime."
-            echo "- Jelajah mendapat filter Semua/SFW/NSFW, override klasifikasi manual, reset klasifikasi, dan Pin/Unpin tetap dipertahankan."
-            echo "- Chapter sheet Bab dibuka langsung dan handle resize/collapse pada sheet detail dinonaktifkan."
-            echo "- Explore extension grid vertical offset diperbaiki."
-            echo "- Local Library/Favourites mendapat Refresh, scan lebih ringan, parsing author, pagination, serta dukungan PDF lokal termasuk deteksi PDF di kategori Lokal."
-            echo "- Metode instalasi extension disatukan: Shizuku, System Installer, dan Private/Sandbox, termasuk Update All dan migration."
-            echo "- Error instalasi Shizuku dibuat lebih jelas dan diberi saran tindakan berikutnya untuk timeout, konflik paket, APK invalid, storage, dan error lain."
-            echo "- Custom/Random User-Agent aktif secara langsung tanpa restart."
-            echo "- DNS over HTTPS/Custom DNS diverifikasi live tanpa restart dan kini menampilkan indikator Aktif/Nonaktif/Tidak valid; User-Agent juga memiliki indikator status aktif."
-            echo "- String resource filter SFW/NSFW diperbaiki agar kompatibel dengan Android resource compiler."
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| File | \`${DEST}\` |"
             echo "| Branch | \`${GITHUB_REF_NAME}\` |"
             echo "| Commit | \`${SHORT_SHA}\` |"
-            echo "| App state | \`d91d3220a784becfec521a7d8c696b9925abcddb\` |"
             echo "| Size | ${SIZE} |"
             echo "| SHA-256 | \`${SHA256}\` |"
             echo "| SHA-1 | \`${SHA1}\` |"
