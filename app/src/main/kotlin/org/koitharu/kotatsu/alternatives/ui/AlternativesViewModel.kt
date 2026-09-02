@@ -88,14 +88,26 @@ class AlternativesViewModel @Inject constructor(
 	)
 	val query: StateFlow<String> = queryState
 
+	private val titleSuggestionsState = MutableStateFlow(buildTitleSuggestions(manga))
+	val titleSuggestions: StateFlow<List<String>> = titleSuggestionsState
+
+	private val recentQueriesState = MutableStateFlow(
+		savedStateHandle.get<ArrayList<String>>(STATE_RECENT_QUERIES)?.toList().orEmpty(),
+	)
+	val recentQueries: StateFlow<List<String>> = recentQueriesState
+
 	private val selectedMode = MutableStateFlow(resolveInitialMode())
 	val searchMode: StateFlow<SearchSourceMode> = selectedMode
 
 	private val progressState = MutableStateFlow(AlternativeSearchProgress())
 	val searchProgress: StateFlow<AlternativeSearchProgress> = progressState
 
+	private val searchRunningState = MutableStateFlow(false)
+	val isSearchRunning: StateFlow<Boolean> = searchRunningState
+
 	private var migrationJob: Job? = null
 	private var searchJob: Job? = null
+	private var searchGeneration = 0
 
 	private val mangaDetails = suspendLazy {
 		mangaRepositoryFactory.create(manga.source).getDetails(manga)
@@ -107,9 +119,9 @@ class AlternativesViewModel @Inject constructor(
 		results,
 		sourceOrder,
 		sourceStatuses,
-		isLoading,
+		searchRunningState,
 		hasResultsOnlyState,
-	) { alternatives, sources, statuses, loading, hasResultsOnly ->
+	) { alternatives, sources, statuses, searching, hasResultsOnly ->
 		val content = ArrayList<ListModel>()
 		for (source in sources) {
 			val sourceResults = alternatives.filter { it.manga.source == source }
@@ -139,7 +151,7 @@ class AlternativesViewModel @Inject constructor(
 		when {
 			content.isEmpty() -> listOf(
 				when {
-					loading -> LoadingState
+					searching -> LoadingState
 					else -> EmptyState(
 						icon = R.drawable.ic_empty_common,
 						textPrimary = R.string.nothing_found,
@@ -148,17 +160,17 @@ class AlternativesViewModel @Inject constructor(
 					)
 				},
 			)
-			loading -> content + LoadingFooter()
+			searching -> content + LoadingFooter()
 			else -> content
 		}
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState))
 
 	init {
+		recordQuery(queryState.value)
 		doSearch()
 	}
 
 	fun retry() {
-		searchJob?.cancel()
 		doSearch()
 	}
 
@@ -167,7 +179,21 @@ class AlternativesViewModel @Inject constructor(
 		if (normalized.isEmpty()) return
 		savedStateHandle[STATE_QUERY] = normalized
 		queryState.value = normalized
+		recordQuery(normalized)
 		doSearch()
+	}
+
+	fun stopSearch() {
+		if (!searchRunningState.value && searchJob?.isActive != true) return
+		searchGeneration++
+		searchJob?.cancel()
+		searchJob = null
+		searchRunningState.value = false
+		sourceStatuses.update { current ->
+			current.mapValues { (_, status) ->
+				if (status.loading) status.copy(loading = false) else status
+			}
+		}
 	}
 
 	fun setSearchMode(mode: SearchSourceMode) {
@@ -215,45 +241,83 @@ class AlternativesViewModel @Inject constructor(
 	}
 
 	private fun doSearch() {
+		val generation = ++searchGeneration
 		val prevJob = searchJob
 		searchJob = launchLoadingJob(Dispatchers.Default) {
 			prevJob?.cancelAndJoin()
-			val activeQuery = queryState.value
-			results.value = emptyList()
-			sourceStatuses.value = emptyMap()
-			progressState.value = AlternativeSearchProgress()
+			if (generation != searchGeneration) return@launchLoadingJob
+			searchRunningState.value = true
+			try {
+				val activeQuery = queryState.value
+				results.value = emptyList()
+				sourceStatuses.value = emptyMap()
+				progressState.value = AlternativeSearchProgress()
 
-			val ref = mangaDetails.getOrDefault(manga)
-			val refCount = ref.chaptersCount()
-			availableLanguagesState.value = alternativesUseCase.getAvailableLanguages(ref)
-			val sources = alternativesUseCase.getSources(ref, selectedMode.value, selectedLanguages.value)
-			sourceOrder.value = sources
-			sourceStatuses.value = sources.associateWith { AlternativeSourceStatus() }
-			progressState.value = AlternativeSearchProgress(total = sources.size)
+				val ref = mangaDetails.getOrDefault(manga)
+				titleSuggestionsState.value = buildTitleSuggestions(ref)
+				val refCount = ref.chaptersCount()
+				availableLanguagesState.value = alternativesUseCase.getAvailableLanguages(ref)
+				val sources = alternativesUseCase.getSources(ref, selectedMode.value, selectedLanguages.value)
+				sourceOrder.value = sources
+				sourceStatuses.value = sources.associateWith { AlternativeSourceStatus() }
+				progressState.value = AlternativeSearchProgress(total = sources.size)
 
-			alternativesUseCase(ref, selectedMode.value, selectedLanguages.value, activeQuery).collect { event ->
-				when (event) {
-					is AlternativeSearchEvent.Result -> {
-						val model = MangaAlternativeModel(
-							mangaModel = mangaListMapper.toListModel(event.manga, ListMode.GRID) as MangaGridModel,
-							referenceChapters = refCount,
-						)
-						upsertResult(model, activeQuery)
-					}
-					is AlternativeSearchEvent.SourceFinished -> {
-						sourceStatuses.update { current ->
-							current + (event.source to AlternativeSourceStatus(loading = false, error = event.error))
-						}
-						progressState.update { current ->
-							current.copy(
-								completed = (current.completed + 1).coerceAtMost(current.total),
-								errors = current.errors + if (event.error != null) 1 else 0,
+				alternativesUseCase(ref, selectedMode.value, selectedLanguages.value, activeQuery).collect { event ->
+					when (event) {
+						is AlternativeSearchEvent.Result -> {
+							val model = MangaAlternativeModel(
+								mangaModel = mangaListMapper.toListModel(event.manga, ListMode.GRID) as MangaGridModel,
+								referenceChapters = refCount,
 							)
+							upsertResult(model, activeQuery)
+						}
+						is AlternativeSearchEvent.SourceFinished -> {
+							sourceStatuses.update { current ->
+								current + (event.source to AlternativeSourceStatus(loading = false, error = event.error))
+							}
+							progressState.update { current ->
+								current.copy(
+									completed = (current.completed + 1).coerceAtMost(current.total),
+									errors = current.errors + if (event.error != null) 1 else 0,
+								)
+							}
 						}
 					}
 				}
+			} finally {
+				if (generation == searchGeneration) {
+					searchRunningState.value = false
+				}
 			}
 		}
+	}
+
+	private fun recordQuery(query: String) {
+		val normalized = query.trim()
+		if (normalized.isEmpty()) return
+		val next = buildList {
+			add(normalized)
+			for (existing in recentQueriesState.value) {
+				if (!existing.equals(normalized, ignoreCase = true)) add(existing)
+				if (size >= MAX_RECENT_QUERIES) break
+			}
+		}.take(MAX_RECENT_QUERIES)
+		recentQueriesState.value = next
+		savedStateHandle[STATE_RECENT_QUERIES] = ArrayList(next)
+	}
+
+	private fun buildTitleSuggestions(details: Manga): List<String> {
+		val result = ArrayList<String>(details.altTitles.size + manga.altTitles.size + 2)
+		fun addDistinct(value: String?) {
+			val normalized = value?.trim().orEmpty()
+			if (normalized.isEmpty()) return
+			if (result.none { it.equals(normalized, ignoreCase = true) }) result += normalized
+		}
+		addDistinct(manga.title)
+		addDistinct(details.title)
+		manga.altTitles.forEach(::addDistinct)
+		details.altTitles.forEach(::addDistinct)
+		return result
 	}
 
 	private fun upsertResult(model: MangaAlternativeModel, activeQuery: String) {
@@ -293,5 +357,7 @@ class AlternativesViewModel @Inject constructor(
 	private companion object {
 		const val STATE_SEARCH_MODE = "alternative_search_mode"
 		const val STATE_QUERY = "alternative_search_query"
+		const val STATE_RECENT_QUERIES = "alternative_recent_queries"
+		const val MAX_RECENT_QUERIES = 6
 	}
 }
