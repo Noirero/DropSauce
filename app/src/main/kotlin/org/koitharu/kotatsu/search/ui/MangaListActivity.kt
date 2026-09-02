@@ -83,7 +83,7 @@ class MangaListActivity :
 
 	private lateinit var source: MangaSource
 
-	// The active language's native name, shown as the top bar's subheading.
+	// The exact source's language, shown as the top bar's subheading.
 	private var activeLanguageName: String? = null
 
 	// Original (attr-defined) expanded height of the collapsing toolbar, captured before growing
@@ -95,8 +95,7 @@ class MangaListActivity :
 		setContentView(ActivityMangaListBinding.inflate(layoutInflater))
 		val filter = intent.getParcelableExtraCompat<ParcelableMangaListFilter>(AppRouter.KEY_FILTER)?.filter
 		val sortOrder = intent.getSerializableExtraCompat<SortOrder>(AppRouter.KEY_SORT_ORDER)
-		// Collapse multi-language sources to their active variant so the screen always reflects the
-		// language chosen in source settings, even if it was opened via a different variant.
+		// Refresh the wrapper by exact source ID without redirecting to a sibling language.
 		val resolved = sourcesRepository.resolveActiveSource(MangaSource(intent.getStringExtra(AppRouter.KEY_SOURCE)))
 		source = resolved.source
 		activeLanguageName = resolved.languageSubtitle
@@ -104,7 +103,7 @@ class MangaListActivity :
 		viewBinding.buttonOrder?.setOnClickListener(this)
 		viewBinding.textLanguage?.apply {
 			setTextColor(context.getThemeColor(appcompatR.attr.colorPrimary))
-			setOnClickListener { router.openSourceSettings(source, scrollToLanguage = true) }
+			setOnClickListener { router.openSourceSettings(source) }
 		}
 		configureSortButton()
 		applyTitle()
@@ -113,8 +112,7 @@ class MangaListActivity :
 
 	override fun onResume() {
 		super.onResume()
-		// If the active language was changed in source settings, reload the list in place for the new
-		// variant so the user doesn't have to back out to Explore and reopen the extension.
+		// Refresh a stale wrapper after an extension update while retaining the exact source ID.
 		val resolved = sourcesRepository.resolveActiveSource(source)
 		if (resolved.source.name != source.name) {
 			source = resolved.source
@@ -150,7 +148,7 @@ class MangaListActivity :
 			applyExpandedHeight(ctl, extra = 0)
 		} else {
 			ctl.setExpandedSubtitleTextColor(ColorStateList.valueOf(getThemeColor(appcompatR.attr.colorPrimary)))
-			ctl.setOnClickListener { router.openSourceSettings(source, scrollToLanguage = true) }
+			ctl.setOnClickListener { router.openSourceSettings(source) }
 			viewBinding.root.doOnLayout { applyLanguage(ctl, name, lang) }
 		}
 	}
