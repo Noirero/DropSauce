@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.FavouriteCategory
@@ -99,12 +98,6 @@ class FavouritesContainerViewModel @Inject constructor(
 
 	val isEmpty = categories.map { it.isEmpty() }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, false)
-
-	init {
-		viewModelScope.launch(Dispatchers.IO) {
-			localFavouritesRepository.refresh()
-		}
-	}
 
 	private fun List<FavouriteCategory>.toUi(
 		showAll: Boolean,
