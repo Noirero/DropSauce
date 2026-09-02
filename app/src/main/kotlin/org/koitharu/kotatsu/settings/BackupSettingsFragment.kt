@@ -34,6 +34,7 @@ import org.koitharu.kotatsu.backup.MihonBackupExporter
 import org.koitharu.kotatsu.backup.MihonBackupManager
 import org.koitharu.kotatsu.backup.MihonBackupManager.Options
 import org.koitharu.kotatsu.backup.MihonBackupManager.RestoreReport
+import org.koitharu.kotatsu.backup.MihonFavouriteRestoreRepair
 import org.koitharu.kotatsu.backup.local.domain.BackupUtils
 import org.koitharu.kotatsu.backup.local.ui.backup.BackupService
 import org.koitharu.kotatsu.backup.local.ui.periodical.PeriodicalBackupSettingsFragment
@@ -61,6 +62,9 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 
 	@Inject
 	lateinit var backupManager: MihonBackupManager
+
+	@Inject
+	lateinit var mihonFavouriteRestoreRepair: MihonFavouriteRestoreRepair
 
 	@Inject
 	lateinit var migrationManager: KotatsuMigrationManager
@@ -218,6 +222,11 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 			var restoreReport: RestoreReport? = null
 			val result = runCatching {
 				restoreReport = backupManager.restoreBackup(uri, options)
+				if (options.libraryEntries) {
+					// The main restore already handles normal Mihon categories. This consistency pass repairs
+					// missing favourite rows and hidden/reused categories from older or forked backups.
+					mihonFavouriteRestoreRepair.repair(uri)
+				}
 			}
 			val error = result.exceptionOrNull()
 			if (error is CancellationException) {
