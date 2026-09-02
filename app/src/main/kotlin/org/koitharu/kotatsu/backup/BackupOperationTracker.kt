@@ -117,6 +117,11 @@ object BackupOperationTracker {
 		)
 	}
 
+	fun failCurrent(error: Throwable, details: String? = null) {
+		val current = mutableState.value as? State.Running ?: return
+		failed(current.kind, error, details)
+	}
+
 	fun acknowledge(id: Long) {
 		val current = mutableState.value as? State.Finished ?: return
 		if (current.id == id) mutableState.value = State.Idle
