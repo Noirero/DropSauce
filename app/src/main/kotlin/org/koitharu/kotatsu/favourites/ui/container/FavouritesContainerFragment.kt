@@ -304,11 +304,11 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 				} else {
 					title
 				}
-				menu.add(Menu.NONE, index, index, label).isCheckable = true
+				menu.add(Menu.NONE, index + MENU_CATEGORY_ID_OFFSET, index, label).isCheckable = true
 			}
-			menu.findItem(binding.pager.currentItem)?.isChecked = true
+			menu.findItem(binding.pager.currentItem + MENU_CATEGORY_ID_OFFSET)?.isChecked = true
 			setOnMenuItemClickListener { menuItem ->
-				val index = menuItem.itemId
+				val index = menuItem.itemId - MENU_CATEGORY_ID_OFFSET
 				if (index !in categories.indices) return@setOnMenuItemClickListener false
 				binding.pager.setCurrentItem(index, false)
 				updateCategoryPickerLabel(options)
@@ -462,6 +462,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		private const val STATE_INLINE_SEARCH_ACTIVE = "favourites_inline_search_active"
 		private const val STATE_SEARCH_QUERY = "favourites_search_query"
 		private const val MAX_CATEGORY_BADGE_COUNT = 99_999
+		private const val MENU_CATEGORY_ID_OFFSET = 1
 		internal val searchScopeActive = MutableStateFlow(false)
 		internal val searchSessionActive = MutableStateFlow(false)
 		internal val searchQuery = MutableStateFlow("")
