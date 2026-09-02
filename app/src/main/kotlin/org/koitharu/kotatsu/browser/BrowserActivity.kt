@@ -16,6 +16,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.InteractiveActionRequiredException
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.parser.CachingMangaRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
@@ -30,12 +31,19 @@ class BrowserActivity : BaseBrowserActivity() {
 	private var successCookieName: String? = null
 	private var initialCookieValue: String? = null
 	private var sourceHeaders: Map<String, String> = emptyMap()
+	private var mihonRepository: CachingMangaRepository? = null
 
 	override fun onCreate2(savedInstanceState: Bundle?, source: MangaSource, repository: MangaRepository?) {
 		successCookieUrl = intent?.getStringExtra(AppRouter.KEY_SUCCESS_COOKIE_URL)
 		successCookieName = intent?.getStringExtra(AppRouter.KEY_SUCCESS_COOKIE_NAME)
 		if (successCookieUrl != null && successCookieName != null) {
 			initialCookieValue = getCookieValue(successCookieUrl!!, successCookieName!!)
+		}
+
+		// Keep a handle only for Mihon sources. A browser login can change the authenticated view of
+		// a chapter, so any details/page data produced before login must not survive after returning.
+		if (source is MihonMangaSource) {
+			mihonRepository = repository as? CachingMangaRepository
 		}
 
 		// Mihon opens a source WebView with the source's own HttpSource headers. Some sites bind
@@ -123,6 +131,10 @@ class BrowserActivity : BaseBrowserActivity() {
 
 	override fun finish() {
 		CookieManager.getInstance().flush()
+		// A failed pre-login page list/details lookup may still be represented by data in the source
+		// cache. Drop it only for Mihon after the WebView session is persisted, so reopening the same
+		// chapter performs a fresh extension request with the newly authenticated cookie jar.
+		mihonRepository?.invalidateCache()
 		if (successCookieUrl != null && successCookieName != null) {
 			val currentValue = getCookieValue(successCookieUrl!!, successCookieName!!)
 			// Don't require the value to *change* — the user may have renewed a cookie that
