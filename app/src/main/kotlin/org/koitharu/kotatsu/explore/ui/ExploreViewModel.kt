@@ -182,6 +182,13 @@ class ExploreViewModel @Inject constructor(
 		sourcesRepository.setMihonLanguageEnabled(language, enabled)
 	}
 
+	fun applyMihonSourceFilter(states: Map<Long, Boolean>) {
+		if (states.isEmpty()) return
+		launchJob(Dispatchers.Default) {
+			sourcesRepository.setMihonSourceStates(states)
+		}
+	}
+
 	fun setContentClassification(sources: Collection<MangaSource>, classification: ExploreContentClass?) {
 		contentPreferences.setOverride(sources, classification)
 	}
