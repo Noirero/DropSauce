@@ -51,7 +51,7 @@ class AlternativesUseCase @Inject constructor(
 
 	/** Compatibility path for background auto-fix: preserve its old Flow<Manga> contract. */
 	suspend operator fun invoke(manga: Manga): Flow<Manga> =
-		invoke(manga, defaultMode(), emptySet()).transform { event ->
+		invoke(manga, defaultMode(), emptySet(), manga.title).transform { event ->
 			if (event is AlternativeSearchEvent.Result) emit(event.manga)
 		}
 
@@ -99,7 +99,9 @@ class AlternativesUseCase @Inject constructor(
 		manga: Manga,
 		mode: SearchSourceMode,
 		preferredLanguages: Set<String>,
+		query: String = manga.title,
 	): Flow<AlternativeSearchEvent> {
+		val normalizedQuery = query.trim().ifEmpty { manga.title }
 		val sources = getSources(manga, mode, preferredLanguages)
 		if (sources.isEmpty()) return emptyFlow()
 
@@ -110,7 +112,7 @@ class AlternativesUseCase @Inject constructor(
 				launch {
 					val searchResult = runCatchingCancellable {
 						sourceSemaphore.withPermit {
-							searchHelperFactory.create(source)(manga.title, SearchKind.TITLE)?.manga
+							searchHelperFactory.create(source)(normalizedQuery, SearchKind.TITLE)?.manga
 						}
 					}
 					val list = searchResult.getOrElse { error ->
