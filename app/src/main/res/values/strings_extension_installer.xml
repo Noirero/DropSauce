@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="extension_installer_method">Installation method</string>
+	<string name="extension_installer_choose_title">Choose extension installation method</string>
+	<string name="extension_installer_not_selected">Not selected — choose before installing or updating an extension</string>
+
+	<string name="extension_installer_shizuku">Shizuku — Silent Install</string>
+	<string name="extension_installer_system">System Installer — Normal</string>
+	<string name="extension_installer_private">Private/Sandbox — Internal · Advanced</string>
+
+	<string name="extension_installer_shizuku_flow">Download → Install automatically → Done</string>
+	<string name="extension_installer_system_flow">Download → Install popup → Confirm → Done</string>
+	<string name="extension_installer_private_flow">Download → Install internally → Done</string>
+
+	<string name="extension_installer_choice_shizuku">%1$s\n%2$s\nShizuku must be installed and running. DropSauce Beta needs Shizuku permission.\n%3$s</string>
+	<string name="extension_installer_choice_system">%1$s\n%2$s\nUses Android’s normal package installer. No Shizuku required.</string>
+	<string name="extension_installer_choice_private">%1$s\n%2$s\nNo installer popup and no Shizuku. The extension is stored only inside DropSauce.</string>
+
+	<string name="extension_installer_shizuku_status_ready">✓ Shizuku ready — permission granted</string>
+	<string name="extension_installer_shizuku_status_permission">⚠ Shizuku running — DropSauce permission not granted</string>
+	<string name="extension_installer_shizuku_status_not_running">✕ Shizuku is not running</string>
+	<string name="extension_installer_shizuku_status_not_installed">✕ Shizuku is not installed</string>
+
+	<string name="extension_installer_shizuku_summary_with_status">No installer popup · %1$s</string>
+	<string name="extension_installer_system_summary">Installation confirmation required</string>
+	<string name="extension_installer_private_summary">Internal install · no Shizuku</string>
+
+	<string name="extension_installer_footer_title">Installation method: %1$s</string>
+	<string name="extension_installer_footer_not_selected">Installation method: Not selected</string>
+	<string name="extension_installer_footer_not_selected_summary">Tap to choose before Update All</string>
+
+	<string name="extension_installer_shizuku_not_ready_title">Shizuku is not ready</string>
+	<string name="extension_installer_shizuku_not_ready_message">The selected installation method requires Shizuku. Make sure Shizuku is running and DropSauce Beta has permission.\n\n%1$s</string>
+	<string name="extension_installer_grant_permission">Grant permission</string>
+	<string name="extension_installer_check_shizuku">Check Shizuku</string>
+	<string name="extension_installer_change_method">Change installation method</string>
+
+	<string name="extension_installer_migrate">Migrate extensions</string>
+	<string name="extension_installer_later">Later</string>
+
+	<string name="extension_installer_settings_system_note">System Installer needs Android confirmation for APK updates, so background APK auto-install is unavailable. Update notifications can still alert you.</string>
+	<string name="extension_installer_settings_shizuku_note">Silent background APK updates work when Auto Update Extensions is enabled and Shizuku remains running with permission granted.</string>
+	<string name="extension_installer_settings_private_note">Private/Sandbox APK updates can run internally when Auto Update Extensions is enabled. They do not require Shizuku.</string>
+
+	<string name="extension_update_all_success">%1$d extensions updated successfully.</string>
+	<string name="extension_update_all_partial">%1$d extensions updated, %2$d failed.</string>
+</resources>
