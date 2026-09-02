@@ -224,8 +224,6 @@ jobs:
         {
           echo "## DropSauce Noirero v${VERSION_NAME}"
           echo
-          echo "Automatic build of the Noirero fork."
-          echo
           echo "### Changelog"
           printf '%s\n' "$CHANGELOG"
         } > "$NOTES_FILE"
