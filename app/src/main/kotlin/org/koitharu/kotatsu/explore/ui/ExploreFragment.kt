@@ -61,6 +61,10 @@ class ExploreFragment :
 
 	/** Page lists, indexed by page position. Both are created up-front by the pager. */
 	private val pages = arrayOfNulls<RecyclerView>(2)
+	private val pageHeights = IntArray(2)
+	private val pageHeightDirty = BooleanArray(2) { true }
+	private var measuredPagerWidth = 0
+	private var pagerHeightUpdatePosted = false
 	private var barsInsets: Insets = Insets.NONE
 
 	override fun onCreateViewBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentExploreBinding {
@@ -69,6 +73,10 @@ class ExploreFragment :
 
 	override fun onViewBindingCreated(binding: FragmentExploreBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
+		pageHeights.fill(0)
+		pageHeightDirty.fill(true)
+		measuredPagerWidth = 0
+		pagerHeightUpdatePosted = false
 		sourceSelectionController = ListSelectionController(
 			appCompatDelegate = checkNotNull(findAppCompatDelegate()),
 			decoration = SourceSelectionDecoration(binding.root.context),
@@ -111,6 +119,7 @@ class ExploreFragment :
 		viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
 		viewModel.isGrid.observe(viewLifecycleOwner) { isGrid ->
 			pages.forEach { it?.applyLayoutManager(isGrid) }
+			invalidateAllPageHeights()
 		}
 		viewModel.onShowSuggestionsTip.observeEvent(viewLifecycleOwner) {
 			showSuggestionsTip()
@@ -118,6 +127,7 @@ class ExploreFragment :
 	}
 
 	private fun onPageCreated(recyclerView: RecyclerView, isNovel: Boolean) {
+		val pageIndex = if (isNovel) 1 else 0
 		val adapter = ExploreAdapter(
 			this,
 			this,
@@ -130,15 +140,27 @@ class ExploreFragment :
 			addItemDecoration(TypedListSpacingDecoration(context, false))
 			checkNotNull(sourceSelectionController).attachToRecyclerView(this)
 			applyLayoutManager(viewModel.isGrid.value)
-			// Empty/loading states can change the measured page height one pass later.
-			addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> post(::updatePagerHeight) }
+			// The page can be laid out again when Favourites moves its header in/out of the activity app
+			// bar. That changes height but not width, so measuring every page again here only stalls the
+			// navigation frame. Content height is invalidated explicitly when data/layout mode changes;
+			// layout only invalidates the cache when the available width actually changes.
+			addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+				if (right - left != oldRight - oldLeft) {
+					invalidateAllPageHeights()
+				}
+			}
 		}
-		pages[if (isNovel) 1 else 0] = recyclerView
+		pages[pageIndex] = recyclerView
+		pageHeightDirty[pageIndex] = true
 		viewModel.sources.observe(viewLifecycleOwner) { content ->
 			adapter.emit(content[isNovel])
-			recyclerView.post {
+			recyclerView.resetPageScrollPosition()
+			invalidatePageHeight(pageIndex)
+			// Empty/loading states may finish sizing themselves one frame after the adapter commit. Do a
+			// single follow-up invalidation instead of permanently remeasuring on every layout pass.
+			recyclerView.postOnAnimation {
 				recyclerView.resetPageScrollPosition()
-				updatePagerHeight()
+				invalidatePageHeight(pageIndex)
 			}
 		}
 	}
@@ -182,27 +204,67 @@ class ExploreFragment :
 		return insets.consumeAllSystemBarsInsets()
 	}
 
+	override fun onHiddenChanged(hidden: Boolean) {
+		super.onHiddenChanged(hidden)
+		if (!hidden && pageHeightDirty.any { it }) {
+			schedulePagerHeightUpdate()
+		}
+	}
+
+	private fun invalidatePageHeight(index: Int) {
+		pageHeightDirty[index] = true
+		if (!isHidden) {
+			schedulePagerHeightUpdate()
+		}
+	}
+
+	private fun invalidateAllPageHeights() {
+		pageHeightDirty.fill(true)
+		if (!isHidden) {
+			schedulePagerHeightUpdate()
+		}
+	}
+
+	private fun schedulePagerHeightUpdate() {
+		val pager = viewBinding?.pager ?: return
+		if (pagerHeightUpdatePosted || isHidden) return
+		pagerHeightUpdatePosted = true
+		// Keep full RecyclerView measurement out of the fragment/navigation commit itself. Multiple
+		// invalidations in the same frame collapse into one measurement pass.
+		pager.postOnAnimation {
+			pagerHeightUpdatePosted = false
+			updatePagerHeight()
+		}
+	}
+
 	/**
 	 * ViewPager2 cannot wrap its content, so the pager is given the height of the taller page. Both pages
 	 * then keep that height, which is what makes switching tabs a no-op for the scroll position: the
-	 * shorter list just ends in empty space. Measured with an unspecified height so the value is the real
-	 * content height rather than an estimate.
+	 * shorter list just ends in empty space. The expensive UNSPECIFIED RecyclerView measure is cached and
+	 * repeated only when page content, grid/list mode, or available width changes.
 	 */
 	private fun updatePagerHeight() {
 		val binding = viewBinding ?: return
+		if (isHidden) return
 		val width = binding.pager.width
 		if (width == 0) {
-			binding.pager.post(::updatePagerHeight)
+			schedulePagerHeightUpdate()
 			return
+		}
+		if (measuredPagerWidth != width) {
+			measuredPagerWidth = width
+			pageHeightDirty.fill(true)
 		}
 		val widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
 		val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-		val height = pages.maxOf { page ->
-			page?.let {
-				it.measure(widthSpec, heightSpec)
-				it.measuredHeight
-			} ?: 0
+		for (index in pages.indices) {
+			val page = pages[index] ?: continue
+			if (!pageHeightDirty[index] && pageHeights[index] > 0) continue
+			page.measure(widthSpec, heightSpec)
+			pageHeights[index] = page.measuredHeight
+			pageHeightDirty[index] = false
 		}
+		val height = pageHeights.maxOrNull() ?: 0
 		if (height > 0 && binding.pager.layoutParams.height != height) {
 			binding.pager.updateLayoutParams { this.height = height }
 			// The first layout uses a temporary screen-sized pager. Once that constraint is removed, clear
@@ -216,6 +278,10 @@ class ExploreFragment :
 	override fun onDestroyView() {
 		actionModeDelegate.removeListener(this)
 		pages.fill(null)
+		pageHeights.fill(0)
+		pageHeightDirty.fill(true)
+		measuredPagerWidth = 0
+		pagerHeightUpdatePosted = false
 		manageBadge = null
 		sourceSelectionController = null
 		super.onDestroyView()
