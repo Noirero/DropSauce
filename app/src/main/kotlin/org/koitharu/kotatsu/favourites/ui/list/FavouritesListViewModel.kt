@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.getLanguageCode
+import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
@@ -51,6 +53,7 @@ import org.koitharu.kotatsu.list.ui.model.TIP_UI_SCALING
 import org.koitharu.kotatsu.list.ui.model.toErrorState
 import org.koitharu.kotatsu.list.ui.model.uiScalingTip
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
+import org.koitharu.kotatsu.local.data.index.LocalMangaIndex
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.Manga
 import java.util.concurrent.atomic.AtomicBoolean
@@ -73,6 +76,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val searchMatcher: FavouritesSearchMatcher,
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val displayPreferences: FavouriteDisplayPreferences,
+	private val localMangaIndex: LocalMangaIndex,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -103,8 +107,6 @@ class FavouritesListViewModel @Inject constructor(
 		FavouritesContainerFragment.searchQuery,
 		databaseWindow,
 	) { query, window ->
-		// Search must remain exhaustive. Normal browsing stays windowed so hundreds of favourites are
-		// not decoded and mapped just to display the first screen.
 		if (query.isBlank()) window else Int.MAX_VALUE
 	}.distinctUntilChanged()
 
@@ -222,8 +224,6 @@ class FavouritesListViewModel @Inject constructor(
 		if (!isPaginationReady.compareAndSet(true, false)) return
 		val nextLimit = limit.value + PAGE_SIZE
 		limit.value = nextLimit
-		// Prefetch a few screens in the DB query so normal scrolling does not have to wait for a new
-		// full-library query. The mapper still receives only [nextLimit] visible items.
 		val preferredWindow = (nextLimit * 4).coerceAtMost(DATABASE_WINDOW_MAX)
 		if (databaseWindow.value < preferredWindow) {
 			databaseWindow.value = preferredWindow
@@ -265,14 +265,37 @@ class FavouritesListViewModel @Inject constructor(
 			val model = result[i]
 			if (model !is MangaListModel) continue
 			val isPinned = model.manga.id in pinnedSet
+			val source = model.manga.source
+			val isSaved = display.showDownloaded && model.manga.id in localMangaIndex
+			val isLocalSource = display.showLocalSource && source.isLocal
+			val languageLabel = if (display.showLanguage) source.getLanguageCode() else null
 			result[i] = when (model) {
 				is MangaGridModel -> model.copy(
+					counter = if (display.showUnread) model.counter else 0,
+					isSaved = isSaved,
 					isPinned = isPinned,
 					isTitleOverCover = display.titleOverCover,
 					isGridSpacingIncreased = display.gridSpacingIncreased,
+					isLocalSource = isLocalSource,
+					languageLabel = languageLabel,
+					showContinueReading = display.showContinueReading && model.progress != null,
 				)
-				is MangaDetailedListModel -> model.copy(isPinned = isPinned)
-				is MangaCompactListModel -> model.copy(isPinned = isPinned)
+				is MangaDetailedListModel -> model.copy(
+					counter = if (display.showUnread) model.counter else 0,
+					isSaved = isSaved,
+					isPinned = isPinned,
+					isLocalSource = isLocalSource,
+					languageLabel = languageLabel,
+					showContinueReading = display.showContinueReading && model.progress != null,
+				)
+				is MangaCompactListModel -> model.copy(
+					counter = if (display.showUnread) model.counter else 0,
+					isPinned = isPinned,
+					isSaved = isSaved,
+					isLocalSource = isLocalSource,
+					languageLabel = languageLabel,
+					showContinueReading = display.showContinueReading,
+				)
 			}
 		}
 		return result
@@ -322,7 +345,6 @@ class FavouritesListViewModel @Inject constructor(
 	) {
 		if (matchingCount >= targetCount) return
 		val current = databaseWindow.value
-		// Fewer rows than requested means the SQL query is exhausted; another window cannot help.
 		if (loadedCount < current || current == Int.MAX_VALUE) return
 		val next = if (current >= DATABASE_WINDOW_MAX) {
 			Int.MAX_VALUE
