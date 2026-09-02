@@ -16,6 +16,7 @@ data class MangaGridModel(
 	val isTitleHidden: Boolean = false,
 	val isTitleOverCover: Boolean = true,
 	val isGridSpacingIncreased: Boolean = false,
+	val gridScale: Float = 1f,
 	val isPinned: Boolean = false,
 	val isLocalSource: Boolean = false,
 	val languageLabel: String? = null,
@@ -31,6 +32,7 @@ data class MangaGridModel(
 			previousState.isTitleHidden != isTitleHidden ||
 			previousState.isTitleOverCover != isTitleOverCover ||
 			previousState.isGridSpacingIncreased != isGridSpacingIncreased ||
+			previousState.gridScale != gridScale ||
 			previousState.isPinned != isPinned ||
 			previousState.isLocalSource != isLocalSource ||
 			previousState.languageLabel != languageLabel ||
