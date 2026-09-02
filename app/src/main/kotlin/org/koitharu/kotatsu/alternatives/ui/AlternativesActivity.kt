@@ -1,7 +1,9 @@
 package org.koitharu.kotatsu.alternatives.ui
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
@@ -66,6 +68,8 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 			adapter = listAdapter
 		}
 
+		setupSearchEditor()
+
 		viewBinding.buttonScopePinned.isEnabled = viewModel.hasPinnedSources
 		viewBinding.toggleSearchScope.addOnButtonCheckedListener { _, checkedId, isChecked ->
 			if (!isChecked) return@addOnButtonCheckedListener
@@ -83,6 +87,12 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		}
 		viewBinding.chipAlternativeReset.setOnClickListener { viewModel.resetFilters() }
 
+		viewModel.query.observe(this) { query ->
+			if (viewBinding.inputAlternativeQuery.text?.toString() != query) {
+				viewBinding.inputAlternativeQuery.setText(query)
+				viewBinding.inputAlternativeQuery.setSelection(query.length)
+			}
+		}
 		viewModel.searchMode.observe(this, ::updateSearchMode)
 		viewModel.preferredLanguages.observe(this, ::updateLanguageChip)
 		viewModel.hasResultsOnly.observe(this) { viewBinding.chipAlternativeHasResults.isChecked = it }
@@ -94,6 +104,29 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 			router.openDetails(it)
 			finishAfterTransition()
 		}
+	}
+
+	private fun setupSearchEditor() {
+		viewBinding.inputAlternativeQuery.setText(viewModel.query.value)
+		viewBinding.inputAlternativeQuery.setSelection(viewBinding.inputAlternativeQuery.text?.length ?: 0)
+		viewBinding.buttonAlternativeSearch.setOnClickListener { submitAlternativeSearch() }
+		viewBinding.inputAlternativeQuery.setOnEditorActionListener { _, actionId, event ->
+			val isKeyboardSearch = actionId == EditorInfo.IME_ACTION_SEARCH
+			val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
+			if (isKeyboardSearch || isEnter) {
+				submitAlternativeSearch()
+				true
+			} else {
+				false
+			}
+		}
+	}
+
+	private fun submitAlternativeSearch() {
+		val query = viewBinding.inputAlternativeQuery.text?.toString()?.trim().orEmpty()
+		if (query.isEmpty()) return
+		viewModel.search(query)
+		viewBinding.inputAlternativeQuery.clearFocus()
 	}
 
 	private fun updateSearchMode(mode: SearchSourceMode) {
@@ -167,7 +200,7 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 
 	override fun onItemClick(item: MangaAlternativeModel, view: View) {
 		when (view.id) {
-			R.id.chip_source -> router.openSearch(item.manga.source, viewModel.manga.title)
+			R.id.chip_source -> router.openSearch(item.manga.source, viewModel.query.value)
 			R.id.button_migrate -> confirmMigration(item.manga)
 			else -> router.openDetails(item.manga)
 		}
