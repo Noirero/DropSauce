@@ -62,6 +62,7 @@ class ShizukuExtensionInstaller @Inject constructor(
 							if (continuation.isActive) {
 								continuation.resume(isReady)
 							}
+						}
 					}
 					continuation.invokeOnCancellation {
 						Shizuku.removeBinderReceivedListener(listener)
@@ -142,58 +143,58 @@ class ShizukuExtensionInstaller @Inject constructor(
 
 	private suspend fun awaitInstallResult(start: (android.content.IntentSender) -> Unit): InstallResult =
 		withTimeout(INSTALL_TIMEOUT_MS) {
-		suspendCancellableCoroutine { continuation ->
-			val receiver = object : BroadcastReceiver() {
-				override fun onReceive(context: Context?, intent: Intent) {
-					if (!continuation.isActive) return
-					runCatching { this@ShizukuExtensionInstaller.context.unregisterReceiver(this) }
-					val status = intent.getIntExtra(
-						PackageInstaller.EXTRA_STATUS,
-						PackageInstaller.STATUS_FAILURE,
-					)
-					val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-					continuation.resume(
-						if (status == PackageInstaller.STATUS_SUCCESS) {
-							InstallResult.Success
-						} else {
-							InstallResult.Failure(status, packageInstallerFailureMessage(status, message))
-						},
-					)
+			suspendCancellableCoroutine { continuation ->
+				val receiver = object : BroadcastReceiver() {
+					override fun onReceive(context: Context?, intent: Intent) {
+						if (!continuation.isActive) return
+						runCatching { this@ShizukuExtensionInstaller.context.unregisterReceiver(this) }
+						val status = intent.getIntExtra(
+							PackageInstaller.EXTRA_STATUS,
+							PackageInstaller.STATUS_FAILURE,
+						)
+						val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+						continuation.resume(
+							if (status == PackageInstaller.STATUS_SUCCESS) {
+								InstallResult.Success
+							} else {
+								InstallResult.Failure(status, packageInstallerFailureMessage(status, message))
+							},
+						)
+					}
 				}
-			}
-			ContextCompat.registerReceiver(
-				context,
-				receiver,
-				IntentFilter(ACTION_SHIZUKU_INSTALL_RESULT),
-				ContextCompat.RECEIVER_NOT_EXPORTED,
-			)
-			continuation.invokeOnCancellation {
-				runCatching { context.unregisterReceiver(receiver) }
-			}
-			try {
-				val statusIntent = PendingIntent.getBroadcast(
+				ContextCompat.registerReceiver(
 					context,
-					INSTALL_REQUEST_CODE,
-					Intent(ACTION_SHIZUKU_INSTALL_RESULT).setPackage(context.packageName),
-					PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+					receiver,
+					IntentFilter(ACTION_SHIZUKU_INSTALL_RESULT),
+					ContextCompat.RECEIVER_NOT_EXPORTED,
 				)
-				start(statusIntent.intentSender)
-			} catch (e: Exception) {
-				runCatching { context.unregisterReceiver(receiver) }
-				if (continuation.isActive) {
-					continuation.resume(
-						InstallResult.Failure(
-							status = null,
-							message = context.getString(
-								R.string.extension_install_error_generic,
-								errorDetail(e.message),
-							),
-						),
+				continuation.invokeOnCancellation {
+					runCatching { context.unregisterReceiver(receiver) }
+				}
+				try {
+					val statusIntent = PendingIntent.getBroadcast(
+						context,
+						INSTALL_REQUEST_CODE,
+						Intent(ACTION_SHIZUKU_INSTALL_RESULT).setPackage(context.packageName),
+						PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
 					)
+					start(statusIntent.intentSender)
+				} catch (e: Exception) {
+					runCatching { context.unregisterReceiver(receiver) }
+					if (continuation.isActive) {
+						continuation.resume(
+							InstallResult.Failure(
+								status = null,
+								message = context.getString(
+									R.string.extension_install_error_generic,
+									errorDetail(e.message),
+								),
+							),
+						)
+					}
 				}
 			}
 		}
-	}
 
 	private fun exceptionFailureMessage(stage: InstallStage, error: Exception): String = when {
 		error is TimeoutCancellationException && stage == InstallStage.CONNECT_SHIZUKU ->
