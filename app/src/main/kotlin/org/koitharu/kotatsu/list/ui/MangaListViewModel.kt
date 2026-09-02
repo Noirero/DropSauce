@@ -3,6 +3,7 @@ package org.koitharu.kotatsu.list.ui
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,11 +38,14 @@ abstract class MangaListViewModel(
 	open val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE) { listMode }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.listMode)
 	val onActionDone = MutableEventFlow<ReversibleAction>()
-	val gridScale = settings.observeAsStateFlow(
+	open val gridScale: StateFlow<Float> = settings.observeAsStateFlow(
 		scope = viewModelScope + Dispatchers.Default,
 		key = AppSettings.KEY_GRID_SIZE,
 		valueProducer = { gridSize / 100f },
 	)
+
+	/** Null keeps the original automatic width-based grid. Favourites overrides this with 2..6. */
+	open val gridColumns: StateFlow<Int?> = MutableStateFlow(null)
 
 	val isIncognitoModeEnabled: Boolean
 		get() = settings.isIncognitoModeEnabled
