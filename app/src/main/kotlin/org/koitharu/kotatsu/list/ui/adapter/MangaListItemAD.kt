@@ -2,23 +2,23 @@ package org.koitharu.kotatsu.list.ui.adapter
 
 import androidx.core.view.isVisible
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
-import org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter
-import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
+import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.util.ext.setTooltipCompat
 import org.koitharu.kotatsu.core.util.ext.textAndVisible
 import org.koitharu.kotatsu.databinding.ItemMangaListBinding
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
+import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 
 fun mangaListItemAD(
-	clickListener: OnListItemClickListener<MangaListModel>,
+	clickListener: MangaDetailsClickListener,
 	titleClickListener: OnListItemClickListener<MangaListModel>? = null,
 ) = adapterDelegateViewBinding<MangaCompactListModel, ListModel, ItemMangaListBinding>(
 	{ inflater, parent -> ItemMangaListBinding.inflate(inflater, parent, false) },
 ) {
 
-	AdapterDelegateClickListenerAdapter(this, clickListener).attach(itemView)
+	org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter(this, clickListener).attach(itemView)
 	if (titleClickListener != null) {
 		binding.textViewTitle.attachTitleClickToRead(itemView) { view ->
 			titleClickListener.onItemClick(item, view)
@@ -28,10 +28,22 @@ fun mangaListItemAD(
 	bind {
 		itemView.setTooltipCompat(item.getSummary(context))
 		binding.textViewTitle.text = item.title
-		binding.textViewSubtitle.textAndVisible = item.subtitle
+		val info = buildList {
+			item.subtitle.takeIf { it.isNotBlank() }?.let(::add)
+			item.languageLabel?.let(::add)
+			if (item.isLocalSource) add(context.getString(R.string.local_storage))
+			if (item.isSaved) add(context.getString(R.string.favourites_show_downloaded))
+		}
+		binding.textViewSubtitle.textAndVisible = info.joinToString(" • ")
 		binding.imageViewPin.isVisible = item.isPinned
 		binding.imageViewCover.setImageAsync(item.coverUrl, item.manga)
 		binding.badge.number = item.counter
 		binding.badge.isVisible = item.counter > 0
+		binding.imageViewContinue.isVisible = item.showContinueReading
+		binding.imageViewContinue.setOnClickListener(if (item.showContinueReading) {
+			{ view -> clickListener.onReadClick(item.toMangaWithOverride(), view) }
+		} else {
+			null
+		})
 	}
 }
