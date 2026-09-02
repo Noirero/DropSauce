@@ -10,5 +10,5 @@
 	<string name="explore_content_reset_all">Reset all classifications</string>
 	<string name="explore_content_classifications_reset">Content classifications reset</string>
 	<string name="explore_content_filter_empty">No extensions in this filter</string>
-	<string name="explore_content_filter_empty_hint">Choose All or change an extension&apos;s classification</string>
+	<string name="explore_content_filter_empty_hint">Choose All or change the classification of an extension</string>
 </resources>
