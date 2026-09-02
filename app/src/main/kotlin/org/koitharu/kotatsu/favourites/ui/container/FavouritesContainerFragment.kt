@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewStub
@@ -12,6 +13,7 @@ import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.AppCompatEditText
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -20,6 +22,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.search.SearchBar
@@ -45,6 +48,7 @@ import org.koitharu.kotatsu.databinding.FragmentFavouritesContainerBinding
 import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
+import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import javax.inject.Inject
 
@@ -56,11 +60,21 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	View.OnClickListener {
 
 	@Inject lateinit var contentTypeStore: FavouriteContentTypeStore
+	@Inject lateinit var displayPreferences: FavouriteDisplayPreferences
 
 	private val viewModel: FavouritesContainerViewModel by viewModels()
 	private var inlineSearchEdit: AppCompatEditText? = null
 	private var inlineSearchActive = false
 	private var searchBackCallback: OnBackPressedCallback? = null
+	private var pagerAdapter: FavouritesContainerAdapter? = null
+	private var categories: List<FavouriteTabModel> = emptyList()
+	private var isEmptyState = false
+
+	private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
+		override fun onPageSelected(position: Int) {
+			updateCategoryPickerLabel()
+		}
+	}
 
 	override val recyclerView: RecyclerView?
 		get() = (findCurrentFragment() as? RecyclerViewOwner)?.recyclerView
@@ -76,15 +90,18 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			?: searchSessionActive.value
 		savedInstanceState?.getString(STATE_SEARCH_QUERY)?.let { searchQuery.value = it }
 		searchScopeActive.value = !isHidden
-		val pagerAdapter = FavouritesContainerAdapter(this)
-		binding.pager.adapter = pagerAdapter
+		val adapter = FavouritesContainerAdapter(this)
+		pagerAdapter = adapter
+		binding.pager.adapter = adapter
 		binding.pager.offscreenPageLimit = 1
 		binding.pager.recyclerView?.isNestedScrollingEnabled = false
+		binding.pager.registerOnPageChangeCallback(pageChangeCallback)
 		TabLayoutMediator(
 			binding.tabs,
 			binding.pager,
-			FavouritesTabConfigurationStrategy(pagerAdapter, viewModel, router),
+			FavouritesTabConfigurationStrategy(adapter, viewModel, router),
 		).attach()
+		binding.buttonCategoryPicker.setOnClickListener { showCategoryPicker() }
 		binding.stubEmpty.setOnInflateListener(this)
 		binding.toggleContentType.addOnButtonCheckedListener { _, checkedId, isChecked ->
 			if (!isChecked) return@addOnButtonCheckedListener
@@ -103,9 +120,13 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			installFavouriteSearchHandler()
 		}
 		actionModeDelegate.addListener(this)
-		viewModel.categories.observe(viewLifecycleOwner, pagerAdapter)
+		viewModel.categories.observe(viewLifecycleOwner, adapter)
+		viewModel.categories.observe(viewLifecycleOwner, ::onCategoriesChanged)
 		viewModel.isEmpty.observe(viewLifecycleOwner, ::onEmptyStateChanged)
 		contentTypeStore.selectedType.observe(viewLifecycleOwner, ::onContentTypeChanged)
+		displayPreferences.state.observe(viewLifecycleOwner) {
+			applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
+		}
 		addMenuProvider(FavouritesContainerMenuProvider(router))
 		viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
 
@@ -125,11 +146,14 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	override fun onDestroyView() {
+		viewBinding?.pager?.unregisterOnPageChangeCallback(pageChangeCallback)
 		exitInlineSearch(clearQuery = false, endSession = false)
 		restoreGlobalSearchHandler()
 		inlineSearchEdit?.let { edit -> (edit.parent as? ViewGroup)?.removeView(edit) }
 		inlineSearchEdit = null
 		searchBackCallback = null
+		pagerAdapter = null
+		categories = emptyList()
 		searchScopeActive.value = false
 		detachTabsFromAppBar()
 		actionModeDelegate.removeListener(this)
@@ -164,6 +188,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = false
 			tabs.setTabsEnabled(false)
+			buttonCategoryPicker.isEnabled = false
 			buttonContentManga.isEnabled = false
 			buttonContentNovel.isEnabled = false
 		}
@@ -173,6 +198,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		viewBinding?.run {
 			pager.isUserInputEnabled = true
 			tabs.setTabsEnabled(true)
+			buttonCategoryPicker.isEnabled = true
 			buttonContentManga.isEnabled = true
 			buttonContentNovel.isEnabled = true
 		}
@@ -212,14 +238,83 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		if (!isHidden) {
 			activity?.findViewById<SearchBar>(R.id.search_bar)?.hint = hint
 		}
+		applyCategoryNavigation(displayPreferences.current(type))
+	}
+
+	private fun onCategoriesChanged(value: List<FavouriteTabModel>) {
+		categories = value
+		viewBinding?.run {
+			if (value.isNotEmpty() && pager.currentItem >= value.size) {
+				pager.setCurrentItem(0, false)
+			}
+			tabs.post {
+				viewBinding?.let { applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value)) }
+			}
+		}
 	}
 
 	private fun onEmptyStateChanged(isEmpty: Boolean) {
+		isEmptyState = isEmpty
 		viewBinding?.run {
 			pager.isGone = isEmpty
-			tabs.isGone = isEmpty
 			stubEmpty.isVisible = isEmpty
 			toggleContentType.isVisible = true
+		}
+		applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
+	}
+
+	private fun applyCategoryNavigation(options: FavouriteDisplayPreferences.Options) {
+		val binding = viewBinding ?: return
+		val hasMultipleCategories = categories.size > 1
+		binding.tabs.isVisible = !isEmptyState && hasMultipleCategories && options.showCategoryTabs
+		binding.buttonCategoryPicker.isVisible = !isEmptyState && hasMultipleCategories && !options.showCategoryTabs
+		for (index in 0 until binding.tabs.tabCount) {
+			val item = categories.getOrNull(index)
+			val badge = binding.tabs.getTabAt(index)?.badge ?: continue
+			badge.isVisible = options.showCategoryCounts && (item?.count ?: 0) > 0
+		}
+		updateCategoryPickerLabel(options)
+	}
+
+	private fun updateCategoryPickerLabel(
+		options: FavouriteDisplayPreferences.Options = displayPreferences.current(contentTypeStore.selectedType.value),
+	) {
+		val binding = viewBinding ?: return
+		val item = categories.getOrNull(binding.pager.currentItem) ?: categories.firstOrNull() ?: return
+		val title = item.title ?: getString(R.string.all_favourites)
+		binding.buttonCategoryPicker.text = if (options.showCategoryCounts) {
+			getString(
+				R.string.favourites_category_selector_with_count,
+				title,
+				item.count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT),
+			)
+		} else {
+			getString(R.string.favourites_category_selector, title)
+		}
+	}
+
+	private fun showCategoryPicker() {
+		val binding = viewBinding ?: return
+		val options = displayPreferences.current(contentTypeStore.selectedType.value)
+		PopupMenu(requireContext(), binding.buttonCategoryPicker).apply {
+			categories.forEachIndexed { index, item ->
+				val title = item.title ?: getString(R.string.all_favourites)
+				val label = if (options.showCategoryCounts) {
+					"$title • ${item.count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)}"
+				} else {
+					title
+				}
+				menu.add(Menu.NONE, index, index, label).isCheckable = true
+			}
+			menu.findItem(binding.pager.currentItem)?.isChecked = true
+			setOnMenuItemClickListener { menuItem ->
+				val index = menuItem.itemId
+				if (index !in categories.indices) return@setOnMenuItemClickListener false
+				binding.pager.setCurrentItem(index, false)
+				updateCategoryPickerLabel(options)
+				true
+			}
+			show()
 		}
 	}
 
@@ -366,6 +461,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	companion object {
 		private const val STATE_INLINE_SEARCH_ACTIVE = "favourites_inline_search_active"
 		private const val STATE_SEARCH_QUERY = "favourites_search_query"
+		private const val MAX_CATEGORY_BADGE_COUNT = 99_999
 		internal val searchScopeActive = MutableStateFlow(false)
 		internal val searchSessionActive = MutableStateFlow(false)
 		internal val searchQuery = MutableStateFlow("")
