@@ -60,6 +60,23 @@
 				app:tabGravity="start"
 				app:tabMode="scrollable" />
 
+			<com.google.android.material.button.MaterialButton
+				android:id="@+id/button_category_picker"
+				style="?attr/materialButtonOutlinedStyle"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginStart="16dp"
+				android:layout_marginTop="4dp"
+				android:layout_marginEnd="16dp"
+				android:layout_marginBottom="4dp"
+				android:gravity="start|center_vertical"
+				android:minHeight="44dp"
+				android:textAllCaps="false"
+				android:visibility="gone"
+				app:icon="@drawable/ic_expand_more"
+				app:iconGravity="textEnd"
+				tools:text="Kategori: Semua • 1250" />
+
 		</LinearLayout>
 
 		<androidx.viewpager2.widget.ViewPager2
