@@ -38,7 +38,6 @@ import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.domain.debounceFavouritesSearch
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
-import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.history.domain.MarkAsReadUseCase
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.domain.ListSortOrder
@@ -80,7 +79,6 @@ class FavouritesListViewModel @Inject constructor(
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val displayPreferences: FavouriteDisplayPreferences,
 	private val localMangaIndex: LocalMangaIndex,
-	private val historyRepository: HistoryRepository,
 	private val unreadCounter: FavouriteUnreadCounter,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
@@ -283,24 +281,39 @@ class FavouritesListViewModel @Inject constructor(
 				listOfNotNull(quickFilter.filterItem(filters), getEmptyState(true))
 			}
 		}
+
+		// Favourites owns the unread/continue/progress decorations. Load their shared history/chapter
+		// metadata once for the visible page instead of making several Room queries for every card.
+		val cardSnapshot = unreadCounter.getSnapshot(
+			mangaIds = map { it.id },
+			includeUnread = display.showUnread,
+		)
 		val result = ArrayList<ListModel>(size + 2)
 		if (isScalingTipVisible) result += uiScalingTip
 		quickFilter.filterItem(filters)?.let(result::add)
-		mangaListMapper.toListModelList(result, this, mode, MangaListMapper.NO_FAVORITE)
+		mangaListMapper.toListModelList(
+			destination = result,
+			manga = this,
+			mode = mode,
+			flags = MangaListMapper.NO_FAVORITE or MangaListMapper.NO_PROGRESS or MangaListMapper.NO_COUNTER,
+		)
 		val pinnedSet = pinned.toSet()
 		for (i in result.indices) {
 			val model = result[i]
 			if (model !is MangaListModel) continue
-			val isPinned = model.manga.id in pinnedSet
+			val mangaId = model.manga.id
+			val isPinned = mangaId in pinnedSet
 			val source = model.manga.source
-			val isSaved = display.showDownloaded && model.manga.id in localMangaIndex
+			val isSaved = display.showDownloaded && mangaId in localMangaIndex
 			val isLocalSource = display.showLocalSource && source.isLocal
 			val languageLabel = if (display.showLanguage) source.getLanguageCode() else null
-			val unreadCount = if (display.showUnread) unreadCounter.getUnreadCount(model.manga.id) else 0
-			val hasReadingHistory = display.showContinueReading && historyRepository.getOne(model.manga) != null
+			val unreadCount = if (display.showUnread) cardSnapshot.unreadCounts[mangaId] ?: 0 else 0
+			val hasReadingHistory = display.showContinueReading && cardSnapshot.hasHistory(mangaId)
+			val progress = cardSnapshot.getProgress(mangaId, settings.progressIndicatorMode)
 			result[i] = when (model) {
 				is MangaGridModel -> model.copy(
 					counter = unreadCount,
+					progress = progress,
 					isSaved = isSaved,
 					isPinned = isPinned,
 					isTitleOverCover = display.titleOverCover,
@@ -311,6 +324,7 @@ class FavouritesListViewModel @Inject constructor(
 				)
 				is MangaDetailedListModel -> model.copy(
 					counter = unreadCount,
+					progress = progress,
 					isSaved = isSaved,
 					isPinned = isPinned,
 					isLocalSource = isLocalSource,
