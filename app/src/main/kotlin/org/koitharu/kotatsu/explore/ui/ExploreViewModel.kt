@@ -27,8 +27,12 @@ import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
+import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
+import org.koitharu.kotatsu.explore.data.ExploreContentClass
+import org.koitharu.kotatsu.explore.data.ExploreContentFilter
+import org.koitharu.kotatsu.explore.data.ExploreContentPreferences
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
 import org.koitharu.kotatsu.explore.domain.ExploreRepository
 import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
@@ -61,6 +65,7 @@ class ExploreViewModel @Inject constructor(
 	private val shortcutManager: AppShortcutManager,
 	private val mihonExtensionLoader: MihonExtensionLoader,
 	private val extensionStoreManager: ExtensionStoreManager,
+	private val contentPreferences: ExploreContentPreferences,
 ) : BaseViewModel() {
 
 	val isGrid = settings.observeAsStateFlow(
@@ -68,6 +73,8 @@ class ExploreViewModel @Inject constructor(
 		scope = viewModelScope + Dispatchers.IO,
 		valueProducer = { isSourcesGridMode },
 	)
+
+	val contentFilter: StateFlow<ExploreContentFilter> = contentPreferences.filter
 
 	private val isSuggestionsEnabled = settings.observeAsFlow(
 		key = AppSettings.KEY_SUGGESTIONS,
@@ -158,6 +165,31 @@ class ExploreViewModel @Inject constructor(
 		}
 	}
 
+	fun setContentFilter(filter: ExploreContentFilter) {
+		contentPreferences.setFilter(filter)
+	}
+
+	fun setContentClassification(sources: Collection<MangaSource>, classification: ExploreContentClass?) {
+		contentPreferences.setOverride(sources, classification)
+	}
+
+	fun hasManualContentClassification(sources: Collection<MangaSource>): Boolean {
+		return sources.any(contentPreferences::hasOverride)
+	}
+
+	fun resetContentClassifications() {
+		val before = contentPreferences.resetAll()
+		if (before.isEmpty()) return
+		launchJob(Dispatchers.Default) {
+			onActionDone.call(
+				ReversibleAction(
+					R.string.explore_content_classifications_reset,
+					ReversibleHandle { contentPreferences.restore(before) },
+				),
+			)
+		}
+	}
+
 	fun hideSources(sources: Collection<MangaSource>) {
 		launchJob(Dispatchers.Default) {
 			val handle = sourcesRepository.setSourcesHidden(sources, hidden = true)
@@ -190,18 +222,36 @@ class ExploreViewModel @Inject constructor(
 		isGrid,
 		sourcesRepository.observeHasMultiLanguageSources(),
 		settings.observeAsFlow(AppSettings.KEY_TIPS_CLOSED) { isTipEnabled(TIP_LANGUAGES) },
+		contentPreferences.filter,
+		contentPreferences.overrides,
 	) { args ->
 		val allSources = args[0] as List<MangaSourceInfo>
 		val isExtensionsLoading = args[1] as Boolean
 		val isGrid = args[2] as Boolean
 		val hasMultiLanguageSources = args[3] as Boolean
 		val isLanguageTipEnabled = args[4] as Boolean
+		val contentFilter = args[5] as ExploreContentFilter
+		val contentOverrides = args[6] as Map<String, ExploreContentClass>
 		ExploreSources(
 			manga = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, false,
+				allSources,
+				isExtensionsLoading,
+				isGrid,
+				hasMultiLanguageSources,
+				isLanguageTipEnabled,
+				contentFilter,
+				contentOverrides,
+				false,
 			),
 			novel = buildSourcesPage(
-				allSources, isExtensionsLoading, isGrid, hasMultiLanguageSources, isLanguageTipEnabled, true,
+				allSources,
+				isExtensionsLoading,
+				isGrid,
+				hasMultiLanguageSources,
+				isLanguageTipEnabled,
+				contentFilter,
+				contentOverrides,
+				true,
 			),
 		)
 	}.withErrorHandling()
@@ -212,15 +262,47 @@ class ExploreViewModel @Inject constructor(
 		isGrid: Boolean,
 		hasMultiLanguageSources: Boolean,
 		isLanguageTipEnabled: Boolean,
+		contentFilter: ExploreContentFilter,
+		contentOverrides: Map<String, ExploreContentClass>,
 		isNovelShown: Boolean,
 	): List<ListModel> {
-		val result = ArrayList<ListModel>(sources.size + 2)
+		val result = ArrayList<ListModel>(sources.size + 4)
 		val shown = sources.filter { it.isNovelSource == isNovelShown }
+		val sfw = shown.filter {
+			contentPreferences.classify(it, contentOverrides) == ExploreContentClass.SFW
+		}
+		val nsfw = shown.filter {
+			contentPreferences.classify(it, contentOverrides) == ExploreContentClass.NSFW
+		}
+		val filteredShown = when (contentFilter) {
+			ExploreContentFilter.ALL -> shown
+			ExploreContentFilter.SFW -> sfw
+			ExploreContentFilter.NSFW -> nsfw
+		}
+
 		when {
-			shown.isNotEmpty() -> shown.mapTo(result) { MangaSourceItem(it, isGrid) }
-			// Novels can also come from extension APKs now, so the spinner belongs on both tabs —
-			// otherwise the novels tab claims nothing is installed while the scan is still running.
+			filteredShown.isNotEmpty() && contentFilter == ExploreContentFilter.ALL -> {
+				if (sfw.isNotEmpty()) {
+					result += ListHeader(R.string.explore_content_sfw, payload = HEADER_CONTENT_CLASSIFICATION)
+					sfw.mapTo(result) { MangaSourceItem(it, isGrid) }
+				}
+				if (nsfw.isNotEmpty()) {
+					result += ListHeader(R.string.explore_content_nsfw, payload = HEADER_CONTENT_CLASSIFICATION)
+					nsfw.mapTo(result) { MangaSourceItem(it, isGrid) }
+				}
+			}
+
+			filteredShown.isNotEmpty() -> filteredShown.mapTo(result) { MangaSourceItem(it, isGrid) }
+
 			isExtensionsLoading -> result += LoadingState
+
+			shown.isNotEmpty() -> result += EmptyState(
+				icon = R.drawable.ic_empty_common,
+				textPrimary = R.string.explore_content_filter_empty,
+				textSecondary = R.string.explore_content_filter_empty_hint,
+				actionStringRes = NO_ACTION_STRING_RES,
+			)
+
 			else -> result += EmptyState(
 				icon = R.drawable.ic_empty_common,
 				textPrimary = if (isNovelShown) {
@@ -232,8 +314,8 @@ class ExploreViewModel @Inject constructor(
 				actionStringRes = NO_ACTION_STRING_RES,
 			)
 		}
-		// Footer note: only relevant when a multi-language source is installed and not dismissed.
-		if (shown.isNotEmpty() && hasMultiLanguageSources && isLanguageTipEnabled) {
+		// Footer note: only relevant when a multi-language source is visible and not dismissed.
+		if (filteredShown.isNotEmpty() && hasMultiLanguageSources && isLanguageTipEnabled) {
 			result += TipModel(
 				key = TIP_LANGUAGES,
 				title = R.string.multi_language_sources,
@@ -268,6 +350,8 @@ class ExploreViewModel @Inject constructor(
 	}
 
 	companion object {
+
+		const val HEADER_CONTENT_CLASSIFICATION = "explore_content_classification"
 
 		private const val TIP_SUGGESTIONS = "suggestions"
 		private const val TIP_LANGUAGES = "languages_note"
