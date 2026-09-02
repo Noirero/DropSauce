@@ -31,6 +31,7 @@ import org.koitharu.kotatsu.core.util.ext.flattenLatest
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
+import org.koitharu.kotatsu.favourites.domain.FavouriteUnreadCounter
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
@@ -79,6 +80,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val displayPreferences: FavouriteDisplayPreferences,
 	private val localMangaIndex: LocalMangaIndex,
 	private val historyRepository: HistoryRepository,
+	private val unreadCounter: FavouriteUnreadCounter,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -271,9 +273,10 @@ class FavouritesListViewModel @Inject constructor(
 			val isSaved = display.showDownloaded && model.manga.id in localMangaIndex
 			val isLocalSource = display.showLocalSource && source.isLocal
 			val languageLabel = if (display.showLanguage) source.getLanguageCode() else null
+			val unreadCount = if (display.showUnread) unreadCounter.getUnreadCount(model.manga.id) else 0
 			result[i] = when (model) {
 				is MangaGridModel -> model.copy(
-					counter = if (display.showUnread) model.counter else 0,
+					counter = unreadCount,
 					isSaved = isSaved,
 					isPinned = isPinned,
 					isTitleOverCover = display.titleOverCover,
@@ -283,7 +286,7 @@ class FavouritesListViewModel @Inject constructor(
 					showContinueReading = display.showContinueReading && model.progress != null,
 				)
 				is MangaDetailedListModel -> model.copy(
-					counter = if (display.showUnread) model.counter else 0,
+					counter = unreadCount,
 					isSaved = isSaved,
 					isPinned = isPinned,
 					isLocalSource = isLocalSource,
@@ -291,7 +294,7 @@ class FavouritesListViewModel @Inject constructor(
 					showContinueReading = display.showContinueReading && model.progress != null,
 				)
 				is MangaCompactListModel -> model.copy(
-					counter = if (display.showUnread) model.counter else 0,
+					counter = unreadCount,
 					isPinned = isPinned,
 					isSaved = isSaved,
 					isLocalSource = isLocalSource,
