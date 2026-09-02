@@ -1,5 +1,7 @@
 package org.koitharu.kotatsu.settings
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -21,8 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.backup.MihonBackupExporter
@@ -37,6 +42,7 @@ import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.util.ext.checkNotificationPermission
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observeEvent
+import org.koitharu.kotatsu.core.util.ext.processLifecycleScope
 import org.koitharu.kotatsu.kotatsumigration.domain.KotatsuMigrationManager
 import org.koitharu.kotatsu.kotatsumigration.domain.MigrationState
 import org.koitharu.kotatsu.kotatsumigration.ui.KotatsuMigrationService
@@ -195,40 +201,63 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 	}
 
 	private fun runMihonRestoreJob(uri: Uri, options: Options) {
-		lifecycleScope.launch {
+		val appContext = requireContext().applicationContext
+		// OpenDocument grants a persistable URI permission. Keep it before leaving this screen so the
+		// restore can continue even if SettingsActivity/this Fragment is closed while the file is read.
+		runCatching {
+			appContext.contentResolver.takePersistableUriPermission(
+				uri,
+				Intent.FLAG_GRANT_READ_URI_PERMISSION,
+			)
+		}
+
+		// A restore is data work, not screen work. The old lifecycleScope was cancelled as soon as the
+		// user pressed Back to check Favourites, rolling the Room transaction back and surfacing
+		// CancellationException as "Job was cancelled". Keep the job alive for the app process instead.
+		processLifecycleScope.launch(Dispatchers.Main.immediate) {
 			var restoreReport: RestoreReport? = null
 			val result = runCatching {
 				restoreReport = backupManager.restoreBackup(uri, options)
 			}
+			val error = result.exceptionOrNull()
+			if (error is CancellationException) {
+				// Real process shutdown is not a restore failure the user needs to be notified about.
+				return@launch
+			}
+
 			val message = result.fold(
-				onSuccess = { getString(R.string.data_restored_success) },
-				onFailure = { it.getDisplayMessage(resources) },
+				onSuccess = { appContext.getString(R.string.data_restored_success) },
+				onFailure = { it.getDisplayMessage(appContext.resources) },
 			)
-			Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+			Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
 			if (result.isSuccess) {
-				restoreReport?.let {
-					requireContext().showExtensionInstallPromptDialog(it.missingSources)
-					showRestoreNotification(it)
+				restoreReport?.let { report ->
+					// Only open an interactive prompt while this screen still has a live Activity. The
+					// completion notification below remains available when the user has already navigated away.
+					val activeActivity = activity?.takeIf {
+						!it.isFinishing && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+					}
+					activeActivity?.showExtensionInstallPromptDialog(report.missingSources)
+					showRestoreNotification(appContext, report)
 				}
 			}
 		}
 	}
 
-	private fun showRestoreNotification(report: RestoreReport) {
-		val ctx = requireContext().applicationContext
+	private fun showRestoreNotification(ctx: Context, report: RestoreReport) {
 		val manager = NotificationManagerCompat.from(ctx)
 		val channel = NotificationChannelCompat.Builder(
 			RESTORE_CHANNEL_ID,
 			NotificationManagerCompat.IMPORTANCE_DEFAULT,
 		)
-			.setName(getString(R.string.backup_restore))
+			.setName(ctx.getString(R.string.backup_restore))
 			.setShowBadge(false)
 			.build()
 		manager.createNotificationChannel(channel)
 		if (!ctx.checkNotificationPermission(RESTORE_CHANNEL_ID)) return
 
 		val details = buildString {
-			append(getString(R.string.restore_report_restored_simple, report.restoredMangaCount))
+			append(ctx.getString(R.string.restore_report_restored_simple, report.restoredMangaCount))
 			if (report.missingSources.isNotEmpty()) {
 				append('\n')
 				append(report.missingSources.joinToString())
@@ -236,7 +265,7 @@ class BackupSettingsFragment : BaseComposeSettingsFragment(R.string.backup_resto
 		}
 		val notification = NotificationCompat.Builder(ctx, RESTORE_CHANNEL_ID)
 			.setSmallIcon(R.drawable.general_notification)
-			.setContentTitle(getString(R.string.data_restored_success))
+			.setContentTitle(ctx.getString(R.string.data_restored_success))
 			.setContentText(details)
 			.setStyle(NotificationCompat.BigTextStyle().bigText(details))
 			.setAutoCancel(true)
@@ -270,7 +299,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.create_backup),
 						subtitle = stringResource(R.string.create_backup_summary),
 						icon = R.drawable.ic_save,
-						
 						shape = pos.shape,
 						onClick = onCreateBackup,
 					)
@@ -280,7 +308,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.restore_backup),
 						subtitle = stringResource(R.string.restore_summary),
 						icon = R.drawable.ic_revert,
-						
 						shape = pos.shape,
 						onClick = onRestoreLocal,
 					)
@@ -290,7 +317,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.periodic_backups),
 						subtitle = stringResource(R.string.periodic_backups_summary),
 						icon = R.drawable.ic_backup_restore,
-						
 						shape = pos.shape,
 						onClick = onOpenPeriodic,
 					)
@@ -305,7 +331,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.restore_from_tachiyomi),
 						subtitle = stringResource(R.string.restore_tachiyomi_summary),
 						icon = R.drawable.ic_revert,
-
 						shape = pos.shape,
 						onClick = onRestoreFromTachiyomi,
 					)
@@ -315,7 +340,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.migrate_from_kotatsu),
 						subtitle = migrationSubtitle,
 						icon = R.drawable.ic_backup_restore,
-
 						shape = pos.shape,
 						onClick = onMigrateFromKotatsu,
 					)
@@ -325,7 +349,6 @@ private fun BackupScreen(
 						title = stringResource(R.string.export_to_mihon),
 						subtitle = stringResource(R.string.export_to_mihon_summary),
 						icon = R.drawable.ic_upload_file,
-
 						shape = pos.shape,
 						onClick = onExportToMihon,
 					)
