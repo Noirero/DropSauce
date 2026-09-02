@@ -28,6 +28,7 @@ import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
+import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
@@ -71,6 +72,7 @@ class FavouritesListViewModel @Inject constructor(
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
 	private val searchMatcher: FavouritesSearchMatcher,
 	private val contentTypeStore: FavouriteContentTypeStore,
+	private val displayPreferences: FavouriteDisplayPreferences,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -83,11 +85,19 @@ class FavouritesListViewModel @Inject constructor(
 	private var lastFilters: Set<ListFilterOption>? = null
 	private var lastContentType: FavouriteContentType? = null
 
+	private val activeDisplayOptions = combine(
+		contentTypeStore.selectedType,
+		displayPreferences.state,
+	) { type, state -> state.getValue(type) }.distinctUntilChanged()
+
 	private val displayState = combine(
 		FavouritesContainerFragment.searchQuery,
 		contentTypeStore.selectedType,
 		limit,
-	) { query, type, pageLimit -> DisplayState(query, type, pageLimit) }
+		displayPreferences.state,
+	) { query, type, pageLimit, preferences ->
+		DisplayState(query, type, pageLimit, preferences.getValue(type))
+	}
 
 	private val databaseLimit = combine(
 		FavouritesContainerFragment.searchQuery,
@@ -98,8 +108,29 @@ class FavouritesListViewModel @Inject constructor(
 		if (query.isBlank()) window else Int.MAX_VALUE
 	}.distinctUntilChanged()
 
-	override val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE_FAVORITES) { favoritesListMode }
-		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.favoritesListMode)
+	override val listMode: StateFlow<ListMode> = activeDisplayOptions
+		.map { it.listMode }
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			displayPreferences.current(contentTypeStore.selectedType.value).listMode,
+		)
+
+	override val gridScale: StateFlow<Float> = activeDisplayOptions
+		.map { it.gridSize / 100f }
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			displayPreferences.current(contentTypeStore.selectedType.value).gridSize / 100f,
+		)
+
+	override val gridColumns: StateFlow<Int?> = activeDisplayOptions
+		.map { it.gridColumns as Int? }
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			displayPreferences.current(contentTypeStore.selectedType.value).gridColumns,
+		)
 
 	val sortOrder: StateFlow<ListSortOrder?> = if (categoryId == NO_ID) {
 		settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) { allFavoritesSortOrder }
@@ -124,7 +155,7 @@ class FavouritesListViewModel @Inject constructor(
 		) { _, visible -> visible },
 		pinnedIds,
 		displayState,
-	) { list, mode, scalingTip, pinned, display ->
+	) { list, _, scalingTip, pinned, display ->
 		val filters = quickFilter.appliedOptions.value
 		val wantNovel = display.type == FavouriteContentType.NOVEL
 		val typed = list.filter { it.source.isNovelSource == wantNovel }
@@ -138,11 +169,12 @@ class FavouritesListViewModel @Inject constructor(
 		}
 		val visible = if (display.query.isBlank()) searched.take(display.limit) else searched
 		visible.mapList(
-			mode,
+			display.options.listMode,
 			filters,
 			pinned.takeIfDefaultState(filters),
 			scalingTip,
 			display.query.isNotBlank(),
+			display.options,
 		)
 	}.distinctUntilChanged().onEach {
 		isPaginationReady.set(true)
@@ -204,6 +236,7 @@ class FavouritesListViewModel @Inject constructor(
 		pinned: List<Long>,
 		isScalingTipVisible: Boolean,
 		isSearchActive: Boolean,
+		display: FavouriteDisplayPreferences.Options,
 	): List<ListModel> {
 		if (isEmpty()) {
 			if (isSearchActive) {
@@ -227,16 +260,19 @@ class FavouritesListViewModel @Inject constructor(
 		if (isScalingTipVisible) result += uiScalingTip
 		quickFilter.filterItem(filters)?.let(result::add)
 		mangaListMapper.toListModelList(result, this, mode, MangaListMapper.NO_FAVORITE)
-		if (pinned.isNotEmpty()) {
-			val pinnedSet = pinned.toSet()
-			for (i in result.indices) {
-				val model = result[i]
-				if (model !is MangaListModel || model.manga.id !in pinnedSet) continue
-				result[i] = when (model) {
-					is MangaGridModel -> model.copy(isPinned = true)
-					is MangaDetailedListModel -> model.copy(isPinned = true)
-					is MangaCompactListModel -> model.copy(isPinned = true)
-				}
+		val pinnedSet = pinned.toSet()
+		for (i in result.indices) {
+			val model = result[i]
+			if (model !is MangaListModel) continue
+			val isPinned = model.manga.id in pinnedSet
+			result[i] = when (model) {
+				is MangaGridModel -> model.copy(
+					isPinned = isPinned,
+					isTitleOverCover = display.titleOverCover,
+					isGridSpacingIncreased = display.gridSpacingIncreased,
+				)
+				is MangaDetailedListModel -> model.copy(isPinned = isPinned)
+				is MangaCompactListModel -> model.copy(isPinned = isPinned)
 			}
 		}
 		return result
@@ -319,5 +355,6 @@ class FavouritesListViewModel @Inject constructor(
 		val query: String,
 		val type: FavouriteContentType,
 		val limit: Int,
+		val options: FavouriteDisplayPreferences.Options,
 	)
 }
