@@ -374,4 +374,32 @@ class MangaListActivity :
 	private fun findFilterOwner(): FilterCoordinator.Owner? {
 		return supportFragmentManager.findFragmentById(R.id.container) as? FilterCoordinator.Owner
 	}
+
+	private fun setSideFragment(cls: Class<out Fragment>, args: Bundle?) = if (viewBinding.containerSide != null) {
+		supportFragmentManager.commit {
+			setReorderingAllowed(true)
+			replace(R.id.container_side, cls, args)
+		}
+		viewBinding.cardSide?.isVisible = true
+		ViewCompat.requestApplyInsets(viewBinding.root)
+		true
+	} else {
+		false
+	}
+
+	private class ApplyFilterRunnable(
+		private val filterOwner: FilterCoordinator.Owner,
+		private val filter: MangaListFilter?,
+		private val sortOrder: SortOrder?,
+	) : Runnable {
+
+		override fun run() {
+			if (sortOrder != null) {
+				filterOwner.filterCoordinator.setSortOrder(sortOrder)
+			}
+			if (filter != null) {
+				filterOwner.filterCoordinator.setAdjusted(filter)
+			}
+		}
+	}
 }
