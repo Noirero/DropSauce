@@ -83,16 +83,18 @@ fun mangaGridItemAD(
 	bind { payloads ->
 		itemView.setTooltipCompat(item.getSummary(context))
 		val baseMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
-		val visualScale = gridVisualScaleProvider?.invoke()
-		val initialMargin = visualScale?.let { scale ->
+		val visualScaleProvider = gridVisualScaleProvider
+		val initialMargin = visualScaleProvider?.invoke()?.let { scale ->
 			resolveFixedGridMargin(itemView, baseMargin, scale)
 		} ?: baseMargin
 		applyGridSizing(initialMargin)
-		if (visualScale != null) {
+		if (visualScaleProvider != null) {
 			val boundId = item.id
 			itemView.doOnLayout {
 				if (item.id != boundId) return@doOnLayout
-				applyGridSizing(resolveFixedGridMargin(itemView, baseMargin, visualScale))
+				applyGridSizing(
+					resolveFixedGridMargin(itemView, baseMargin, visualScaleProvider.invoke()),
+				)
 			}
 		}
 
