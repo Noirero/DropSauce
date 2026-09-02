@@ -18,6 +18,9 @@ class FavouritesTabConfigurationStrategy(
 		tab.text = item.title ?: tab.view.context.getString(R.string.all_favourites)
 		tab.tag = item
 		tab.getOrCreateBadge().apply {
+			// Material's default badge width abbreviates values above 999 as "999+".
+			// Allow the full category count to stay visible through 99,999 instead.
+			maxCharacterCount = 6
 			number = item.count
 			isVisible = item.count > 0
 		}
