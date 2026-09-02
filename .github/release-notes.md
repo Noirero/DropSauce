@@ -1,6 +1,7 @@
 ## Changelog 2
 
 - Source Mihon yang dibuka saat extension masih dimuat kini otomatis disambungkan kembali ke source ID yang tepat setelah pemuatan selesai; pembaruan extension juga menyegarkan layar source tanpa berpindah bahasa.
+- Alternatives kini menyimpan fallback ke Preferred Languages ketika mode Pinned tidak memiliki source, sehingga layar tidak kembali mencoba mode Pinned kosong setelah recreation.
 - Filter bahasa pada tab Ekstensi kini mengenali semua bahasa yang benar-benar tersedia di dalam satu APK multi-source, termasuk kode regional.
 - Global Search dan Alternatives menunggu pemuatan extension selesai agar tidak menampilkan hasil kosong palsu saat aplikasi baru dibuka; Alternatives juga tidak lagi menghitung dan memuat daftar source dua kali untuk satu pencarian.
 - Pemeriksaan download lama kini bersifat read-only dan tidak lagi menghapus metadata atau cover hanya karena aplikasi sedang mengecek keberadaan file.

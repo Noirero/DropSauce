@@ -261,10 +261,13 @@ class AlternativesViewModel @Inject constructor(
 				val hasPinned = alternativesUseCase.hasPinnedSources()
 				hasPinnedSourcesState.value = hasPinned
 				if (selectedMode.value == SearchSourceMode.PINNED_ONLY && !hasPinned) {
-					selectedMode.value = SearchSourceMode.PREFERRED_LANGUAGES
+					val fallbackMode = SearchSourceMode.PREFERRED_LANGUAGES
+					searchPreferences.alternativeMode = fallbackMode
+					savedStateHandle[STATE_SEARCH_MODE] = fallbackMode.name
+					selectedMode.value = fallbackMode
 					sources = alternativesUseCase.getSources(
 						ref,
-						SearchSourceMode.PREFERRED_LANGUAGES,
+						fallbackMode,
 						selectedLanguages.value,
 					)
 				}
