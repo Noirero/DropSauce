@@ -139,7 +139,7 @@ class ExtensionsSettingsFragment : BaseComposeSettingsFragment(R.string.extensio
 						showShizukuNotReadyDialog()
 					}
 					method == ExtensionInstallerMethod.PRIVATE &&
-						hadSelection && previous != ExtensionInstallerMethod.PRIVATE -> {
+						(!hadSelection || previous != ExtensionInstallerMethod.PRIVATE) -> {
 						// Reuse the catalog's existing auto-migration flow instead of inventing another one.
 						router.openSourcesCatalog(isExternalOnly = true, autoMigrate = true)
 					}
