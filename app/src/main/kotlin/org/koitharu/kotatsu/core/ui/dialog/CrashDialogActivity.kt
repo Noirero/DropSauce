@@ -15,13 +15,15 @@ import kotlinx.coroutines.withContext
 import org.acra.ReportField
 import org.acra.dialog.CrashReportDialogHelper
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.logs.CrashLogStore
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.util.ext.copyToClipboard
 
 /**
  * Replaces ACRA's stock crash dialog with the app's M3 Expressive card.
  * No report sender is configured, so the only meaningful action is putting the report
- * on the clipboard; "close" just discards the pending report.
+ * on the clipboard; "close" just discards the pending ACRA report. A private copy is retained
+ * by CrashLogStore so it can be surfaced once more after the normal app process starts again.
  */
 class CrashDialogActivity : ComponentActivity() {
 
@@ -43,7 +45,13 @@ class CrashDialogActivity : ComponentActivity() {
 			val report = withContext(Dispatchers.Default) {
 				runCatching { helper.reportData }.getOrNull()
 			}
-			showDialog(helper, report?.toJSON()?.takeIf { it.isNotEmpty() }, report?.getString(ReportField.STACK_TRACE))
+			val reportJson = report?.toJSON()?.takeIf { it.isNotEmpty() }
+			if (reportJson != null) {
+				withContext(Dispatchers.IO) {
+					runCatching { CrashLogStore.saveAcraCrash(this@CrashDialogActivity, reportJson) }
+				}
+			}
+			showDialog(helper, reportJson, report?.getString(ReportField.STACK_TRACE))
 		}
 	}
 
