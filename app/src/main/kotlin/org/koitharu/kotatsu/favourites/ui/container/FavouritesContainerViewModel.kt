@@ -3,11 +3,15 @@ package org.koitharu.kotatsu.favourites.ui.container
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
@@ -26,8 +30,10 @@ import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
+import org.koitharu.kotatsu.favourites.domain.FavouritesSearchRepository
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_TITLE
+import org.koitharu.kotatsu.favourites.domain.debounceFavouritesSearch
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import org.koitharu.kotatsu.local.data.LocalFavouritesRepository
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -38,12 +44,24 @@ class FavouritesContainerViewModel @Inject constructor(
 	private val settings: AppSettings,
 	private val favouritesRepository: FavouritesRepository,
 	private val searchMatcher: FavouritesSearchMatcher,
+	private val searchRepository: FavouritesSearchRepository,
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val localFavouritesRepository: LocalFavouritesRepository,
 	private val displayPreferences: FavouriteDisplayPreferences,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
+
+	private val searchQuery = FavouritesContainerFragment.searchQuery
+		.debounceFavouritesSearch()
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			FavouritesContainerFragment.searchQuery.value.trim(),
+		)
+
+	private val favouritesChanges = favouritesRepository.observeFavouritesChanges()
+		.onEach { searchRepository.invalidate() }
 
 	private val categoriesStateFlow = favouritesRepository.observeCategoriesForLibrary()
 		.withErrorHandling()
@@ -89,25 +107,33 @@ class FavouritesContainerViewModel @Inject constructor(
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
 	/**
-	 * Counts are computed in the background from one lightweight membership query. The old path loaded
-	 * every Manga+tags once for the whole library and then again once per category (N+1); a 16k library
-	 * spread over ~30 categories could therefore materialise hundreds of thousands of Manga objects
-	 * before the tabs appeared.
+	 * Build a cheap request first, then do the expensive scan in mapLatest. A new debounced query or DB
+	 * invalidation cancels the old calculation instead of making the user wait for stale 10k-30k scans.
 	 */
-	private val countState = combine(
+	private val countRequests = combine(
 		categoriesStateFlow.filterNotNull(),
-		favouritesRepository.observeFavouritesChanges(),
+		favouritesChanges,
 		contentTypeState,
-		FavouritesContainerFragment.searchQuery,
+		searchQuery,
 	) { list, _, state, query ->
-		val typedCategories = list.filter { contentTypeStore.isCategoryForType(it.id, state.type) }
+		CountRequest(
+			categories = list.filter { contentTypeStore.isCategoryForType(it.id, state.type) },
+			state = state,
+			query = query,
+		)
+	}
+
+	private val countState = countRequests.mapLatest { request ->
+		val typedCategories = request.categories
+		val state = request.state
+		val query = request.query
 		val key = CountKey(
 			type = state.type,
 			query = query,
 			categoryIds = typedCategories.map { it.id },
 		)
 		if (!state.showCategoryCounts) {
-			return@combine CountSnapshot(key, 0, emptyMap(), 0)
+			return@mapLatest CountSnapshot(key, 0, emptyMap(), 0)
 		}
 
 		val remote = calculateRemoteCounts(typedCategories, state.type, query)
@@ -131,7 +157,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	val categories = combine(
 		categoryStructure.filterNotNull(),
 		countState,
-		FavouritesContainerFragment.searchQuery,
+		searchQuery,
 	) { structure, snapshot, query ->
 		val expectedKey = CountKey(
 			type = structure.type,
@@ -160,7 +186,7 @@ class FavouritesContainerViewModel @Inject constructor(
 		type: FavouriteContentType,
 		query: String,
 	): RemoteCounts {
-		val memberships = favouritesRepository.getMemberships()
+		val memberships = searchRepository.getMemberships()
 		val categoryIds = typedCategories.mapTo(HashSet(typedCategories.size)) { it.id }
 		val counts = HashMap<Long, Int>(typedCategories.size)
 		val wantNovel = type == FavouriteContentType.NOVEL
@@ -168,7 +194,8 @@ class FavouritesContainerViewModel @Inject constructor(
 		if (query.isBlank()) {
 			val allIds = HashSet<Long>()
 			val sourceTypeCache = HashMap<String, Boolean>()
-			for (membership in memberships) {
+			for ((index, membership) in memberships.withIndex()) {
+				if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 				val isNovel = sourceTypeCache.getOrPut(membership.source) {
 					MangaSource(membership.source).isNovelSource
 				}
@@ -181,11 +208,15 @@ class FavouritesContainerViewModel @Inject constructor(
 			return RemoteCounts(allIds.size, counts)
 		}
 
-		// Text matching needs Manga titles/authors, so only the active search path loads full Manga
-		// objects. Category membership still comes from the single lightweight query above.
-		val allForType = favouritesRepository.getAllManga().filter { it.source.isNovelSource == wantNovel }
-		val matchingIds = searchMatcher.filter(allForType, query).mapTo(HashSet()) { it.id }
-		for (membership in memberships) {
+		// Searching category counts no longer loads every full Manga + tags. A single lightweight
+		// projection supplies just id/title/author/source, while memberships supply category ids.
+		val sourceTypeCache = HashMap<String, Boolean>()
+		val searchable = searchRepository.getEntries().filter { entry ->
+			sourceTypeCache.getOrPut(entry.source) { MangaSource(entry.source).isNovelSource } == wantNovel
+		}
+		val matchingIds = searchMatcher.matchingIds(searchable, query)
+		for ((index, membership) in memberships.withIndex()) {
+			if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 			if (membership.mangaId !in matchingIds || membership.categoryId !in categoryIds) continue
 			counts[membership.categoryId] = (counts[membership.categoryId] ?: 0) + 1
 		}
@@ -258,6 +289,12 @@ class FavouritesContainerViewModel @Inject constructor(
 		val includeLocal: Boolean,
 	)
 
+	private data class CountRequest(
+		val categories: List<FavouriteCategory>,
+		val state: ContentTypeState,
+		val query: String,
+	)
+
 	private data class CountKey(
 		val type: FavouriteContentType,
 		val query: String,
@@ -279,4 +316,8 @@ class FavouritesContainerViewModel @Inject constructor(
 		val allCount: Int,
 		val counts: Map<Long, Int>,
 	)
+
+	private companion object {
+		const val CANCELLATION_CHECK_MASK = 0xFF
+	}
 }

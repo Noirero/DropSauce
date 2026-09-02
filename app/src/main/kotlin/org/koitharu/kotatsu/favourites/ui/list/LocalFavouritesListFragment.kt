@@ -55,7 +55,7 @@ class LocalFavouritesListFragment : MangaListFragment() {
 		titleTapToRead = settings.isTitleTapToReadEnabled,
 	)
 
-	override fun onScrolledToEnd() = Unit
+	override fun onScrolledToEnd() = viewModel.requestMoreItems()
 
 	override fun onFilterClick(view: View?) {
 		router.showListSortSheet(ListConfigSection.Favorites(LOCAL_FAVOURITES_CATEGORY_ID))
