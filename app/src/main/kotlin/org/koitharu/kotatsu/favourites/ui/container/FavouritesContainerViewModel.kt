@@ -5,6 +5,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -43,6 +44,13 @@ class FavouritesContainerViewModel @Inject constructor(
 
 	private val categoriesStateFlow = favouritesRepository.observeCategoriesForLibrary()
 		.withErrorHandling()
+		// A category sort-order change only changes the manga order inside that page. Do not rebuild
+		// every tab/count for it; the page ViewModel observes the order itself and refreshes immediately.
+		.distinctUntilChanged { old, new ->
+			old.size == new.size && old.indices.all { index ->
+				old[index].id == new[index].id && old[index].title == new[index].title
+			}
+		}
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
 	private val contentTypeState = combine(
@@ -56,7 +64,9 @@ class FavouritesContainerViewModel @Inject constructor(
 	val categories = combine(
 		categoriesStateFlow.filterNotNull(),
 		observeAllFavouritesVisibility(),
-		favouritesRepository.observeCategoriesWithCovers(),
+		// We only need to know that favourites changed. Loading every cover for every category here
+		// made large libraries rebuild slowly even though this ViewModel never used those covers.
+		favouritesRepository.observeFavouritesChanges(),
 		contentTypeState,
 		FavouritesContainerFragment.searchQuery,
 	) { list, showAll, _, state, query ->

@@ -56,6 +56,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 private const val PAGE_SIZE = 16
+private const val DATABASE_WINDOW_INITIAL = PAGE_SIZE * 4
+private const val DATABASE_WINDOW_MAX = 4096
 
 @HiltViewModel
 class FavouritesListViewModel @Inject constructor(
@@ -75,13 +77,26 @@ class FavouritesListViewModel @Inject constructor(
 	private val quickFilter = quickFilterFactory.create(categoryId)
 	private val refreshTrigger = MutableStateFlow(Any())
 	private val limit = MutableStateFlow(PAGE_SIZE)
+	private val databaseWindow = MutableStateFlow(DATABASE_WINDOW_INITIAL)
 	private val isPaginationReady = AtomicBoolean(false)
+	private var lastSortOrder: ListSortOrder? = null
+	private var lastFilters: Set<ListFilterOption>? = null
+	private var lastContentType: FavouriteContentType? = null
 
 	private val displayState = combine(
 		FavouritesContainerFragment.searchQuery,
 		contentTypeStore.selectedType,
 		limit,
 	) { query, type, pageLimit -> DisplayState(query, type, pageLimit) }
+
+	private val databaseLimit = combine(
+		FavouritesContainerFragment.searchQuery,
+		databaseWindow,
+	) { query, window ->
+		// Search must remain exhaustive. Normal browsing stays windowed so hundreds of favourites are
+		// not decoded and mapped just to display the first screen.
+		if (query.isBlank()) window else Int.MAX_VALUE
+	}.distinctUntilChanged()
 
 	override val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE_FAVORITES) { favoritesListMode }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.favoritesListMode)
@@ -114,6 +129,13 @@ class FavouritesListViewModel @Inject constructor(
 		val wantNovel = display.type == FavouriteContentType.NOVEL
 		val typed = list.filter { it.source.isNovelSource == wantNovel }
 		val searched = searchMatcher.filter(typed, display.query)
+		if (display.query.isBlank()) {
+			maybeExpandDatabaseWindow(
+				loadedCount = list.size,
+				matchingCount = searched.size,
+				targetCount = display.limit,
+			)
+		}
 		val visible = if (display.query.isBlank()) searched.take(display.limit) else searched
 		visible.mapList(
 			mode,
@@ -165,7 +187,15 @@ class FavouritesListViewModel @Inject constructor(
 	}
 
 	fun requestMoreItems() {
-		if (isPaginationReady.compareAndSet(true, false)) limit.value += PAGE_SIZE
+		if (!isPaginationReady.compareAndSet(true, false)) return
+		val nextLimit = limit.value + PAGE_SIZE
+		limit.value = nextLimit
+		// Prefetch a few screens in the DB query so normal scrolling does not have to wait for a new
+		// full-library query. The mapper still receives only [nextLimit] visible items.
+		val preferredWindow = (nextLimit * 4).coerceAtMost(DATABASE_WINDOW_MAX)
+		if (databaseWindow.value < preferredWindow) {
+			databaseWindow.value = preferredWindow
+		}
 	}
 
 	private suspend fun List<Manga>.mapList(
@@ -218,32 +248,52 @@ class FavouritesListViewModel @Inject constructor(
 		settings.setPinnedFavourites(categoryId, updated)
 	}
 
-	private fun observeFavorites() = if (categoryId == NO_ID) {
-		combine(
-			sortOrder.filterNotNull(),
-			quickFilter.appliedOptions.combineWithSettings(),
-			pinnedIds,
-		) { order, filters, pinned ->
-			isPaginationReady.set(false)
-			repository.observeAll(
-				order,
-				filters,
-				Int.MAX_VALUE,
-				pinned.takeIfDefaultState(filters),
-			)
-		}.flattenLatest()
-	} else {
-		combine(
-			quickFilter.appliedOptions.combineWithSettings(),
-			pinnedIds,
-		) { filters, pinned ->
-			repository.observeAll(
-				categoryId,
-				filters,
-				Int.MAX_VALUE,
-				pinned.takeIfDefaultState(filters),
-			)
-		}.flattenLatest()
+	private fun observeFavorites() = combine(
+		sortOrder.filterNotNull(),
+		quickFilter.appliedOptions.combineWithSettings(),
+		pinnedIds,
+		databaseLimit,
+		contentTypeStore.selectedType,
+	) { order, filters, pinned, queryLimit, contentType ->
+		val configurationChanged =
+			(lastSortOrder != null && lastSortOrder != order) ||
+				(lastFilters != null && lastFilters != filters) ||
+				(lastContentType != null && lastContentType != contentType)
+		lastSortOrder = order
+		lastFilters = filters
+		lastContentType = contentType
+
+		val effectiveLimit = if (configurationChanged && queryLimit != Int.MAX_VALUE) {
+			limit.value = PAGE_SIZE
+			databaseWindow.value = DATABASE_WINDOW_INITIAL
+			DATABASE_WINDOW_INITIAL
+		} else {
+			queryLimit
+		}
+		isPaginationReady.set(false)
+		val effectivePinned = pinned.takeIfDefaultState(filters)
+		if (categoryId == NO_ID) {
+			repository.observeAll(order, filters, effectiveLimit, effectivePinned)
+		} else {
+			repository.observeAll(categoryId, order, filters, effectiveLimit, effectivePinned)
+		}
+	}.flattenLatest()
+
+	private fun maybeExpandDatabaseWindow(
+		loadedCount: Int,
+		matchingCount: Int,
+		targetCount: Int,
+	) {
+		if (matchingCount >= targetCount) return
+		val current = databaseWindow.value
+		// Fewer rows than requested means the SQL query is exhausted; another window cannot help.
+		if (loadedCount < current || current == Int.MAX_VALUE) return
+		val next = if (current >= DATABASE_WINDOW_MAX) {
+			Int.MAX_VALUE
+		} else {
+			(current * 2).coerceAtMost(DATABASE_WINDOW_MAX)
+		}
+		if (next != current) databaseWindow.value = next
 	}
 
 	private fun List<Long>.takeIfDefaultState(filters: Set<ListFilterOption>): List<Long> =
