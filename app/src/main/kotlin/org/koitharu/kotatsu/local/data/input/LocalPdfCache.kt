@@ -18,8 +18,12 @@ import kotlin.math.roundToInt
 object LocalPdfCache {
 
 	private const val CACHE_DIR_NAME = "local_pdf_pages"
-	private const val PDF_RENDER_SCALE = 4f
-	private const val MAX_RENDER_DIMENSION = 4096
+	// Rendering every page at 4x/4096px made long local PDFs spend tens of seconds in PNG deflate,
+	// increased GC pressure and could contribute to foreground ANRs while the library UI was active.
+	// 2560px is still comfortably above typical phone display resolution while cutting bitmap area,
+	// memory use and PNG compression work substantially.
+	private const val PDF_RENDER_SCALE = 2.5f
+	private const val MAX_RENDER_DIMENSION = 2560
 
 	@Synchronized
 	fun renderCover(pdf: File): File? = runCatching {
