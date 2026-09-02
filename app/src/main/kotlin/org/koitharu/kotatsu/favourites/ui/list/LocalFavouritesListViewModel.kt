@@ -3,10 +3,12 @@ package org.koitharu.kotatsu.favourites.ui.list
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
@@ -16,6 +18,7 @@ import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
+import org.koitharu.kotatsu.favourites.domain.debounceFavouritesSearch
 import org.koitharu.kotatsu.favourites.ui.container.FavouritesContainerFragment
 import org.koitharu.kotatsu.list.domain.MangaListMapper
 import org.koitharu.kotatsu.list.ui.MangaListViewModel
@@ -31,6 +34,8 @@ import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import javax.inject.Inject
 
+private const val LOCAL_SEARCH_PAGE_SIZE = 16
+
 @HiltViewModel
 class LocalFavouritesListViewModel @Inject constructor(
 	private val settings: AppSettings,
@@ -40,6 +45,22 @@ class LocalFavouritesListViewModel @Inject constructor(
 	private val mangaListMapper: MangaListMapper,
 	private val searchMatcher: FavouritesSearchMatcher,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges) {
+
+	private val limit = MutableStateFlow(LOCAL_SEARCH_PAGE_SIZE)
+	private var lastSearchQuery = FavouritesContainerFragment.searchQuery.value.trim()
+	private val searchQuery = FavouritesContainerFragment.searchQuery
+		.debounceFavouritesSearch()
+		.onEach { query ->
+			if (query != lastSearchQuery) {
+				lastSearchQuery = query
+				limit.value = LOCAL_SEARCH_PAGE_SIZE
+			}
+		}
+		.stateIn(
+			viewModelScope + Dispatchers.Default,
+			SharingStarted.Eagerly,
+			lastSearchQuery,
+		)
 
 	override val listMode = settings.observeAsFlow(AppSettings.KEY_LIST_MODE_FAVORITES) { favoritesListMode }
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, settings.favoritesListMode)
@@ -55,24 +76,25 @@ class LocalFavouritesListViewModel @Inject constructor(
 	override val content = combine(
 		localFavouritesRepository.items,
 		observeListModeWithTriggers(),
-		FavouritesContainerFragment.searchQuery,
+		searchQuery,
 		pinnedIds,
-	) { items, mode, query, pinned ->
+		limit,
+	) { items, mode, query, pinned, pageLimit ->
 		val searched = searchMatcher.filter(items.skipNsfwIfNeeded(), query)
 		val pinnedSet = pinned.toHashSet()
-		val visible = if (pinnedSet.isEmpty()) {
+		val ordered = if (pinnedSet.isEmpty()) {
 			searched
 		} else {
-			val ordered = ArrayList<org.koitharu.kotatsu.parsers.model.Manga>(searched.size)
-			for (id in pinned) {
-				searched.firstOrNull { it.id == id }?.let(ordered::add)
+			ArrayList<org.koitharu.kotatsu.parsers.model.Manga>(searched.size).also { result ->
+				for (id in pinned) {
+					searched.firstOrNull { it.id == id }?.let(result::add)
+				}
+				for (manga in searched) {
+					if (manga.id !in pinnedSet) result.add(manga)
+				}
 			}
-			for (manga in searched) {
-				if (manga.id !in pinnedSet) ordered.add(manga)
-			}
-			ordered
 		}
-		if (visible.isEmpty()) {
+		if (ordered.isEmpty()) {
 			listOf(
 				EmptyState(
 					icon = R.drawable.ic_empty_favourites,
@@ -90,6 +112,7 @@ class LocalFavouritesListViewModel @Inject constructor(
 				),
 			)
 		} else {
+			val visible = ordered.take(pageLimit)
 			ArrayList<ListModel>(visible.size).also { result ->
 				mangaListMapper.toListModelList(
 					destination = result,
@@ -131,6 +154,10 @@ class LocalFavouritesListViewModel @Inject constructor(
 	}
 
 	override fun onRetry() = onRefresh()
+
+	fun requestMoreItems() {
+		limit.value += LOCAL_SEARCH_PAGE_SIZE
+	}
 
 	fun setPinned(ids: Set<Long>, isPinned: Boolean) {
 		val current = settings.getPinnedFavourites(LOCAL_FAVOURITES_CATEGORY_ID)
