@@ -1,3 +1,4 @@
 Trigger DropSauce Noirero beta build.
-Build: chapter swipe-right read/unread toggle + EPUB translation choices + chapter delete UI refresh.
-Beta rebuild trigger: 2026-09-01 after persistent per-chapter read toggle patch.
+Requested build after Mihon browser-session fixes and crash/ANR logging hardening.
+Target app code base: 011cbf2cc51f6a9ad79d2e1b4503f277db70a71a
+Requested: 2026-09-02
