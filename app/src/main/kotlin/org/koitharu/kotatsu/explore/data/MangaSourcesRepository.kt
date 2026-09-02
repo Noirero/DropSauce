@@ -224,11 +224,21 @@ class MangaSourcesRepository @Inject constructor(
 	}
 
 	fun setMihonSourcesEnabled(sourceIds: Collection<Long>, enabled: Boolean) {
-		val updated = settings.mihonDisabledSourceIds.toMutableSet()
-		for (sourceId in sourceIds) {
+		setMihonSourceStates(sourceIds.associateWith { enabled })
+	}
+
+	/** Applies a mixed source selection with one preference write and one downstream refresh. */
+	@Synchronized
+	fun setMihonSourceStates(states: Map<Long, Boolean>) {
+		if (states.isEmpty()) return
+		val before = settings.mihonDisabledSourceIds
+		val updated = before.toMutableSet()
+		for ((sourceId, enabled) in states) {
 			if (enabled) updated.remove(sourceId.toString()) else updated.add(sourceId.toString())
 		}
-		settings.mihonDisabledSourceIds = updated
+		if (updated != before) {
+			settings.mihonDisabledSourceIds = updated
+		}
 	}
 
 	fun setMihonLanguageEnabled(language: String, enabled: Boolean) {
