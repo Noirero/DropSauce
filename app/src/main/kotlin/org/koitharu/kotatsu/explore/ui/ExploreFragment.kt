@@ -90,13 +90,11 @@ class ExploreFragment :
 
 		binding.pager.adapter = ExploreSourcesPagerAdapter(::onPageCreated)
 		binding.pager.offscreenPageLimit = 1
-		// The pager's internal list opens a *horizontal* nested scroll on every touch-down. The app bar
-		// declines it, and CoordinatorLayout keeps one accept-flag per child per gesture — so that "no"
-		// overwrites the "yes" the NestedScrollView just got, and the search bar sits still for the whole
-		// gesture. The pager has no use for nested scrolling, so switch it off.
+		// The pager's internal list opens a horizontal nested scroll on every touch-down. It does not
+		// need to participate in the app bar's nested-scroll chain.
 		binding.pager.recyclerView?.isNestedScrollingEnabled = false
-		// A zero-height pager lays out no pages at all, so nothing would ever be measured. Start at one
-		// screen and let updatePagerHeight replace it with the real content height.
+		// A zero-height pager lays out no pages at all, so start at one screen and replace it with the
+		// measured content height as soon as the extension pages are ready.
 		binding.pager.updateLayoutParams { height = resources.displayMetrics.heightPixels }
 		TabLayoutMediator(header.tabsKind, binding.pager) { tab, position ->
 			tab.setText(if (position == 1) R.string.store_kind_novel else R.string.store_kind_manga)
@@ -131,27 +129,44 @@ class ExploreFragment :
 			addItemDecoration(TypedListSpacingDecoration(context, false))
 			checkNotNull(sourceSelectionController).attachToRecyclerView(this)
 			applyLayoutManager(viewModel.isGrid.value)
-			// The empty state sizes itself one layout pass late (it centers on the display), so the height
-			// measured right after emit() can be stale. Re-measuring on every page layout is a no-op unless
-			// the height really changed.
+			// Empty/loading states can change the measured page height one pass later.
 			addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> post(::updatePagerHeight) }
 		}
 		pages[if (isNovel) 1 else 0] = recyclerView
 		viewModel.sources.observe(viewLifecycleOwner) { content ->
 			adapter.emit(content[isNovel])
-			recyclerView.post(::updatePagerHeight)
+			recyclerView.post {
+				recyclerView.resetPageScrollPosition()
+				updatePagerHeight()
+			}
 		}
 	}
 
 	private fun RecyclerView.applyLayoutManager(isGrid: Boolean) {
 		val adapter = adapter as? ExploreAdapter ?: return
 		layoutManager = if (isGrid) {
-			GridLayoutManager(context, 4).also { lm ->
+			object : GridLayoutManager(context, 4) {
+				override fun canScrollVertically(): Boolean = false
+			}.also { lm ->
 				lm.spanSizeLookup = ExploreGridSpanSizeLookup(adapter, lm)
 			}
 		} else {
-			LinearLayoutManager(context)
+			object : LinearLayoutManager(context) {
+				override fun canScrollVertically(): Boolean = false
+			}
 		}
+		resetPageScrollPosition()
+	}
+
+	/**
+	 * The source RecyclerViews are measurement-only children of the outer NestedScrollView. They must
+	 * never retain their own vertical offset: while the pager starts at one-screen height, a normal
+	 * LayoutManager can temporarily scroll the longer Manga page and keep that stale anchor after the
+	 * pager grows, which produces the large blank gap seen above the extension grid.
+	 */
+	private fun RecyclerView.resetPageScrollPosition() {
+		stopScroll()
+		(layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(0, 0)
 	}
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
@@ -189,6 +204,11 @@ class ExploreFragment :
 		}
 		if (height > 0 && binding.pager.layoutParams.height != height) {
 			binding.pager.updateLayoutParams { this.height = height }
+			// The first layout uses a temporary screen-sized pager. Once that constraint is removed, clear
+			// any anchor that RecyclerView calculated while it was clipped so item 0 stays at the top.
+			binding.pager.post {
+				pages.forEach { it?.resetPageScrollPosition() }
+			}
 		}
 	}
 
@@ -254,7 +274,7 @@ class ExploreFragment :
 	override fun onCreateActionMode(
 		controller: ListSelectionController,
 		menuInflater: MenuInflater,
-		menu: Menu
+		menu: Menu,
 	): Boolean {
 		menuInflater.inflate(R.menu.mode_source, menu)
 		return true
@@ -326,5 +346,4 @@ class ExploreFragment :
 			.create()
 			.show()
 	}
-
 }
