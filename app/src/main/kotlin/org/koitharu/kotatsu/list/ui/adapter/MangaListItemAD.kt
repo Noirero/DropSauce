@@ -3,13 +3,14 @@ package org.koitharu.kotatsu.list.ui.adapter
 import androidx.core.view.isVisible
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter
+import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 import org.koitharu.kotatsu.core.util.ext.setTooltipCompat
 import org.koitharu.kotatsu.core.util.ext.textAndVisible
 import org.koitharu.kotatsu.databinding.ItemMangaListBinding
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
-import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 
 fun mangaListItemAD(
 	clickListener: MangaDetailsClickListener,
@@ -18,7 +19,7 @@ fun mangaListItemAD(
 	{ inflater, parent -> ItemMangaListBinding.inflate(inflater, parent, false) },
 ) {
 
-	org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter(this, clickListener).attach(itemView)
+	AdapterDelegateClickListenerAdapter(this, clickListener).attach(itemView)
 	if (titleClickListener != null) {
 		binding.textViewTitle.attachTitleClickToRead(itemView) { view ->
 			titleClickListener.onItemClick(item, view)
@@ -40,10 +41,12 @@ fun mangaListItemAD(
 		binding.badge.number = item.counter
 		binding.badge.isVisible = item.counter > 0
 		binding.imageViewContinue.isVisible = item.showContinueReading
-		binding.imageViewContinue.setOnClickListener(if (item.showContinueReading) {
-			{ view -> clickListener.onReadClick(item.toMangaWithOverride(), view) }
+		if (item.showContinueReading) {
+			binding.imageViewContinue.setOnClickListener { view ->
+				clickListener.onReadClick(item.toMangaWithOverride(), view)
+			}
 		} else {
-			null
-		})
+			binding.imageViewContinue.setOnClickListener(null)
+		}
 	}
 }
