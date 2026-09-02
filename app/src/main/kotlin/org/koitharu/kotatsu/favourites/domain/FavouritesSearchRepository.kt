@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.withLock
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.favourites.data.FavouriteMembership
 import org.koitharu.kotatsu.favourites.data.FavouriteSearchEntry
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,12 +20,12 @@ class FavouritesSearchRepository @Inject constructor(
 	private val db: MangaDatabase,
 ) {
 	private val mutex = Mutex()
-	@Volatile private var generation = 0L
+	private val generation = AtomicLong(0L)
 	@Volatile private var cachedEntries: List<FavouriteSearchEntry>? = null
 	@Volatile private var cachedMemberships: List<FavouriteMembership>? = null
 
 	fun invalidate() {
-		generation++
+		generation.incrementAndGet()
 		cachedEntries = null
 		cachedMemberships = null
 	}
@@ -33,9 +34,9 @@ class FavouritesSearchRepository @Inject constructor(
 		cachedEntries?.let { return it }
 		return mutex.withLock {
 			cachedEntries?.let { return@withLock it }
-			val expectedGeneration = generation
+			val expectedGeneration = generation.get()
 			val loaded = db.getFavouritesDao().findSearchEntries()
-			if (generation == expectedGeneration) cachedEntries = loaded
+			if (generation.get() == expectedGeneration) cachedEntries = loaded
 			loaded
 		}
 	}
@@ -44,9 +45,9 @@ class FavouritesSearchRepository @Inject constructor(
 		cachedMemberships?.let { return it }
 		return mutex.withLock {
 			cachedMemberships?.let { return@withLock it }
-			val expectedGeneration = generation
+			val expectedGeneration = generation.get()
 			val loaded = db.getFavouritesDao().findMemberships()
-			if (generation == expectedGeneration) cachedMemberships = loaded
+			if (generation.get() == expectedGeneration) cachedMemberships = loaded
 			loaded
 		}
 	}
