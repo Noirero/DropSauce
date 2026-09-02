@@ -3,6 +3,9 @@ package org.koitharu.kotatsu
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,6 +22,7 @@ class KotatsuApp : BaseApp() {
 	@Volatile
 	private var recoveredCrashDialogShown = false
 	private val exitRecoveryComplete = CompletableDeferred<Unit>()
+	private var crashLogExportLauncher: ActivityResultLauncher<String>? = null
 
 	override fun onCreate() {
 		super.onCreate()
@@ -38,6 +42,36 @@ class KotatsuApp : BaseApp() {
 	}
 
 	private inner class RecoveredCrashDialogCallbacks : Application.ActivityLifecycleCallbacks {
+		override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+			if (activity !is MainActivity) return
+			// Register against MainActivity's ActivityResultRegistry before the activity starts. Using
+			// Android's CreateDocument contract lets the user choose any writable folder without broad
+			// storage permissions or exposing the private diagnostics directory through a FileProvider.
+			crashLogExportLauncher?.unregister()
+			crashLogExportLauncher = activity.activityResultRegistry.register(
+				CRASH_LOG_EXPORT_KEY,
+				ActivityResultContracts.CreateDocument("text/plain"),
+			) { uri ->
+				if (uri != null) {
+					processLifecycleScope.launch(Dispatchers.IO) {
+						val saved = CrashLogStore.exportText(activity, uri)
+						if (saved) {
+							CrashLogStore.clearPending(activity)
+						}
+						activity.runOnUiThread {
+							if (!activity.isFinishing && !activity.isDestroyed) {
+								Toast.makeText(
+									activity,
+									if (saved) "Crash log saved as .txt" else "Failed to save crash log",
+									Toast.LENGTH_SHORT,
+								).show()
+							}
+						}
+					}
+				}
+			}
+		}
+
 		override fun onActivityResumed(activity: Activity) {
 			if (recoveredCrashDialogShown || activity !is MainActivity) return
 			processLifecycleScope.launch(Dispatchers.IO) {
@@ -49,15 +83,31 @@ class KotatsuApp : BaseApp() {
 					if (recoveredCrashDialogShown || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
 					recoveredCrashDialogShown = true
 					val preview = log.take(MAX_DIALOG_LOG_CHARS).let {
-						if (log.length > it.length) "$it\n\n… Full log is available through Copy details." else it
+						if (log.length > it.length) {
+							"$it\n\n… Full log is available through Copy text or Save .txt."
+						} else {
+							it
+						}
 					}
 					buildAlertDialog(activity) {
 						setTitle(R.string.error_occurred)
 						setMessage(preview)
 						setCancelable(false)
-						setPositiveButton(R.string.copy_details) { _, _ ->
+						setPositiveButton("Copy text") { _, _ ->
 							activity.copyToClipboard(activity.getString(R.string.error_details), log)
 							CrashLogStore.clearPending(activity)
+						}
+						setNeutralButton("Save .txt") { _, _ ->
+							val launcher = crashLogExportLauncher
+							if (launcher == null) {
+								Toast.makeText(activity, "Unable to open file picker", Toast.LENGTH_SHORT).show()
+							} else {
+								runCatching {
+									launcher.launch(CrashLogStore.suggestedTextFileName())
+								}.onFailure {
+									Toast.makeText(activity, "Unable to open file picker", Toast.LENGTH_SHORT).show()
+								}
+							}
 						}
 						setNegativeButton(R.string.close) { _, _ ->
 							CrashLogStore.clearPending(activity)
@@ -67,15 +117,21 @@ class KotatsuApp : BaseApp() {
 			}
 		}
 
-		override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
 		override fun onActivityStarted(activity: Activity) = Unit
 		override fun onActivityPaused(activity: Activity) = Unit
 		override fun onActivityStopped(activity: Activity) = Unit
 		override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-		override fun onActivityDestroyed(activity: Activity) = Unit
+
+		override fun onActivityDestroyed(activity: Activity) {
+			if (activity is MainActivity) {
+				crashLogExportLauncher?.unregister()
+				crashLogExportLauncher = null
+			}
+		}
 	}
 
 	private companion object {
 		const val MAX_DIALOG_LOG_CHARS = 12_000
+		const val CRASH_LOG_EXPORT_KEY = "recovered_crash_log_export"
 	}
 }
