@@ -52,11 +52,10 @@ object CrashLogStore {
 			.maxByOrNull { it.timestamp }
 			?: return
 
-		val marker = markerFile(context)
-		val lastSeen = marker.takeIf(File::isFile)?.readText()?.trim()?.toLongOrNull() ?: 0L
+		val lastSeen = runCatching {
+			markerFile(context).takeIf(File::isFile)?.readText()?.trim()?.toLongOrNull() ?: 0L
+		}.getOrDefault(0L)
 		if (exit.timestamp <= lastSeen) return
-		marker.parentFile?.mkdirs()
-		marker.writeText(exit.timestamp.toString())
 
 		val type = when (exit.reason) {
 			android.app.ApplicationExitInfo.REASON_ANR -> "Freeze / ANR"
@@ -83,28 +82,38 @@ object CrashLogStore {
 				append(trace)
 			}
 		}
-		writeLog(context, text)
+
+		// Mark the system exit as consumed only after the report itself was persisted. If storage is
+		// temporarily unavailable, the same exit can be recovered again on a later app launch.
+		if (writeLog(context, text)) {
+			runCatching {
+				markerFile(context).apply { parentFile?.mkdirs() }.writeText(exit.timestamp.toString())
+			}
+		}
 	}
 
-	fun pendingLog(context: Context): String? = pendingFile(context)
-		.takeIf(File::isFile)
-		?.let { runCatching { it.readText() }.getOrNull() }
-		?.takeIf { it.isNotBlank() }
+	fun pendingLog(context: Context): String? = runCatching {
+		pendingFile(context)
+			.takeIf(File::isFile)
+			?.readText()
+	}.getOrNull()?.takeIf { it.isNotBlank() }
 
 	fun clearPending(context: Context) {
-		pendingFile(context).delete()
+		runCatching { pendingFile(context).delete() }
 	}
 
-	fun lastLog(context: Context): String? = lastLogFile(context)
-		.takeIf(File::isFile)
-		?.let { runCatching { it.readText() }.getOrNull() }
-		?.takeIf { it.isNotBlank() }
+	fun lastLog(context: Context): String? = runCatching {
+		lastLogFile(context)
+			.takeIf(File::isFile)
+			?.readText()
+	}.getOrNull()?.takeIf { it.isNotBlank() }
 
-	private fun writeLog(context: Context, text: String) {
+	private fun writeLog(context: Context, text: String): Boolean = runCatching {
 		val dir = File(context.filesDir, DIRECTORY).apply { mkdirs() }
 		File(dir, LAST_LOG).writeText(text)
 		File(dir, PENDING_LOG).writeText(text)
-	}
+		true
+	}.getOrDefault(false)
 
 	private fun pendingFile(context: Context) = File(File(context.filesDir, DIRECTORY), PENDING_LOG)
 	private fun lastLogFile(context: Context) = File(File(context.filesDir, DIRECTORY), LAST_LOG)
