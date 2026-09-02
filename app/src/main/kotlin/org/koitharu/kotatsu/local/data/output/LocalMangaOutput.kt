@@ -102,10 +102,28 @@ sealed class LocalMangaOutput(
 
 		private suspend fun findLegacy(root: File, manga: Manga, format: DownloadFormat): LocalMangaOutput? {
 			val isNovel = manga.source.isNovelSource
+			val downloadsRoot = File(root, DOWNLOADS_DIR_NAME)
+			val contentRoot = if (isNovel) File(downloadsRoot, NOVEL_DIR_NAME) else downloadsRoot
 			val legacyContentRoot = if (isNovel) File(root, NOVEL_DIR_NAME) else root
-			val legacySourceRoot = getSourceDirectory(legacyContentRoot, manga)
-			return getImpl(legacySourceRoot, manga, onlyIfExists = true, format = format)
-				?: if (legacySourceRoot != root) getImpl(root, manga, onlyIfExists = true, format = format) else null
+			val candidates = LinkedHashSet<File>()
+
+			// v0.9.500091-style source folder beneath the current downloads root, without a
+			// language suffix. Existing files stay where they are and remain writable.
+			candidates += getLegacySourceDirectories(contentRoot, manga)
+			getPreviousLanguageSourceDirectory(contentRoot, manga)?.let(candidates::add)
+
+			// Layouts used before the dedicated `downloads` root was introduced. Try both the
+			// language-aware name and the original source-only name.
+			candidates += getSourceDirectory(legacyContentRoot, manga)
+			candidates += getLegacySourceDirectories(legacyContentRoot, manga)
+			getPreviousLanguageSourceDirectory(legacyContentRoot, manga)?.let(candidates::add)
+			candidates += legacyContentRoot
+			if (legacyContentRoot != root) candidates += root
+
+			for (candidate in candidates) {
+				getImpl(candidate, manga, onlyIfExists = true, format = format)?.let { return it }
+			}
+			return null
 		}
 
 		/** Returns a readable source directory, e.g. `Doujindesu (ID)` or `KDT Novels (JP)`. */
@@ -114,16 +132,42 @@ sealed class LocalMangaOutput(
 			if (source !is MihonMangaSource) {
 				return root
 			}
+			return File(root, mihonSourceDirectoryName(source.displayName, source.language).toReadableFileName())
+		}
+
+		internal fun stableSourceLanguageCode(language: String): String = language
+			.trim()
+			.replace('_', '-')
+			.uppercase(Locale.ROOT)
+			.ifEmpty { "OTHER" }
+
+		internal fun mihonSourceDirectoryName(displayName: String, language: String): String {
+			return "${mihonSourceBaseName(displayName, language)} (${stableSourceLanguageCode(language)})"
+		}
+
+		internal fun mihonSourceBaseName(displayName: String, language: String): String {
+			val rawLanguage = language.trim()
+			if (rawLanguage.isEmpty()) return displayName.trim()
+			val escaped = Regex.escape(rawLanguage.replace('_', '-'))
+			val suffix = Regex("(?:[_\\s]+$escaped|\\s*\\($escaped\\))[_\\s]*$", RegexOption.IGNORE_CASE)
+			return displayName.replace(suffix, "").trim(' ', '_').ifEmpty { displayName.trim() }
+		}
+
+		private fun getLegacySourceDirectories(root: File, manga: Manga): List<File> {
+			val source = manga.source.unwrap() as? MihonMangaSource ?: return listOf(root)
+			val rawName = source.displayName.toReadableFileName()
+			val baseName = mihonSourceBaseName(source.displayName, source.language).toReadableFileName()
+			return linkedSetOf(rawName, baseName).map { File(root, it) }
+		}
+
+		private fun getPreviousLanguageSourceDirectory(root: File, manga: Manga): File? {
+			val source = manga.source.unwrap() as? MihonMangaSource ?: return null
 			val language = source.language.trim().uppercase(Locale.ROOT)
 			val displayName = source.displayName
 				.replace(Regex("[_\\s]+${Regex.escape(language)}[_\\s]*$", RegexOption.IGNORE_CASE), "")
 				.trim(' ', '_')
-			val sourceName = if (language.isNotEmpty()) {
-				"$displayName ($language)"
-			} else {
-				displayName
-			}
-			return File(root, sourceName.toReadableFileName())
+			val name = if (language.isNotEmpty()) "$displayName ($language)" else displayName
+			return File(root, name.toReadableFileName())
 		}
 
 		private suspend fun getImpl(

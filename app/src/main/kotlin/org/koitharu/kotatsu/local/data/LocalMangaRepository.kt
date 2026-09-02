@@ -366,7 +366,7 @@ class LocalMangaRepository @Inject constructor(
 			children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
 				when {
 					child.isDirectory && child.name == LocalMangaOutput.NOVEL_DIR_NAME -> scanNovelRoot(child, result)
-					child.isDirectory && File(child, LocalMangaOutput.SOURCE_DIR_MARKER).isFile -> child.withChildren { mangaDirs ->
+					child.isDirectory && child.isDownloadSourceDirectory() -> child.withChildren { mangaDirs ->
 						mangaDirs.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
 					}
 					else -> result.add(child)
@@ -395,6 +395,27 @@ class LocalMangaRepository @Inject constructor(
 			}
 			else -> result.add(child)
 		}
+	}
+
+	/**
+	 * Source folders created before [LocalMangaOutput.SOURCE_DIR_MARKER] are detected from their
+	 * children. This keeps `downloads/SourceName/Title/Chapter.cbz` visible without mistaking a
+	 * normal title folder (whose chapter archives are direct children) for a source folder.
+	 */
+	private fun File.isDownloadSourceDirectory(): Boolean {
+		if (File(this, LocalMangaOutput.SOURCE_DIR_MARKER).isFile) return true
+		return withChildren { titles ->
+			titles.any { title ->
+				title.isDirectory && title.withChildren { artifacts ->
+					artifacts.any { it.isFile && it.isSupportedDownloadArtifact() }
+				}
+			}
+		}
+	}
+
+	private fun File.isSupportedDownloadArtifact(): Boolean = when (extension.lowercase(Locale.ROOT)) {
+		"cbz", "zip", "epub", "pdf" -> true
+		else -> false
 	}
 
 	private fun Collection<LocalManga>.unwrap(): List<Manga> = map { it.manga }
