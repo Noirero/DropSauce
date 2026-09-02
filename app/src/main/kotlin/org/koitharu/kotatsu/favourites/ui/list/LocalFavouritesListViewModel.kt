@@ -117,7 +117,6 @@ class LocalFavouritesListViewModel @Inject constructor(
 	)
 
 	init {
-		onRefresh()
 		viewModelScope.launch {
 			localStorageChanges.collect {
 				localFavouritesRepository.refresh()
