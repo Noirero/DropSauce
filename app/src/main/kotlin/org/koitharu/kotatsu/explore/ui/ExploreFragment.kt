@@ -39,6 +39,7 @@ import org.koitharu.kotatsu.core.util.ext.recyclerView
 import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
 import org.koitharu.kotatsu.databinding.FragmentExploreBinding
+import org.koitharu.kotatsu.explore.data.ExploreContentClass
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreAdapter
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreListEventListener
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
@@ -100,7 +101,7 @@ class ExploreFragment :
 			tab.setText(if (position == 1) R.string.store_kind_novel else R.string.store_kind_manga)
 		}.attach()
 		actionModeDelegate.addListener(this)
-		addMenuProvider(ExploreMenuProvider(router))
+		addMenuProvider(ExploreMenuProvider(router, viewModel))
 		viewModel.headerContent.observe(viewLifecycleOwner, headerAdapter)
 		viewModel.hasExtensionUpdates.observe(viewLifecycleOwner) { hasUpdates ->
 			manageBadge = header.buttonManage.bindBadge(manageBadge, if (hasUpdates) "" else null)
@@ -231,10 +232,10 @@ class ExploreFragment :
 	}
 
 	override fun onListHeaderClick(item: ListHeader, view: View) {
-		if (item.payload == R.id.nav_suggestions) {
-			router.openSuggestions()
-		} else {
-			router.openSourcesCatalog(isExternalOnly = true)
+		when (item.payload) {
+			R.id.nav_suggestions -> router.openSuggestions()
+			ExploreViewModel.HEADER_CONTENT_CLASSIFICATION -> Unit
+			else -> router.openSourcesCatalog(isExternalOnly = true)
 		}
 	}
 
@@ -287,6 +288,10 @@ class ExploreFragment :
 		menu.findItem(R.id.action_shortcut)?.isVisible = isSingleSelection
 		menu.findItem(R.id.action_pin)?.isVisible = selectedSources.all { !it.isPinned }
 		menu.findItem(R.id.action_unpin)?.isVisible = selectedSources.all { it.isPinned }
+		menu.findItem(R.id.action_mark_sfw)?.isVisible = selectedSources.isNotEmpty()
+		menu.findItem(R.id.action_mark_nsfw)?.isVisible = selectedSources.isNotEmpty()
+		menu.findItem(R.id.action_reset_content_classification)?.isVisible =
+			viewModel.hasManualContentClassification(selectedSources)
 		menu.findItem(R.id.action_disable)?.isVisible = false
 		menu.findItem(R.id.action_delete)?.isVisible = false
 		return super.onPrepareActionMode(controller, mode, menu)
@@ -317,6 +322,21 @@ class ExploreFragment :
 
 			R.id.action_unpin -> {
 				viewModel.setSourcesPinned(selectedSources, isPinned = false)
+				mode?.finish()
+			}
+
+			R.id.action_mark_sfw -> {
+				viewModel.setContentClassification(selectedSources, ExploreContentClass.SFW)
+				mode?.finish()
+			}
+
+			R.id.action_mark_nsfw -> {
+				viewModel.setContentClassification(selectedSources, ExploreContentClass.NSFW)
+				mode?.finish()
+			}
+
+			R.id.action_reset_content_classification -> {
+				viewModel.setContentClassification(selectedSources, null)
 				mode?.finish()
 			}
 
