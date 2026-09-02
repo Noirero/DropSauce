@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.core.logs
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import java.io.BufferedReader
 import java.io.File
@@ -107,6 +108,26 @@ object CrashLogStore {
 			.takeIf(File::isFile)
 			?.readText()
 	}.getOrNull()?.takeIf { it.isNotBlank() }
+
+	/**
+	 * Writes the complete recovered report to a user-selected document Uri as UTF-8 text.
+	 * Prefer the pending report shown in the dialog, then fall back to the retained last report.
+	 */
+	fun exportText(context: Context, uri: Uri): Boolean {
+		val text = pendingLog(context) ?: lastLog(context) ?: return false
+		return runCatching {
+			val stream = context.contentResolver.openOutputStream(uri, "wt") ?: return@runCatching false
+			stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+				writer.write(text)
+			}
+			true
+		}.getOrDefault(false)
+	}
+
+	fun suggestedTextFileName(): String {
+		val suffix = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+		return "DropSauce-Beta-crash-log-$suffix.txt"
+	}
 
 	private fun writeLog(context: Context, text: String): Boolean = runCatching {
 		val dir = File(context.filesDir, DIRECTORY).apply { mkdirs() }
