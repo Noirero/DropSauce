@@ -33,6 +33,13 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 	@Query("SELECT * FROM favourites WHERE deleted_at = 0 GROUP BY manga_id ORDER BY created_at DESC")
 	abstract suspend fun findAll(): List<FavouriteManga>
 
+	@Query(
+		"SELECT favourites.manga_id AS manga_id, favourites.category_id AS category_id, manga.source AS source " +
+			"FROM favourites INNER JOIN manga ON manga.manga_id = favourites.manga_id " +
+			"WHERE favourites.deleted_at = 0",
+	)
+	abstract suspend fun findMemberships(): List<FavouriteMembership>
+
 	@Transaction
 	@Query("SELECT * FROM favourites WHERE deleted_at = 0 GROUP BY manga_id ORDER BY created_at DESC LIMIT :limit")
 	abstract suspend fun findLast(limit: Int): List<FavouriteManga>
