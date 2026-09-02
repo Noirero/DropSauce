@@ -11,12 +11,12 @@ private const val FAVOURITES_SEARCH_DEBOUNCE_MS = 250L
 /**
  * Shared search-input policy for the Favourites container and its pages.
  *
- * The raw EditText state remains immediate, but expensive filtering/counting waits briefly while the
- * user is still typing. Clearing the query is immediate so leaving search never leaves stale results
- * visible. Trimming here also prevents whitespace-only edits from re-running a large-library search.
+ * The raw EditText state remains immediate, while expensive filtering/counting waits briefly as the
+ * user types. Trimming and distinctUntilChanged prevent whitespace-only/repeated text from re-running
+ * a large-library search.
  */
 @OptIn(FlowPreview::class)
 fun Flow<String>.debounceFavouritesSearch(): Flow<String> =
 	map { it.trim() }
-		.debounce { query -> if (query.isEmpty()) 0L else FAVOURITES_SEARCH_DEBOUNCE_MS }
 		.distinctUntilChanged()
+		.debounce(FAVOURITES_SEARCH_DEBOUNCE_MS)
