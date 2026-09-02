@@ -4,24 +4,27 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.AdapterListUpdateCallback
 import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.AsyncListDiffer
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.FlowCollector
+import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.util.ContinuationResumeRunnable
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment
 import org.koitharu.kotatsu.favourites.ui.list.LocalFavouritesListFragment
-import org.koitharu.kotatsu.list.ui.ListModelDiffCallback
 import kotlin.coroutines.suspendCoroutine
 
-class FavouritesContainerAdapter(fragment: Fragment) : FragmentStateAdapter(fragment),
-	FlowCollector<List<FavouriteTabModel>> {
+class FavouritesContainerAdapter(
+	private val fragment: Fragment,
+) : FragmentStateAdapter(fragment), FlowCollector<List<FavouriteTabModel>> {
 
 	private val differ = AsyncListDiffer(
 		AdapterListUpdateCallback(this),
-		AsyncDifferConfig.Builder(ListModelDiffCallback<FavouriteTabModel>())
+		AsyncDifferConfig.Builder(FavouriteTabDiffCallback)
 			.setBackgroundThreadExecutor(Dispatchers.Default.limitedParallelism(2).asExecutor())
 			.build(),
 	)
@@ -46,8 +49,44 @@ class FavouritesContainerAdapter(fragment: Fragment) : FragmentStateAdapter(frag
 	}
 
 	override suspend fun emit(value: List<FavouriteTabModel>) = suspendCoroutine { cont ->
-		differ.submitList(value, ContinuationResumeRunnable(cont))
+		differ.submitList(value) {
+			// Count-only changes are deliberately excluded from the ViewPager diff below. Rebuilding
+			// tabs for every count update makes TabLayoutMediator recreate every Material badge and can
+			// monopolize the main thread on large/active libraries. Update the already attached badges
+			// directly instead; visibility remains controlled by FavouritesContainerFragment settings.
+			updateTabBadgeNumbers(value)
+			ContinuationResumeRunnable(cont).run()
+		}
 	}
 
 	fun getItem(position: Int): FavouriteTabModel = differ.currentList[position]
+
+	private fun updateTabBadgeNumbers(items: List<FavouriteTabModel>) {
+		val tabs = fragment.view?.findViewById<TabLayout>(R.id.tabs) ?: return
+		if (tabs.tabCount != items.size) return
+		for (index in items.indices) {
+			val badge = tabs.getTabAt(index)?.badge ?: continue
+			val count = items[index].count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)
+			if (badge.number != count) {
+				badge.number = count
+			}
+		}
+	}
+
+	private object FavouriteTabDiffCallback : DiffUtil.ItemCallback<FavouriteTabModel>() {
+
+		override fun areItemsTheSame(oldItem: FavouriteTabModel, newItem: FavouriteTabModel): Boolean {
+			return oldItem.id == newItem.id
+		}
+
+		override fun areContentsTheSame(oldItem: FavouriteTabModel, newItem: FavouriteTabModel): Boolean {
+			// Count changes do not alter ViewPager structure/content. They are applied directly to badges
+			// after the differ commits the new list, avoiding TabLayoutMediator's full tab repopulation.
+			return oldItem.id == newItem.id && oldItem.title == newItem.title
+		}
+	}
+
+	private companion object {
+		const val MAX_CATEGORY_BADGE_COUNT = 99_999
+	}
 }
