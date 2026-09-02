@@ -74,7 +74,18 @@ object BackupOperationTracker {
 		@StringRes stageRes: Int,
 		progress: Progress = Progress.INDETERMINATE,
 	) {
-		update(kind, progress, stageRes)
+		val current = mutableState.value as? State.Running
+		val effectiveProgress = if (kind == Kind.MIHON_RESTORE && progress.total == LEGACY_MIHON_STAGE_TOTAL) {
+			// The Mihon screen used to report only two coarse stages (1/2 and 2/2). Once exact chapter
+			// progress is available, keep it across the favourites-verification stage instead of
+			// replacing e.g. 14000/14000 with 2/2. Before chapter counting starts, stay indeterminate.
+			current?.takeIf { it.kind == kind }?.progress
+				?.takeUnless { it.isIndeterminate }
+				?: Progress.INDETERMINATE
+		} else {
+			progress
+		}
+		update(kind, effectiveProgress, stageRes)
 	}
 
 	fun success(kind: Kind, details: String? = null) {
@@ -146,4 +157,6 @@ object BackupOperationTracker {
 			"$file — ${frame.className}.${frame.methodName}"
 		}
 	}
+
+	private const val LEGACY_MIHON_STAGE_TOTAL = 2
 }

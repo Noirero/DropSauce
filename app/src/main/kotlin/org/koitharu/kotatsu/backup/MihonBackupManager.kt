@@ -38,6 +38,7 @@ import org.koitharu.kotatsu.core.db.entity.TagEntity
 import org.koitharu.kotatsu.core.exceptions.BadBackupFormatException
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.SourceSettings
+import org.koitharu.kotatsu.core.util.progress.Progress
 import org.koitharu.kotatsu.favourites.data.FavouriteCategoryEntity
 import org.koitharu.kotatsu.favourites.data.FavouriteEntity
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
@@ -334,6 +335,12 @@ class MihonBackupManager @Inject constructor(
     categoryResolver: CategoryResolver,
   ) {
     val now = System.currentTimeMillis()
+    val totalChapters = backup.backupManga.sumOf { it.chapters.size }
+    BackupOperationTracker.update(
+      BackupOperationTracker.Kind.MIHON_RESTORE,
+      if (totalChapters > 0) Progress(0, totalChapters) else Progress.INDETERMINATE,
+      R.string.backup_operation_restoring,
+    )
 
     val pending = backup.backupManga.map { item ->
       val sourceName = resolveStoredSourceName(item.source, backup.backupSources)
@@ -576,7 +583,21 @@ class MihonBackupManager @Inject constructor(
       }
     }
     pending.forEach { item -> item.favourites.forEach { db.getFavouritesDao().upsert(it) } }
-    pending.forEach { item -> restoreChapters(item.manga.id, item.chapters) }
+
+    var restoredChapterCount = 0
+    pending.forEach { item ->
+      restoreChapters(item.manga.id, item.chapters)
+      if (totalChapters > 0) {
+        repeat(item.chapters.size) {
+          restoredChapterCount += 1
+          BackupOperationTracker.update(
+            BackupOperationTracker.Kind.MIHON_RESTORE,
+            Progress(restoredChapterCount, totalChapters),
+            R.string.backup_operation_restoring,
+          )
+        }
+      }
+    }
 
     // Never move a user backwards when they restore an older backup onto an installation that has
     // since been read further. This mirrors Mihon's merge-oriented restore behavior instead of
