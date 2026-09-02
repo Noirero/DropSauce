@@ -5,10 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.webkit.CookieManager
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
+import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.InteractiveActionRequiredException
@@ -17,9 +19,9 @@ import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
+import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
-
-import android.webkit.CookieManager
+import org.koitharu.kotatsu.parsers.util.nullIfEmpty
 
 @AndroidEntryPoint
 class BrowserActivity : BaseBrowserActivity() {
@@ -27,6 +29,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	private var successCookieUrl: String? = null
 	private var successCookieName: String? = null
 	private var initialCookieValue: String? = null
+	private var sourceHeaders: Map<String, String> = emptyMap()
 
 	override fun onCreate2(savedInstanceState: Bundle?, source: MangaSource, repository: MangaRepository?) {
 		successCookieUrl = intent?.getStringExtra(AppRouter.KEY_SUCCESS_COOKIE_URL)
@@ -35,8 +38,33 @@ class BrowserActivity : BaseBrowserActivity() {
 			initialCookieValue = getCookieValue(successCookieUrl!!, successCookieName!!)
 		}
 
+		// Mihon opens a source WebView with the source's own HttpSource headers. Some sites bind
+		// authenticated sessions / anti-bot cookies to those headers (especially User-Agent), so a
+		// generic WebView session may successfully log in but still be rejected by chapter requests.
+		sourceHeaders = getSourceHeaders(source)
+		val explicitUserAgent = intent?.getStringExtra(AppRouter.KEY_USER_AGENT)?.nullIfEmpty()
+		val sourceUserAgent = sourceHeaders.entries
+			.firstOrNull { it.key.equals("user-agent", ignoreCase = true) }
+			?.value
+			?.nullIfEmpty()
+		val effectiveUserAgent = explicitUserAgent ?: sourceUserAgent
+		if (effectiveUserAgent != null) {
+			viewBinding.webView.settings.userAgentString = effectiveUserAgent
+			// Explicit challenge UAs must win over the source header as well as WebView settings.
+			if (explicitUserAgent != null) {
+				val headers = sourceHeaders.toMutableMap()
+				val existingKey = headers.keys.firstOrNull { it.equals("user-agent", ignoreCase = true) }
+				if (existingKey != null) {
+					headers[existingKey] = explicitUserAgent
+				} else {
+					headers["User-Agent"] = explicitUserAgent
+				}
+				sourceHeaders = headers
+			}
+		}
+
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = true)
-		viewBinding.webView.webViewClient = BrowserClient(this, adBlock)
+		viewBinding.webView.webViewClient = BrowserClient(this, adBlock, sourceHeaders)
 		lifecycleScope.launch {
 			try {
 				proxyProvider.applyWebViewConfig()
@@ -53,7 +81,11 @@ class BrowserActivity : BaseBrowserActivity() {
 						intent?.getStringExtra(AppRouter.KEY_TITLE) ?: getString(R.string.loading_),
 						url,
 					)
-					viewBinding.webView.loadUrl(url)
+					if (sourceHeaders.isEmpty()) {
+						viewBinding.webView.loadUrl(url)
+					} else {
+						viewBinding.webView.loadUrl(url, sourceHeaders)
+					}
 				}
 			}
 		}
@@ -82,18 +114,36 @@ class BrowserActivity : BaseBrowserActivity() {
 		else -> super.onOptionsItemSelected(item)
 	}
 
+	override fun onPause() {
+		// AndroidCookieJar used by Mihon extensions reads from this same CookieManager. Persist the
+		// login before the detail/reader screen resumes so the very next image request sees it.
+		CookieManager.getInstance().flush()
+		super.onPause()
+	}
+
 	override fun finish() {
+		CookieManager.getInstance().flush()
 		if (successCookieUrl != null && successCookieName != null) {
-			// Flush before reading so cookies the WebView just set are visible.
-			CookieManager.getInstance().flush()
 			val currentValue = getCookieValue(successCookieUrl!!, successCookieName!!)
 			// Don't require the value to *change* — the user may have renewed a cookie that
-			// already existed but was invalid, producing the same token.  Just check it exists.
+			// already existed but was invalid, producing the same token. Just check it exists.
 			setResult(if (!currentValue.isNullOrBlank()) RESULT_OK else RESULT_CANCELED)
 		} else {
 			setResult(RESULT_OK)
 		}
 		super.finish()
+	}
+
+	private fun getSourceHeaders(source: MangaSource): Map<String, String> {
+		val httpSource = (source as? MihonMangaSource)?.catalogueSource as? HttpSource
+			?: return emptyMap()
+		return runCatching {
+			httpSource.headers
+				.toMultimap()
+				.mapValues { (_, values) -> values.firstOrNull().orEmpty() }
+		}.onFailure {
+			it.printStackTraceDebug()
+		}.getOrDefault(emptyMap())
 	}
 
 	private fun getCookieValue(url: String, cookieName: String): String? {
