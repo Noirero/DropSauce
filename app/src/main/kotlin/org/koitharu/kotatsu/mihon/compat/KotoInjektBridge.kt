@@ -26,6 +26,7 @@ import org.koitharu.kotatsu.core.network.CommonHeadersInterceptor
 import org.koitharu.kotatsu.core.network.GZipInterceptor
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.core.network.RateLimitInterceptor
+import org.koitharu.kotatsu.core.network.UserAgentManager
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.network.webview.WebViewExecutor
 import org.koitharu.kotatsu.parsers.network.UserAgents
@@ -127,7 +128,7 @@ class KotoInjektBridge @Inject constructor(
 	@ApplicationContext private val context: Context,
 	@MangaHttpClient private val httpClient: OkHttpClient,
 	private val webViewExecutor: WebViewExecutor,
-	private val settings: AppSettings,
+	private val userAgentManager: UserAgentManager,
 ) {
 	@Volatile
 	private var initialized = false
@@ -144,11 +145,10 @@ class KotoInjektBridge @Inject constructor(
 			context = context,
 			baseClient = httpClient,
 			androidCookieJar = androidCookieJar,
-			// Cloudflare binds cf_clearance to the UA that earned it.  configureForParser()
-			// strips "Version/x.x" and normalises the device string in the WebView UA, so
-			// OkHttp must use the same transformed UA or cf_clearance will be rejected.
+			// Cloudflare binds cf_clearance to the UA that earned it. Keep OkHttp and Mihon's
+			// challenge WebView on the same live UA; Random stays fixed for the app session.
 			userAgentProvider = {
-				val base = settings.mihonUserAgentOverride
+				val base = userAgentManager.effectiveOverride
 					?: webViewExecutor.defaultUserAgent
 					?: AppSettings.DEFAULT_MIHON_USER_AGENT
 				base
@@ -180,7 +180,7 @@ class KotoInjektBridge @Inject constructor(
 				// HttpSource.client; returning Kotatsu's native client reintroduces the global limiter.
 				addSingletonFactory<OkHttpClient> { networkHelper.client }
 				addSingletonFactory<CookieJar> { networkHelper.client.cookieJar }
-				// AndroidCookieJar wraps Android's system CookieManager.  Extensions that do
+				// AndroidCookieJar wraps Android's system CookieManager. Extensions that do
 				// `val cookieManager: AndroidCookieJar by injectLazy()` (e.g. for custom CF
 				// interceptors) need this registration or they crash with a missing-binding error.
 				addSingletonFactory<AndroidCookieJar> { androidCookieJar }
