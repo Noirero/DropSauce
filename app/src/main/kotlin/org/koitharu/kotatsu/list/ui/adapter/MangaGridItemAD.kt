@@ -9,6 +9,8 @@ import android.widget.FrameLayout
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import coil3.size.Size
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
 import org.koitharu.kotatsu.R
@@ -22,12 +24,14 @@ import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaGridModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
 import org.koitharu.kotatsu.list.ui.size.ItemSizeResolver
+import kotlin.math.roundToInt
 import androidx.appcompat.R as appcompatR
 
 fun mangaGridItemAD(
 	sizeResolver: ItemSizeResolver,
 	clickListener: MangaDetailsClickListener,
 	titleClickListener: OnListItemClickListener<MangaListModel>? = null,
+	gridVisualScaleProvider: (() -> Float)? = null,
 ) = adapterDelegateViewBinding<MangaGridModel, ListModel, ItemMangaGridBinding>(
 	{ inflater, parent -> ItemMangaGridBinding.inflate(inflater, parent, false) },
 ) {
@@ -58,7 +62,10 @@ fun mangaGridItemAD(
 
 	bind { payloads ->
 		itemView.setTooltipCompat(item.getSummary(context))
-		val coverMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
+		val baseMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
+		val coverMargin = gridVisualScaleProvider?.invoke()?.let { scale ->
+			resolveFixedGridMargin(itemView, baseMargin, scale)
+		} ?: baseMargin
 		itemView.updateLayoutParams<ViewGroup.MarginLayoutParams> {
 			if (
 				leftMargin != coverMargin ||
@@ -97,7 +104,7 @@ fun mangaGridItemAD(
 			if (item.isFavorite) addIcon(R.drawable.ic_heart_outline)
 			isVisible = iconsCount > 0
 		}
-		val coverWidth = sizeResolver.cellWidth - coverMargin * 2
+		val coverWidth = resolveActualCoverWidth(itemView, sizeResolver.cellWidth, coverMargin)
 		binding.imageViewCover.exactImageSize = if (coverWidth > 0) {
 			Size(coverWidth, coverWidth * 18 / 13)
 		} else {
@@ -115,3 +122,49 @@ fun mangaGridItemAD(
 		}
 	}
 }
+
+private fun resolveFixedGridMargin(itemView: View, baseMargin: Int, requestedScale: Float): Int {
+	val scale = requestedScale.coerceIn(MIN_FIXED_GRID_SCALE, MAX_FIXED_GRID_SCALE)
+	if (scale == DEFAULT_FIXED_GRID_SCALE) return baseMargin
+
+	val recyclerView = itemView.parent as? RecyclerView
+	val layoutManager = recyclerView?.layoutManager as? GridLayoutManager
+	val slotWidth = if (recyclerView != null && layoutManager != null && layoutManager.spanCount > 0) {
+		(recyclerView.width - recyclerView.paddingStart - recyclerView.paddingEnd) / layoutManager.spanCount
+	} else {
+		0
+	}
+
+	return if (scale < DEFAULT_FIXED_GRID_SCALE) {
+		val maxMargin = if (slotWidth > 0) {
+			(slotWidth * MAX_FIXED_GRID_MARGIN_FRACTION).roundToInt().coerceAtLeast(baseMargin)
+		} else {
+			baseMargin
+		}
+		val progress = (scale - MIN_FIXED_GRID_SCALE) /
+			(DEFAULT_FIXED_GRID_SCALE - MIN_FIXED_GRID_SCALE)
+		(maxMargin + (baseMargin - maxMargin) * progress).roundToInt()
+	} else {
+		val minMargin = (baseMargin * MIN_FIXED_GRID_MARGIN_FACTOR).roundToInt().coerceAtLeast(1)
+		val progress = (scale - DEFAULT_FIXED_GRID_SCALE) /
+			(MAX_FIXED_GRID_SCALE - DEFAULT_FIXED_GRID_SCALE)
+		(baseMargin + (minMargin - baseMargin) * progress).roundToInt()
+	}
+}
+
+private fun resolveActualCoverWidth(itemView: View, fallbackWidth: Int, margin: Int): Int {
+	val recyclerView = itemView.parent as? RecyclerView
+	val layoutManager = recyclerView?.layoutManager as? GridLayoutManager
+	val slotWidth = if (recyclerView != null && layoutManager != null && layoutManager.spanCount > 0) {
+		(recyclerView.width - recyclerView.paddingStart - recyclerView.paddingEnd) / layoutManager.spanCount
+	} else {
+		fallbackWidth
+	}
+	return slotWidth - margin * 2
+}
+
+private const val MIN_FIXED_GRID_SCALE = 0.5f
+private const val DEFAULT_FIXED_GRID_SCALE = 1f
+private const val MAX_FIXED_GRID_SCALE = 1.5f
+private const val MAX_FIXED_GRID_MARGIN_FRACTION = 0.2f
+private const val MIN_FIXED_GRID_MARGIN_FACTOR = 0.25f
