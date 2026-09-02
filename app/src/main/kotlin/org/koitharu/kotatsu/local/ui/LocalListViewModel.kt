@@ -106,6 +106,7 @@ class LocalListViewModel @Inject constructor(
 					list.add(0, tip)
 					return
 				}
+			}
 		}
 	}
 
