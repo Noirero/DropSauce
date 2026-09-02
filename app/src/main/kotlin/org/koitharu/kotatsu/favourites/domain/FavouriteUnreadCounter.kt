@@ -3,6 +3,9 @@ package org.koitharu.kotatsu.favourites.domain
 import dagger.Reusable
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.ChapterEntity
+import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode
+import org.koitharu.kotatsu.history.data.HistoryEntity
+import org.koitharu.kotatsu.list.domain.ReadingProgress
 import kotlin.math.ceil
 import javax.inject.Inject
 
@@ -18,11 +21,46 @@ class FavouriteUnreadCounter @Inject constructor(
 	private val database: MangaDatabase,
 ) {
 
-	suspend fun getUnreadCount(mangaId: Long): Int {
-		val chapters = database.getChaptersDao().findAll(mangaId)
-		if (chapters.isEmpty()) return 0
+	data class Snapshot internal constructor(
+		private val histories: Map<Long, HistoryEntity>,
+		val unreadCounts: Map<Long, Int>,
+	) {
+		fun hasHistory(mangaId: Long): Boolean = mangaId in histories
 
-		val history = database.getHistoryDao().find(mangaId)
+		fun getProgress(mangaId: Long, mode: ProgressIndicatorMode): ReadingProgress? {
+			val history = histories[mangaId] ?: return null
+			val fixedPercent = if (ReadingProgress.isCompleted(history.percent)) 1f else history.percent
+			return ReadingProgress(
+				percent = fixedPercent,
+				totalChapters = history.chaptersCount,
+				mode = mode,
+			).takeIf { it.isValid() }
+		}
+	}
+
+	/**
+	 * Loads the card metadata for a whole visible Favourites page in at most two Room queries instead
+	 * of querying history/chapters again for every card.
+	 */
+	suspend fun getSnapshot(mangaIds: Collection<Long>, includeUnread: Boolean): Snapshot {
+		if (mangaIds.isEmpty()) return Snapshot(emptyMap(), emptyMap())
+		val ids = mangaIds.distinct()
+		val histories = database.getHistoryDao().findByIds(ids).associateBy { it.mangaId }
+		if (!includeUnread) return Snapshot(histories, emptyMap())
+
+		val chaptersByManga = database.getChaptersDao().findAll(ids).groupBy { it.mangaId }
+		val unread = HashMap<Long, Int>(chaptersByManga.size)
+		for ((mangaId, chapters) in chaptersByManga) {
+			unread[mangaId] = calculateUnreadCount(chapters, histories[mangaId])
+		}
+		return Snapshot(histories, unread)
+	}
+
+	suspend fun getUnreadCount(mangaId: Long): Int =
+		getSnapshot(listOf(mangaId), includeUnread = true).unreadCounts[mangaId] ?: 0
+
+	private fun calculateUnreadCount(chapters: List<ChapterEntity>, history: HistoryEntity?): Int {
+		if (chapters.isEmpty()) return 0
 		if (history == null) {
 			// Multiple scanlator branches can contain the same logical chapter. Before the user has
 			// selected/read a branch, use the largest branch instead of summing duplicate branches.
