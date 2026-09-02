@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.network.DoHManager
 import org.koitharu.kotatsu.core.network.DoHProvider
@@ -169,6 +170,18 @@ private fun StorageNetworkScreen(
 	var noOffline by rememberBooleanPref(AppSettings.KEY_OFFLINE_DISABLED, false)
 	var adblock by rememberBooleanPref(AppSettings.KEY_ADBLOCK, false)
 
+	val selectedDohProvider = remember(doh) {
+		DoHProvider.entries.firstOrNull { it.name == doh } ?: DoHProvider.NONE
+	}
+	val customDohIsValid = remember(customDohUrl) {
+		customDohUrl.trim().toHttpUrlOrNull()?.scheme == "https"
+	}
+	val dohStatus = when {
+		selectedDohProvider == DoHProvider.NONE -> "Nonaktif"
+		selectedDohProvider == DoHProvider.CUSTOM && !customDohIsValid -> "⚠ Belum aktif"
+		else -> "✓ Aktif"
+	}
+
 	val storageSummary = usage?.let {
 		val used = it.savedManga.bytes + it.pagesCache.bytes + it.otherCache.bytes
 		val total = used + it.available.bytes
@@ -235,7 +248,7 @@ private fun StorageNetworkScreen(
 				}
 				item { pos ->
 					ListSettingsItem(
-						title = stringResource(R.string.dns_over_https),
+						title = "${stringResource(R.string.dns_over_https)} • $dohStatus",
 						entries = dohEntries,
 						entryValues = dohValues,
 						selectedValue = doh,
@@ -244,10 +257,14 @@ private fun StorageNetworkScreen(
 						shape = pos.shape,
 					)
 				}
-				if (doh == DoHProvider.CUSTOM.name) {
+				if (selectedDohProvider == DoHProvider.CUSTOM) {
 					item { pos ->
 						EditTextSettingsItem(
-							title = "Alamat DNS Kustom",
+							title = if (customDohIsValid) {
+								"Alamat DNS Kustom • ✓ Aktif"
+							} else {
+								"Alamat DNS Kustom • ⚠ Tidak valid"
+							},
 							value = customDohUrl,
 							hint = "https://example.com/dns-query",
 							onValueChange = { customDohUrl = it.trim() },
@@ -331,11 +348,17 @@ private fun UserAgentSettingsItem(
 	onApply: (UserAgentMode, String, String) -> Unit,
 ) {
 	var showDialog by remember { mutableStateOf(false) }
-	val summary = when (mode) {
+	val isActive = when (mode) {
+		UserAgentMode.DEFAULT -> true
+		UserAgentMode.CUSTOM -> customUserAgent.isNotBlank()
+		UserAgentMode.RANDOM -> randomUserAgent.isNotBlank()
+	}
+	val details = when (mode) {
 		UserAgentMode.DEFAULT -> "Default (device WebView)"
 		UserAgentMode.CUSTOM -> "Custom"
 		UserAgentMode.RANDOM -> "Random • ${UserAgentManager.describe(randomUserAgent)}"
 	}
+	val summary = "${if (isActive) "✓ Aktif" else "⚠ Belum aktif"} • $details"
 	SettingsItem(
 		title = title,
 		subtitle = summary,
