@@ -1,5 +1,6 @@
 ## Changelog 2
 
+- Disukai kini menampilkan Manga/Novel lebih cepat saat pertama dibuka, termasuk saat informasi unread, progress, dan continue reading diaktifkan.
 - Jelajah kini tidak lagi mengukur dan memuat seluruh daftar source sekaligus; daftar Manga/Novel tetap virtualized sehingga koleksi extension besar tidak membekukan UI atau memicu ANR saat source grid ditampilkan.
 - Source Mihon yang dibuka saat extension masih dimuat kini otomatis disambungkan kembali ke source ID yang tepat setelah pemuatan selesai; pembaruan extension juga menyegarkan layar source tanpa berpindah bahasa.
 - Alternatives kini menyimpan fallback ke Preferred Languages ketika mode Pinned tidak memiliki source, sehingga layar tidak kembali mencoba mode Pinned kosong setelah recreation.
