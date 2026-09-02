@@ -47,6 +47,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	private var cachedParentHeight = 0
 	private var velocityTracker: VelocityTracker? = null
 	private var halfExpandedCollapseRatio: Float? = null
+	private var manualMovementEnabled = true
 	private var dragStartedOnHandle = false
 	private val dragHandleHitRect = Rect()
 
@@ -103,8 +104,26 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		updateCollapseButtonVisibility()
 	}
 
+	/**
+	 * Enables or disables this header's manual expand/collapse controls without affecting the sheet's
+	 * content or other adaptive-sheet users. Callers that keep the native BottomSheetBehavior dragging
+	 * disabled can use this to make the handle row purely visual.
+	 */
+	fun setManualMovementEnabled(enabled: Boolean) {
+		manualMovementEnabled = enabled
+		binding.shButtonCollapse.isClickable = enabled
+		binding.shButtonCollapse.isFocusable = enabled
+		if (!enabled) {
+			isIntercepting = false
+			dragStartedOnHandle = false
+			velocityTracker?.recycle()
+			velocityTracker = null
+		}
+	}
+
 	override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
 		val behavior = sheetBehavior as? AdaptiveSheetBehavior.Bottom ?: return super.onInterceptTouchEvent(ev)
+		if (!manualMovementEnabled) return super.onInterceptTouchEvent(ev)
 		if (behavior.isDraggable) return super.onInterceptTouchEvent(ev)
 
 		when (ev.actionMasked) {
@@ -150,6 +169,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 
 	override fun onTouchEvent(event: MotionEvent): Boolean {
 		val behavior = sheetBehavior as? AdaptiveSheetBehavior.Bottom ?: return super.onTouchEvent(event)
+		if (!manualMovementEnabled) return super.onTouchEvent(event)
 		if (behavior.isDraggable) return super.onTouchEvent(event)
 
 		if (event.actionMasked == MotionEvent.ACTION_DOWN) {
@@ -221,6 +241,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	}
 
 	override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+		if (!manualMovementEnabled) return super.onGenericMotionEvent(event)
 		val behavior = sheetBehavior ?: return super.onGenericMotionEvent(event)
 		if (event.source and InputDevice.SOURCE_CLASS_POINTER != 0) {
 			if (event.actionMasked == MotionEvent.ACTION_SCROLL) {
@@ -355,7 +376,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	}
 
 	private fun collapseSheet() {
-		if (halfExpandedCollapseRatio != null) {
+		if (manualMovementEnabled && halfExpandedCollapseRatio != null) {
 			(sheetBehavior as? AdaptiveSheetBehavior.Bottom)?.state = AdaptiveSheetBehavior.STATE_COLLAPSED
 		}
 	}
