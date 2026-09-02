@@ -214,6 +214,7 @@ class MangaListMapper @Inject constructor(
 				if (line.isNotEmpty()) {
 					set.add(line)
 				}
+			}
 			set.trim()
 			set
 		}
