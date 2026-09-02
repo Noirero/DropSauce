@@ -13,6 +13,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.list.ListSelectionController
+import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
 import org.koitharu.kotatsu.list.ui.MangaListFragment
@@ -33,6 +34,12 @@ class FavouritesListFragment : MangaListFragment() {
 	override fun onViewBindingCreated(binding: FragmentListBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
 		binding.recyclerView.isVP2BugWorkaroundEnabled = true
+		viewModel.gridScale.observe(viewLifecycleOwner) {
+			val adapter = binding.recyclerView.adapter ?: return@observe
+			if (adapter.itemCount > 0) {
+				adapter.notifyItemRangeChanged(0, adapter.itemCount)
+			}
+		}
 	}
 
 	override fun onCreateAdapter() = MangaListAdapter(
@@ -40,6 +47,7 @@ class FavouritesListFragment : MangaListFragment() {
 		sizeResolver = DynamicItemSizeResolver(resources, viewLifecycleOwner, settings, adjustWidth = false),
 		titleTapToRead = settings.isTitleTapToReadEnabled,
 		onTipClose = { viewModel.dismissScalingTip() },
+		gridVisualScaleProvider = { viewModel.gridScale.value },
 	)
 
 	override fun onScrolledToEnd() = viewModel.requestMoreItems()
