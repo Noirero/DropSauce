@@ -24,8 +24,9 @@ import javax.inject.Singleton
  * when their files are removed. Folder-name matching is case-insensitive so local/Local/LOCAL are
  * treated the same.
  *
- * EPUB is deliberately excluded for now. A title folder is eligible only when it contains at least
- * one direct CBZ/ZIP chapter and no direct EPUB file, keeping this first implementation manga-only.
+ * EPUB is deliberately excluded for now. A title folder is eligible when it contains at least one
+ * direct CBZ/ZIP/PDF chapter and no direct EPUB file, keeping this category manga-only while also
+ * allowing local PDF chapters supported by LocalMangaParser.
  */
 @Singleton
 class LocalFavouritesRepository @Inject constructor(
@@ -73,7 +74,7 @@ class LocalFavouritesRepository @Inject constructor(
 					if (
 						mangaFolder.isDirectory &&
 						!mangaFolder.isHidden &&
-						mangaFolder.hasSupportedArchiveChapters()
+						mangaFolder.hasSupportedMangaChapters()
 					) {
 						result.putIfAbsent(mangaFolder.absolutePath, mangaFolder)
 					}
@@ -83,17 +84,18 @@ class LocalFavouritesRepository @Inject constructor(
 		return result.values.toList()
 	}
 
-	private fun File.hasSupportedArchiveChapters(): Boolean {
-		var hasCbzOrZip = false
+	private fun File.hasSupportedMangaChapters(): Boolean {
+		var hasSupportedChapter = false
 		for (file in listFiles().orEmpty()) {
 			if (!file.isFile) continue
 			when {
 				file.extension.equals("epub", ignoreCase = true) -> return false
 				file.extension.equals("cbz", ignoreCase = true) ||
-					file.extension.equals("zip", ignoreCase = true) -> hasCbzOrZip = true
+					file.extension.equals("zip", ignoreCase = true) ||
+					file.extension.equals("pdf", ignoreCase = true) -> hasSupportedChapter = true
 			}
 		}
-		return hasCbzOrZip
+		return hasSupportedChapter
 	}
 
 	private companion object {
