@@ -10,11 +10,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import coil3.ImageLoader
+import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.model.getTitle
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.core.ui.BaseListAdapter
@@ -93,6 +95,13 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 				viewBinding.inputAlternativeQuery.setSelection(query.length)
 			}
 		}
+		viewModel.titleSuggestions.observe(this) { updateQueryChips() }
+		viewModel.recentQueries.observe(this) { updateQueryChips() }
+		viewModel.isSearchRunning.observe(this) { running ->
+			viewBinding.buttonAlternativeSearch.isVisible = !running
+			viewBinding.buttonAlternativeStop.isVisible = running
+			updateProgress(viewModel.searchProgress.value)
+		}
 		viewModel.searchMode.observe(this, ::updateSearchMode)
 		viewModel.preferredLanguages.observe(this, ::updateLanguageChip)
 		viewModel.hasResultsOnly.observe(this) { viewBinding.chipAlternativeHasResults.isChecked = it }
@@ -109,7 +118,15 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 	private fun setupSearchEditor() {
 		viewBinding.inputAlternativeQuery.setText(viewModel.query.value)
 		viewBinding.inputAlternativeQuery.setSelection(viewBinding.inputAlternativeQuery.text?.length ?: 0)
+		viewBinding.layoutAlternativeQuery.helperText = getString(
+			if (viewModel.manga.source.isNovelSource) {
+				R.string.alternative_search_scope_novel
+			} else {
+				R.string.alternative_search_scope_manga
+			},
+		)
 		viewBinding.buttonAlternativeSearch.setOnClickListener { submitAlternativeSearch() }
+		viewBinding.buttonAlternativeStop.setOnClickListener { viewModel.stopSearch() }
 		viewBinding.inputAlternativeQuery.setOnEditorActionListener { _, actionId, event ->
 			val isKeyboardSearch = actionId == EditorInfo.IME_ACTION_SEARCH
 			val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
@@ -120,6 +137,7 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 				false
 			}
 		}
+		updateQueryChips()
 	}
 
 	private fun submitAlternativeSearch() {
@@ -127,6 +145,31 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 		if (query.isEmpty()) return
 		viewModel.search(query)
 		viewBinding.inputAlternativeQuery.clearFocus()
+	}
+
+	private fun updateQueryChips() {
+		val group = viewBinding.chipGroupAlternativeQueries
+		group.removeAllViews()
+		val suggestions = viewModel.titleSuggestions.value
+		for (title in suggestions) {
+			group.addView(createQueryChip(title, title))
+		}
+		for (recent in viewModel.recentQueries.value) {
+			if (suggestions.any { it.equals(recent, ignoreCase = true) }) continue
+			group.addView(createQueryChip("↶ $recent", recent))
+		}
+		viewBinding.scrollAlternativeQuerySuggestions.isVisible = group.childCount > 0
+	}
+
+	private fun createQueryChip(label: String, query: String): Chip = Chip(this).apply {
+		text = label
+		isCheckable = false
+		setOnClickListener {
+			viewBinding.inputAlternativeQuery.setText(query)
+			viewBinding.inputAlternativeQuery.setSelection(query.length)
+			viewModel.search(query)
+			viewBinding.inputAlternativeQuery.clearFocus()
+		}
 	}
 
 	private fun updateSearchMode(mode: SearchSourceMode) {
@@ -173,14 +216,27 @@ class AlternativesActivity : BaseActivity<ActivityAlternativesBinding>(),
 	}
 
 	private fun updateProgress(progress: AlternativeSearchProgress) {
+		val running = viewModel.isSearchRunning.value
 		with(viewBinding.progressAlternativeSearch) {
-			isVisible = progress.total > 0 && progress.completed < progress.total
+			isVisible = running && progress.total > 0 && progress.completed < progress.total
 			max = progress.total.coerceAtLeast(1)
 			setProgressCompat(progress.completed, true)
 		}
-		viewBinding.collapsingToolbarLayout.subtitle = if (progress.total > 0) {
-			getString(R.string.search_progress_sources, progress.completed, progress.total, progress.errors)
-		} else null
+		viewBinding.collapsingToolbarLayout.subtitle = when {
+			progress.total <= 0 -> null
+			!running && progress.completed < progress.total -> getString(
+				R.string.alternative_search_stopped,
+				progress.completed,
+				progress.total,
+				progress.errors,
+			)
+			else -> getString(
+				R.string.search_progress_sources,
+				progress.completed,
+				progress.total,
+				progress.errors,
+			)
+		}
 	}
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
