@@ -52,10 +52,12 @@ fun mangaListDetailedItemAD(
 		binding.badge.number = item.counter
 		binding.badge.isVisible = item.counter > 0
 		binding.imageViewContinue.isVisible = item.showContinueReading
-		binding.imageViewContinue.setOnClickListener(if (item.showContinueReading) {
-			{ view -> clickListener.onReadClick(item.toMangaWithOverride(), view) }
+		if (item.showContinueReading) {
+			binding.imageViewContinue.setOnClickListener { view ->
+				clickListener.onReadClick(item.toMangaWithOverride(), view)
+			}
 		} else {
-			null
-		})
+			binding.imageViewContinue.setOnClickListener(null)
+		}
 	}
 }
