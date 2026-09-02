@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.GridLayoutManager
@@ -60,22 +61,41 @@ fun mangaGridItemAD(
 		cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r)
 	}
 
+	fun applyGridSizing(margin: Int) {
+		itemView.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+			if (
+				leftMargin != margin ||
+				topMargin != margin ||
+				rightMargin != margin ||
+				bottomMargin != margin
+			) {
+				setMargins(margin, margin, margin, margin)
+			}
+		}
+		val coverWidth = resolveActualCoverWidth(itemView, sizeResolver.cellWidth, margin)
+		binding.imageViewCover.exactImageSize = if (coverWidth > 0) {
+			Size(coverWidth, coverWidth * 18 / 13)
+		} else {
+			null
+		}
+	}
+
 	bind { payloads ->
 		itemView.setTooltipCompat(item.getSummary(context))
 		val baseMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
-		val coverMargin = gridVisualScaleProvider?.invoke()?.let { scale ->
+		val visualScale = gridVisualScaleProvider?.invoke()
+		val initialMargin = visualScale?.let { scale ->
 			resolveFixedGridMargin(itemView, baseMargin, scale)
 		} ?: baseMargin
-		itemView.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-			if (
-				leftMargin != coverMargin ||
-				topMargin != coverMargin ||
-				rightMargin != coverMargin ||
-				bottomMargin != coverMargin
-			) {
-				setMargins(coverMargin, coverMargin, coverMargin, coverMargin)
+		applyGridSizing(initialMargin)
+		if (visualScale != null) {
+			val boundId = item.id
+			itemView.doOnLayout {
+				if (item.id != boundId) return@doOnLayout
+				applyGridSizing(resolveFixedGridMargin(itemView, baseMargin, visualScale))
 			}
 		}
+
 		val isTitleOverCover = item.isTitleOverCover && !item.isTitleHidden
 		binding.textViewTitleOverlay.text = item.title
 		binding.textViewTitle.text = item.title
@@ -103,12 +123,6 @@ fun mangaGridItemAD(
 			if (item.isLocalSource) addIcon(R.drawable.ic_manga_source)
 			if (item.isFavorite) addIcon(R.drawable.ic_heart_outline)
 			isVisible = iconsCount > 0
-		}
-		val coverWidth = resolveActualCoverWidth(itemView, sizeResolver.cellWidth, coverMargin)
-		binding.imageViewCover.exactImageSize = if (coverWidth > 0) {
-			Size(coverWidth, coverWidth * 18 / 13)
-		} else {
-			null
 		}
 		binding.imageViewCover.setImageAsync(item.coverUrl, item.manga)
 		binding.badge.number = item.counter
