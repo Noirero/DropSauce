@@ -220,8 +220,9 @@ class ExploreFragment :
 			setText(R.string.source_filter_summary)
 			setPadding(0, 0, 0, rowPadding)
 		})
-		if (entries.isEmpty()) {
+		val stateProvider = if (entries.isEmpty()) {
 			content.addView(TextView(context).apply { setText(R.string.no_external_source_installed) })
+			null
 		} else {
 			addSourceFilterControls(content, entries)
 		}
@@ -229,11 +230,16 @@ class ExploreFragment :
 		MaterialAlertDialogBuilder(context)
 			.setTitle(R.string.source_filter)
 			.setView(scroll)
-			.setPositiveButton(android.R.string.ok, null)
+			.setPositiveButton(android.R.string.ok) { _, _ ->
+				stateProvider?.invoke()?.let(viewModel::applyMihonSourceFilter)
+			}
 			.show()
 	}
 
-	private fun addSourceFilterControls(container: LinearLayout, entries: List<MihonSourceFilterEntry>) {
+	private fun addSourceFilterControls(
+		container: LinearLayout,
+		entries: List<MihonSourceFilterEntry>,
+	): () -> Map<Long, Boolean> {
 		val context = container.context
 		val rowPadding = (12 * resources.displayMetrics.density).toInt()
 		fun header(text: CharSequence) {
@@ -243,11 +249,42 @@ class ExploreFragment :
 				setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium)
 			})
 		}
-		header(getString(R.string.source_filter_languages))
+		fun allLabel(section: String): String {
+			val all = getExternalExtensionLanguageDisplayName("all")
+			return "$all ${section.replaceFirstChar { it.lowercase() }}"
+		}
+
 		val byLanguage = entries.groupBy { it.source.language.ifBlank { "other" }.lowercase() }
 		val languageSwitches = linkedMapOf<String, SwitchMaterial>()
 		val sourceSwitches = linkedMapOf<Long, SwitchMaterial>()
+		var languageAllSwitch: SwitchMaterial? = null
+		var sourceAllSwitch: SwitchMaterial? = null
 		var updating = false
+
+		fun updateAllSwitches() {
+			val wasUpdating = updating
+			updating = true
+			languageAllSwitch?.isChecked = languageSwitches.isNotEmpty() && languageSwitches.values.all { it.isChecked }
+			sourceAllSwitch?.isChecked = sourceSwitches.isNotEmpty() && sourceSwitches.values.all { it.isChecked }
+			updating = wasUpdating
+		}
+
+		header(getString(R.string.source_filter_languages))
+		languageAllSwitch = SwitchMaterial(context).apply {
+			text = allLabel(getString(R.string.source_filter_languages))
+			isChecked = entries.all { it.isEnabled }
+			setPadding(0, rowPadding / 2, 0, rowPadding / 2)
+			setOnCheckedChangeListener { _, checked ->
+				if (updating) return@setOnCheckedChangeListener
+				updating = true
+				languageSwitches.values.forEach { it.isChecked = checked }
+				sourceSwitches.values.forEach { it.isChecked = checked }
+				sourceAllSwitch?.isChecked = checked
+				updating = false
+			}
+		}
+		container.addView(languageAllSwitch)
+
 		byLanguage.entries
 			.sortedBy { getExternalExtensionLanguageDisplayName(it.key) }
 			.forEach { (language, languageEntries) ->
@@ -258,15 +295,32 @@ class ExploreFragment :
 					setOnCheckedChangeListener { _, checked ->
 						if (updating) return@setOnCheckedChangeListener
 						updating = true
-						viewModel.setMihonLanguageEnabled(language, checked)
 						languageEntries.forEach { sourceSwitches[it.source.sourceId]?.isChecked = checked }
+						languageAllSwitch?.isChecked = languageSwitches.values.all { it.isChecked }
+						sourceAllSwitch?.isChecked = sourceSwitches.isNotEmpty() && sourceSwitches.values.all { it.isChecked }
 						updating = false
 					}
 				}
 				languageSwitches[language] = toggle
 				container.addView(toggle)
 			}
+
 		header(getString(R.string.source_filter_individual))
+		sourceAllSwitch = SwitchMaterial(context).apply {
+			text = allLabel(getString(R.string.source_filter_individual))
+			isChecked = entries.all { it.isEnabled }
+			setPadding(0, rowPadding / 2, 0, rowPadding / 2)
+			setOnCheckedChangeListener { _, checked ->
+				if (updating) return@setOnCheckedChangeListener
+				updating = true
+				sourceSwitches.values.forEach { it.isChecked = checked }
+				languageSwitches.values.forEach { it.isChecked = checked }
+				languageAllSwitch?.isChecked = checked
+				updating = false
+			}
+		}
+		container.addView(sourceAllSwitch)
+
 		entries.sortedWith(
 			compareBy<MihonSourceFilterEntry> { getExternalExtensionLanguageDisplayName(it.source.language) }
 				.thenBy { it.source.displayName.lowercase() },
@@ -277,7 +331,6 @@ class ExploreFragment :
 				setPadding(0, rowPadding / 2, 0, rowPadding / 2)
 				setOnCheckedChangeListener { _, checked ->
 					if (updating) return@setOnCheckedChangeListener
-					viewModel.setMihonSourceEnabled(entry.source.sourceId, checked)
 					val language = entry.source.language.ifBlank { "other" }.lowercase()
 					val siblings = byLanguage[language].orEmpty()
 					updating = true
@@ -285,11 +338,19 @@ class ExploreFragment :
 						if (sibling.source.sourceId == entry.source.sourceId) checked
 						else sourceSwitches[sibling.source.sourceId]?.isChecked == true
 					}
+					updateAllSwitches()
 					updating = false
 				}
 			}
 			sourceSwitches[entry.source.sourceId] = toggle
 			container.addView(toggle)
+		}
+		updateAllSwitches()
+
+		return {
+			entries.associate { entry ->
+				entry.source.sourceId to (sourceSwitches[entry.source.sourceId]?.isChecked ?: entry.isEnabled)
+			}
 		}
 	}
 
