@@ -11,6 +11,7 @@ import org.koitharu.kotatsu.explore.data.ExploreContentFilter
 class ExploreMenuProvider(
 	private val router: AppRouter,
 	private val viewModel: ExploreViewModel,
+	private val onSourceFilterClick: () -> Unit,
 ) : MenuProvider {
 
 	override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -52,6 +53,11 @@ class ExploreMenuProvider(
 
 			R.id.action_manage -> {
 				router.openSourcesCatalog(isExternalOnly = true)
+				true
+			}
+
+			R.id.action_source_filter -> {
+				onSourceFilterClick()
 				true
 			}
 

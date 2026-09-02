@@ -689,12 +689,8 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		set(value) = prefs.edit { putBoolean(KEY_SOURCES_GRID, value) }
 
 	/**
-	 * The active language chosen per logical source (a package + source-name pair) for
-	 * multi-language extensions. Each entry is encoded as "lang\npkgName\nsourceName" (newline
-	 * delimited; none of the parts can contain a newline), so a single source collapses its
-	 * language variants into one Explore entity and the user picks exactly one active language
-	 * for it. Unset sources fall back to the install-time default (app language -> English ->
-	 * any), resolved at read time.
+	 * Legacy active-language choices from the pre-multi-source Explore model. Kept so old logical
+	 * source pins can migrate to the exact source id the user previously selected.
 	 */
 	var mihonPerExtActiveLangs: Set<String>
 		get() = prefs.getStringSet(KEY_MIHON_PER_EXT_ACTIVE_LANG, emptySet()).orEmpty()
@@ -718,6 +714,11 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	var mihonHiddenPackages: Set<String>
 		get() = prefs.getStringSet(KEY_MIHON_HIDDEN_PACKAGES, emptySet()).orEmpty()
 		set(value) = prefs.edit { putStringSet(KEY_MIHON_HIDDEN_PACKAGES, value) }
+
+	/** Mihon source ids disabled from Explore and source-wide searches, independently per source. */
+	var mihonDisabledSourceIds: Set<String>
+		get() = prefs.getStringSet(KEY_MIHON_DISABLED_SOURCE_IDS, emptySet()).orEmpty()
+		set(value) = prefs.edit { putStringSet(KEY_MIHON_DISABLED_SOURCE_IDS, value) }
 
 	/** LNReader plugin ids hidden from Explore. Mirrors [mihonHiddenPackages] for novel plugins. */
 	var lnHiddenPlugins: Set<String>
@@ -1352,6 +1353,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_SOURCES_ORDER = "sources_sort_order"
 		const val KEY_MIHON_PER_EXT_ACTIVE_LANG = "mihon_per_ext_active_lang"
 		const val KEY_MIHON_HIDDEN_PACKAGES = "mihon_hidden_packages"
+		const val KEY_MIHON_DISABLED_SOURCE_IDS = "mihon_disabled_source_ids"
 		const val KEY_LN_HIDDEN_PLUGINS = "ln_hidden_plugins"
 		const val KEY_EXTERNAL_EXTENSIONS_REPO_URL = "external_extensions_repo_url"
 		const val KEY_MIHON_EXTENSION_REPOS = "mihon_extension_repos"

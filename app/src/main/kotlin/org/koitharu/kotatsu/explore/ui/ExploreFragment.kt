@@ -8,6 +8,9 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.appcompat.view.ActionMode
 import androidx.core.graphics.Insets
 import androidx.core.view.WindowInsetsCompat
@@ -17,6 +20,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.badge.BadgeDrawable
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
@@ -40,6 +45,8 @@ import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
 import org.koitharu.kotatsu.databinding.FragmentExploreBinding
 import org.koitharu.kotatsu.explore.data.ExploreContentClass
+import org.koitharu.kotatsu.explore.data.MihonSourceFilterEntry
+import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreAdapter
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreListEventListener
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
@@ -109,7 +116,7 @@ class ExploreFragment :
 			tab.setText(if (position == 1) R.string.store_kind_novel else R.string.store_kind_manga)
 		}.attach()
 		actionModeDelegate.addListener(this)
-		addMenuProvider(ExploreMenuProvider(router, viewModel))
+		addMenuProvider(ExploreMenuProvider(router, viewModel, ::showSourceFilterDialog))
 		viewModel.headerContent.observe(viewLifecycleOwner, headerAdapter)
 		viewModel.hasExtensionUpdates.observe(viewLifecycleOwner) { hasUpdates ->
 			manageBadge = header.buttonManage.bindBadge(manageBadge, if (hasUpdates) "" else null)
@@ -301,7 +308,96 @@ class ExploreFragment :
 		when (item.payload) {
 			R.id.nav_suggestions -> router.openSuggestions()
 			ExploreViewModel.HEADER_CONTENT_CLASSIFICATION -> Unit
+			ExploreViewModel.HEADER_LANGUAGE_GROUP -> Unit
 			else -> router.openSourcesCatalog(isExternalOnly = true)
+		}
+	}
+
+	private fun showSourceFilterDialog() {
+		val entries = viewModel.sourceFilters.value
+		val context = requireContext()
+		val padding = (20 * resources.displayMetrics.density).toInt()
+		val rowPadding = (12 * resources.displayMetrics.density).toInt()
+		val content = LinearLayout(context).apply {
+			orientation = LinearLayout.VERTICAL
+			setPadding(padding, rowPadding, padding, rowPadding)
+		}
+		content.addView(TextView(context).apply {
+			setText(R.string.source_filter_summary)
+			setPadding(0, 0, 0, rowPadding)
+		})
+		if (entries.isEmpty()) {
+			content.addView(TextView(context).apply { setText(R.string.no_external_source_installed) })
+		} else {
+			addSourceFilterControls(content, entries)
+		}
+		val scroll = ScrollView(context).apply { addView(content) }
+		MaterialAlertDialogBuilder(context)
+			.setTitle(R.string.source_filter)
+			.setView(scroll)
+			.setPositiveButton(android.R.string.ok, null)
+			.show()
+	}
+
+	private fun addSourceFilterControls(container: LinearLayout, entries: List<MihonSourceFilterEntry>) {
+		val context = container.context
+		val rowPadding = (12 * resources.displayMetrics.density).toInt()
+		fun header(text: CharSequence) {
+			container.addView(TextView(context).apply {
+				this.text = text
+				setPadding(0, rowPadding, 0, rowPadding / 2)
+				setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium)
+			})
+		}
+		header(getString(R.string.source_filter_languages))
+		val byLanguage = entries.groupBy { it.source.language.ifBlank { "other" }.lowercase() }
+		val languageSwitches = linkedMapOf<String, SwitchMaterial>()
+		val sourceSwitches = linkedMapOf<Long, SwitchMaterial>()
+		var updating = false
+		byLanguage.entries
+			.sortedBy { getExternalExtensionLanguageDisplayName(it.key) }
+			.forEach { (language, languageEntries) ->
+				val toggle = SwitchMaterial(context).apply {
+					text = getExternalExtensionLanguageDisplayName(language)
+					isChecked = languageEntries.all { it.isEnabled }
+					setPadding(0, rowPadding / 2, 0, rowPadding / 2)
+					setOnCheckedChangeListener { _, checked ->
+						if (updating) return@setOnCheckedChangeListener
+						updating = true
+						viewModel.setMihonLanguageEnabled(language, checked)
+						languageEntries.forEach { sourceSwitches[it.source.sourceId]?.isChecked = checked }
+						updating = false
+					}
+				}
+				languageSwitches[language] = toggle
+				container.addView(toggle)
+			}
+		header(getString(R.string.source_filter_individual))
+		entries.sortedWith(
+			compareBy<MihonSourceFilterEntry> { getExternalExtensionLanguageDisplayName(it.source.language) }
+				.thenBy { it.source.displayName.lowercase() },
+		).forEach { entry ->
+			val toggle = SwitchMaterial(context).apply {
+				text = "${entry.source.displayName} — ${entry.source.languageDisplayName}"
+				isChecked = entry.isEnabled
+				setPadding(0, rowPadding / 2, 0, rowPadding / 2)
+				setOnCheckedChangeListener { _, checked ->
+					if (updating) return@setOnCheckedChangeListener
+					viewModel.setMihonSourceEnabled(entry.source.sourceId, checked)
+					val language = entry.source.language.ifBlank { "other" }.lowercase()
+					val siblings = entries.filter {
+						it.source.language.ifBlank { "other" }.equals(language, ignoreCase = true)
+					}
+					updating = true
+					languageSwitches[language]?.isChecked = siblings.all { sibling ->
+						if (sibling.source.sourceId == entry.source.sourceId) checked
+						else sourceSwitches[sibling.source.sourceId]?.isChecked == true
+					}
+					updating = false
+				}
+			}
+			sourceSwitches[entry.source.sourceId] = toggle
+			container.addView(toggle)
 		}
 	}
 

@@ -18,9 +18,8 @@ data class MihonMangaSource(
 		get() = "MIHON_${catalogueSource.id}"
 
 	/**
-	 * The source's display name WITHOUT any language suffix. Multiple languages of the same
-	 * extension collapse into a single Explore entity, so the language is surfaced separately
-	 * (browse top-bar subheading + source settings) rather than appended to the name.
+	 * The source's display name without a language suffix. Explore keeps every source id separate
+	 * and surfaces [language] as secondary metadata.
 	 */
 	val displayName: String
 		get() = catalogueSource.name

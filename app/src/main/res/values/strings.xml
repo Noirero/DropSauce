@@ -273,6 +273,12 @@
     <string name="no_filters_available">This source has no filters</string>
     <string name="enter_name">Enter name</string>
     <string name="pinned_sources_only">Pinned sources only</string>
+    <string name="pinned_sources">Pinned</string>
+    <string name="source_filter">Source filter</string>
+    <string name="source_filter_languages">Languages</string>
+    <string name="source_filter_individual">Individual sources</string>
+    <string name="source_filter_summary">Choose which sources participate in Explore and global search.</string>
+    <string name="extension_sources">Sources</string>
     <string name="local_library_only">Local library only</string>
     <string name="never">Never</string>
     <string name="only_using_wifi">Only on Wi-Fi</string>

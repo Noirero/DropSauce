@@ -2,7 +2,6 @@ package org.koitharu.kotatsu.explore.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.core.os.ConfigurationCompat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -18,7 +17,6 @@ import org.koitharu.kotatsu.lnreader.LnPluginManager
 import org.koitharu.kotatsu.lnreader.model.LnMangaSource
 import org.koitharu.kotatsu.mihon.MihonExtensionManager
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
-import org.koitharu.kotatsu.mihon.resolveActiveMihonLanguage
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,6 +25,11 @@ import javax.inject.Singleton
 data class ResolvedSource(
 	val source: MangaSource,
 	val languageSubtitle: String?,
+)
+
+data class MihonSourceFilterEntry(
+	val source: MihonMangaSource,
+	val isEnabled: Boolean,
 )
 
 @Singleton
@@ -128,8 +131,8 @@ class MangaSourcesRepository @Inject constructor(
 
 	private fun sourceKeyOf(source: MangaSource): String = when (source) {
 		is MangaSourceInfo -> sourceKeyOf(source.mangaSource)
-		// Key by package + source name (NOT language) so pins and last-used survive a language switch.
-		is MihonMangaSource -> "mihon:${source.pkgName}:${source.catalogueSource.name}"
+		// Mihon source ids are the stable identity. Two language variants from one APK are independent.
+		is MihonMangaSource -> "mihon:${source.sourceId}"
 		is LnMangaSource -> "ln:${source.pluginId}"
 		else -> {
 			val matched = getMihonSources().firstOrNull { it.name == source.name }
@@ -153,7 +156,7 @@ class MangaSourcesRepository @Inject constructor(
 
 	private fun buildSortedSourceInfoList(sources: List<MangaSource>): List<MangaSourceInfo> {
 		if (sources.isEmpty()) return emptyList()
-		val pinnedOrder = getPinnedSourceKeys()
+		val pinnedOrder = normalizeLegacyPinnedSourceKeys(getPinnedSourceKeys(), sources)
 		val pinnedIndex = HashMap<String, Int>(pinnedOrder.size)
 		for ((index, key) in pinnedOrder.withIndex()) {
 			pinnedIndex[key] = index
@@ -176,52 +179,45 @@ class MangaSourcesRepository @Inject constructor(
 		return pinned + unpinned
 	}
 
-	/**
-	 * Collapses each logical source (a package + source-name pair) into a single Explore entity.
-	 * For a multi-language source only the active-language variant is returned — chosen by the
-	 * user, or defaulted (app language → English → any) at read time. Single-language sources are
-	 * returned as-is. Honours the NSFW filter.
-	 */
+	/** Returns every enabled Mihon source independently. No name/language collapsing is allowed. */
 	private fun getMihonSources(): List<MihonMangaSource> {
 		val manager = mihonExtensionManager ?: return emptyList()
 		manager.initialize()
 		val hideNsfw = settings.isNsfwContentDisabled
 		val hiddenPackages = settings.mihonHiddenPackages
-		val appLang = appLanguage
+		val disabledSourceIds = settings.mihonDisabledSourceIds
 		return manager.getMihonMangaSources()
 			.filterNot { hideNsfw && it.isNsfw }
 			.filterNot { it.pkgName in hiddenPackages }
-			.groupBy { it.pkgName to it.catalogueSource.name }
-			.mapNotNull { (key, group) ->
-				if (group.size == 1) {
-					group.first()
-				} else {
-					val (pkgName, sourceName) = key
-					val langs = group.map { it.language }
-					val stored = settings.getMihonActiveLang(pkgName, sourceName)
-					val activeLang = resolveActiveMihonLanguage(langs, stored, appLang)
-					group.firstOrNull { it.language == activeLang } ?: group.first()
-				}
-			}
+			.filterNot { it.sourceId.toString() in disabledSourceIds }
 	}
 
 	/**
-	 * Resolves a (possibly stale) Mihon source to the language variant that is currently active
-	 * for its logical source. Non-Mihon or single-language sources are returned unchanged. The
-	 * returned [ResolvedSource.languageSubtitle] is the active language's native name, or null
-	 * when the source has no language variants.
+	 * Resolves a stale wrapper by its exact source id. Language variants must never redirect to a
+	 * sibling after restart; favourites/history depend on this preserving the original source id.
 	 */
 	fun resolveActiveSource(source: MangaSource): ResolvedSource {
 		val mihon = source.unwrapMihon() ?: return ResolvedSource(source, null)
 		val manager = mihonExtensionManager ?: return ResolvedSource(source, null)
 		manager.initialize()
-		val siblings = manager.getMihonMangaSources()
-			.filter { it.pkgName == mihon.pkgName && it.catalogueSource.name == mihon.catalogueSource.name }
-		if (siblings.size <= 1) return ResolvedSource(source, null)
-		val stored = settings.getMihonActiveLang(mihon.pkgName, mihon.catalogueSource.name)
-		val activeLang = resolveActiveMihonLanguage(siblings.map { it.language }, stored, appLanguage)
-		val active = siblings.firstOrNull { it.language == activeLang } ?: mihon
-		return ResolvedSource(active, active.languageDisplayName)
+		val exact = manager.getMihonMangaSourceById(mihon.sourceId) ?: mihon
+		return ResolvedSource(exact, exact.languageDisplayName)
+	}
+
+	fun setMihonSourcesEnabled(sourceIds: Collection<Long>, enabled: Boolean) {
+		val updated = settings.mihonDisabledSourceIds.toMutableSet()
+		for (sourceId in sourceIds) {
+			if (enabled) updated.remove(sourceId.toString()) else updated.add(sourceId.toString())
+		}
+		settings.mihonDisabledSourceIds = updated
+	}
+
+	fun setMihonLanguageEnabled(language: String, enabled: Boolean) {
+		val ids = getAllMihonSources().filter {
+			it.language.equals(language, ignoreCase = true) ||
+				(language.equals("other", ignoreCase = true) && it.language.isBlank())
+		}.map { it.sourceId }
+		setMihonSourcesEnabled(ids, enabled)
 	}
 
 	/** Novel plugins mixed straight into Explore alongside manga sources. */
@@ -257,13 +253,6 @@ class MangaSourcesRepository @Inject constructor(
 		else -> null
 	}
 
-	/** The app's current language code (e.g. "en", "fr"), used to default a source's language. */
-	private val appLanguage: String
-		get() = ConfigurationCompat.getLocales(context.resources.configuration)[0]
-			?.language
-			?.takeIf { it.isNotEmpty() }
-			?: "en"
-
 	/** True when at least one installed source offers more than one language. */
 	private fun hasMultiLanguageSources(): Boolean {
 		val manager = mihonExtensionManager ?: return false
@@ -288,11 +277,20 @@ class MangaSourcesRepository @Inject constructor(
 		return combine(
 			manager.installedExtensions,
 			manager.isLoading,
-			settings.observeAsFlow(AppSettings.KEY_MIHON_PER_EXT_ACTIVE_LANG) { mihonPerExtActiveLangs },
 			settings.observeAsFlow(AppSettings.KEY_DISABLE_NSFW) { isNsfwContentDisabled },
 			settings.observeAsFlow(AppSettings.KEY_MIHON_HIDDEN_PACKAGES) { mihonHiddenPackages },
+			settings.observeAsFlow(AppSettings.KEY_MIHON_DISABLED_SOURCE_IDS) { mihonDisabledSourceIds },
 		) { _: Any?, _: Any?, _: Any?, _: Any?, _: Any? ->
 			getMihonSources()
+		}.distinctUntilChanged()
+	}
+
+	fun observeMihonSourceFilters(): Flow<List<MihonSourceFilterEntry>> {
+		return combine(
+			observeAllMihonSources(),
+			settings.observeAsFlow(AppSettings.KEY_MIHON_DISABLED_SOURCE_IDS) { mihonDisabledSourceIds },
+		) { sources, disabled ->
+			sources.map { MihonSourceFilterEntry(it, it.sourceId.toString() !in disabled) }
 		}.distinctUntilChanged()
 	}
 
@@ -328,6 +326,25 @@ class MangaSourcesRepository @Inject constructor(
 
 	suspend fun reloadMihonSources() {
 		mihonExtensionManager?.loadExtensions()
+	}
+
+	private fun normalizeLegacyPinnedSourceKeys(keys: List<String>, sources: List<MangaSource>): List<String> {
+		var changed = false
+		val normalized = keys.mapNotNull { key ->
+			if (!key.startsWith("mihon:") || key.removePrefix("mihon:").toLongOrNull() != null) return@mapNotNull key
+			val legacy = key.removePrefix("mihon:")
+			val matches = sources.filterIsInstance<MihonMangaSource>().filter {
+				legacy == "${it.pkgName}:${it.catalogueSource.name}"
+			}
+			val match = matches.firstOrNull { candidate ->
+				settings.getMihonActiveLang(candidate.pkgName, candidate.catalogueSource.name)
+					?.equals(candidate.language, ignoreCase = true) == true
+			} ?: matches.firstOrNull()
+			changed = true
+			match?.let(::sourceKeyOf)
+		}.distinct()
+		if (changed) setPinnedSourceKeys(normalized)
+		return normalized
 	}
 
 	private companion object {

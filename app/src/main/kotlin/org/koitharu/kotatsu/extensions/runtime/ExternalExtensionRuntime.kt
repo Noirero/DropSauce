@@ -86,7 +86,8 @@ private val langCodesByName: Map<String, String> by lazy {
 
 fun getExternalExtensionLanguageDisplayName(langCode: String): String {
 	return when (langCode.lowercase(Locale.ROOT)) {
-		"all" -> "Multi"
+		"all" -> "All"
+		"other" -> "Other"
 		else -> runCatching { Locale.forLanguageTag(langCode).getDisplayLanguage(Locale.getDefault()) }
 			.getOrNull()
 			?.takeIf { it.isNotBlank() }
@@ -101,7 +102,8 @@ fun getExternalExtensionLanguageDisplayName(langCode: String): String {
  */
 fun getExternalExtensionLanguageAutonym(langCode: String): String {
 	return when (langCode.lowercase(Locale.ROOT)) {
-		"all" -> "Multi"
+		"all" -> "All"
+		"other" -> "Other"
 		else -> runCatching {
 			val locale = Locale.forLanguageTag(langCode)
 			locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercase(locale) }

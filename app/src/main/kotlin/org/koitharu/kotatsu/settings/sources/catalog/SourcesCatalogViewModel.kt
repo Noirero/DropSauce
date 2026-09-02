@@ -425,7 +425,11 @@ class SourcesCatalogViewModel @Inject constructor(
 				packageName = local.pkgName,
 				title = extensionDisplayName(local.appName),
 				subtitle = buildString {
-					append(getExternalExtensionLanguageDisplayName(local.lang))
+					appendInstalledSourceLanguages(
+						installedSourcesByPackage[local.pkgName],
+						local.lang,
+						appContext.getString(R.string.extension_sources),
+					)
 					append(" • ")
 					append(local.versionName)
 					if (local.isNsfw) append(" • 18+")
@@ -866,7 +870,11 @@ class SourcesCatalogViewModel @Inject constructor(
 					packageName = local.pkgName,
 					title = extensionDisplayName(local.appName),
 					subtitle = buildString {
-						append(getExternalExtensionLanguageDisplayName(local.lang))
+						appendInstalledSourceLanguages(
+							sourcesByPackage[local.pkgName],
+							local.lang,
+							appContext.getString(R.string.extension_sources),
+						)
 						append(" • ").append(local.versionName)
 						if (local.isNsfw) append(" • 18+")
 						append(" • ").append(owner.displayName)
@@ -1015,6 +1023,23 @@ class SourcesCatalogViewModel @Inject constructor(
 		val pageId: String,
 		val items: List<ListModel>,
 	)
+}
+
+private fun StringBuilder.appendInstalledSourceLanguages(
+	sources: List<org.koitharu.kotatsu.mihon.model.MihonMangaSource>?,
+	fallbackLanguage: String,
+	sourcesLabel: String,
+) {
+	val languages = sources.orEmpty()
+		.map { it.language }
+		.distinctBy { it.lowercase() }
+		.map(::getExternalExtensionLanguageDisplayName)
+	if (languages.size > 1) {
+		append(sourcesLabel).append(":\n")
+		append(languages.joinToString("\n"))
+	} else {
+		append(languages.firstOrNull() ?: getExternalExtensionLanguageDisplayName(fallbackLanguage))
+	}
 }
 
 /** Library rows for novel plugins are stored as `LN_<pluginId>`. */

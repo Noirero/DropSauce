@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu
-	xmlns:android="http://schemas.android.com/apk/res/android">
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:app="http://schemas.android.com/apk/res-auto">
 
 	<item
 		android:id="@+id/action_content_filter"
@@ -25,6 +26,12 @@
 				android:title="@string/explore_content_reset_all" />
 		</menu>
 	</item>
+
+	<item
+		android:id="@+id/action_source_filter"
+		android:icon="@drawable/ic_filter_funnel"
+		android:title="@string/source_filter"
+		app:showAsAction="ifRoom" />
 
 	<item
 		android:id="@+id/action_manage"

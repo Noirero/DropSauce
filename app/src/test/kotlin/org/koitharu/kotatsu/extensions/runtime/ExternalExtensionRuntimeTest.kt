@@ -8,6 +8,12 @@ import org.junit.Test
 class ExternalExtensionRuntimeTest {
 
 	@Test
+	fun `pseudo languages use stable labels`() {
+		assertEquals("All", getExternalExtensionLanguageDisplayName("all"))
+		assertEquals("Other", getExternalExtensionLanguageDisplayName("other"))
+	}
+
+	@Test
 	fun `one package keeps same-name language sources separate by id`() {
 		val result = process(listOf(
 			Success("extension.nhentai", listOf(
