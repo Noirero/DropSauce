@@ -51,7 +51,15 @@ open class BrowserClient(
 	}
 
 	override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-		if (request?.isForMainFrame == true && loadWithAdditionalHeaders(view, request.url.toString())) {
+		// loadUrl(url, headers) always creates a GET request. Replaying a form submission here would
+		// therefore discard its POST body and can make a successful login look like it failed.
+		// Keep the extension headers on ordinary main-frame GET navigation, but let WebView handle
+		// POST (and any other non-GET method) itself so its method/body/cookies are preserved.
+		if (
+			request?.isForMainFrame == true &&
+			request.method.equals("GET", ignoreCase = true) &&
+			loadWithAdditionalHeaders(view, request.url.toString())
+		) {
 			return true
 		}
 		return super.shouldOverrideUrlLoading(view, request)
