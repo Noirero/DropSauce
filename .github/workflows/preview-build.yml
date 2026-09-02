@@ -6,6 +6,9 @@ name: Beta Build
 # alongside DropSauce Noirero main. All Beta builds use the repository's permanent signing
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
+  push:
+    branches:
+      - beta
   workflow_dispatch:
 
 permissions:
@@ -146,6 +149,25 @@ jobs:
             echo "This APK uses the preview applicationId suffix and can be installed alongside DropSauce Noirero main."
             echo "All Beta builds from this workflow use the permanent repository signing key for in-place updates."
             echo "App name: \`DropSauce Noirero Beta\`"
+            echo ""
+            echo "### Ringkasan perubahan"
+            echo ""
+            echo "**Perubahan Beta yang sebelumnya sudah dipromosikan ke Main hingga v0.9.500121:**"
+            echo "- Penghapusan chapter Manga/Novel dibuat tepat sasaran, termasuk chapter duplikat."
+            echo "- Downloader dipertahankan dengan struktur DropSauce, ditingkatkan paralelisme dan resume download."
+            echo "- Swipe/read-state chapter diperbaiki."
+            echo "- Favourites dipisah Manga/Novel, ditambah kategori Lokal, pin, badge, dan perbaikan search/state."
+            echo "- Global/Alternative Search ditingkatkan dengan pinned source, filter bahasa, progress, ranking, dan cache."
+            echo "- Notes, Markdown, detail UI, Custom DoH, dan kompatibilitas extension lama diperbaiki."
+            echo ""
+            echo "**Perubahan Beta baru setelah Main v0.9.500121:**"
+            echo "- Perbaikan restore backup Tachiyomi/Mihon: state, progress lokal, merge, tracking, dan extension store."
+            echo "- Extension repository/store memakai tipe media eksplisit dan dikelompokkan Manga/Novel/Anime."
+            echo "- Chapter sheet diperbaiki: area drag dibatasi, collapse control, dan gesture handle diperkuat."
+            echo "- Explore extension grid vertical offset diperbaiki."
+            echo "- Local Library/Favourites mendapat Refresh, parsing author, loading/pagination lebih ringan, serta dukungan PDF lokal dengan cache."
+            echo "- Ditambahkan Custom dan Random User-Agent yang aktif secara langsung."
+            echo "- Metode instalasi extension disatukan: Shizuku, System Installer, dan Private/Sandbox, termasuk Update All dan migration."
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
