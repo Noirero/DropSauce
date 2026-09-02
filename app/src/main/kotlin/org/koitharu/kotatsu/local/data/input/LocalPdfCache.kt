@@ -48,7 +48,7 @@ object LocalPdfCache {
 		if (!pdf.isFile || !pdf.canRead()) {
 			throw IOException("Cannot read PDF: $pdf")
 		}
-		ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+		return ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
 			PdfRenderer(descriptor).use(block)
 		}
 	}
