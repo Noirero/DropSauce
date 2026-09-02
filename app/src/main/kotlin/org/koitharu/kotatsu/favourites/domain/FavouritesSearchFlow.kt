@@ -17,6 +17,6 @@ private const val FAVOURITES_SEARCH_DEBOUNCE_MS = 250L
  */
 @OptIn(FlowPreview::class)
 fun Flow<String>.debounceFavouritesSearch(): Flow<String> =
-	map(String::trim)
+	map { it.trim() }
 		.debounce { query -> if (query.isEmpty()) 0L else FAVOURITES_SEARCH_DEBOUNCE_MS }
 		.distinctUntilChanged()
