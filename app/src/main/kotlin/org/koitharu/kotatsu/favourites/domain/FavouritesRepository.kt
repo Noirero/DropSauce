@@ -108,6 +108,21 @@ class FavouritesRepository @Inject constructor(
 			.distinctUntilChanged()
 	}
 
+	/**
+	 * Lightweight invalidation signal for library/category UI.
+	 *
+	 * Unlike [observeCategoriesWithCovers], this does not query or materialize every cover merely to
+	 * learn that favourites changed. It is intentionally not distinctUntilChanged: every Room
+	 * invalidation must reach collectors even when the total number of favourites stays the same
+	 * (for example when a manga is moved between categories).
+	 */
+	fun observeFavouritesChanges(): Flow<Unit> {
+		return db.invalidationTracker.createFlow(
+			TABLE_FAVOURITES,
+			emitInitialState = true,
+		).map { Unit }
+	}
+
 	fun observeCategories(): Flow<List<FavouriteCategory>> {
 		return db.getFavouriteCategoriesDao().observeAll().mapItems {
 			it.toFavouriteCategory()
@@ -337,6 +352,5 @@ class FavouritesRepository @Inject constructor(
 			for (id in ids) {
 				db.getFavouritesDao().recover(mangaId = id, categoryId = categoryId)
 			}
-		}
 	}
 }
