@@ -105,7 +105,8 @@ class LocalMangaParser(private val uri: Uri) {
 					},
 				)
 			} else {
-				val title = rootFile.name.fileNameToTitle()
+				val nameMetadata = rootFile.localNameMetadata()
+				val title = nameMetadata?.title ?: rootFile.name.fileNameToTitle()
 				Manga(
 					id = rootFile.absolutePath.longHashCode(),
 					title = title,
@@ -149,7 +150,7 @@ class LocalMangaParser(private val uri: Uri) {
 					contentRating = null,
 					tags = emptySet(),
 					state = null,
-					authors = emptySet(),
+					authors = nameMetadata?.authors.orEmpty(),
 					largeCoverUrl = null,
 					description = null,
 				)
@@ -204,6 +205,7 @@ class LocalMangaParser(private val uri: Uri) {
 		val isCollection = epubFiles.size > 1 || rootFile.isDirectory
 		val books = epubFiles.map { it to EpubParser.parse(it) }
 		val (firstFile, firstBook) = books.first()
+		val nameMetadata = rootFile.localNameMetadata()
 		val chapters = if (withDetails) {
 			val result = ArrayList<MangaChapter>()
 			var number = 0f
@@ -234,9 +236,11 @@ class LocalMangaParser(private val uri: Uri) {
 			Manga(
 				id = rootFile.absolutePath.longHashCode(),
 				title = if (isCollection) {
-					rootFile.name.fileNameToTitle()
+					nameMetadata?.title ?: rootFile.name.fileNameToTitle()
 				} else {
-					firstBook.title ?: rootFile.name.fileNameToTitle()
+					firstBook.title?.takeIf { it.isNotBlank() }
+						?: nameMetadata?.title
+						?: rootFile.name.fileNameToTitle()
 				},
 				url = rootFile.toUri().toString(),
 				publicUrl = rootFile.toUri().toString(),
@@ -250,7 +254,7 @@ class LocalMangaParser(private val uri: Uri) {
 				contentRating = null,
 				tags = emptySet(),
 				state = null,
-				authors = firstBook.authors,
+				authors = firstBook.authors.ifEmpty { nameMetadata?.authors.orEmpty() },
 				largeCoverUrl = null,
 				description = firstBook.description,
 			),
@@ -353,6 +357,34 @@ class LocalMangaParser(private val uri: Uri) {
 	private fun Path.userFriendlyName(): String = name.substringBeforeLast('.')
 		.replace('_', ' ')
 		.toTitleCase()
+
+	private fun File.localNameMetadata(): LocalNameMetadata? {
+		val displayName = if (isDirectory) name else name.substringBeforeLast('.', name)
+		if (!displayName.startsWith('[')) {
+			return null
+		}
+		val closingBracket = displayName.indexOf(']')
+		if (closingBracket <= 1) {
+			return null
+		}
+		val title = displayName.substring(closingBracket + 1).trim()
+		if (title.isEmpty()) {
+			return null
+		}
+		val authors = displayName.substring(1, closingBracket)
+			.split(',')
+			.map { it.trim() }
+			.filterTo(LinkedHashSet()) { it.isNotEmpty() }
+		if (authors.isEmpty()) {
+			return null
+		}
+		return LocalNameMetadata(title = title, authors = authors)
+	}
+
+	private data class LocalNameMetadata(
+		val title: String,
+		val authors: Set<String>,
+	)
 
 	private class FsAndPath(
 		val fileSystem: FileSystem,
