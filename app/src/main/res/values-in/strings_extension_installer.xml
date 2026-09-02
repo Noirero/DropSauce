@@ -42,6 +42,25 @@
 	<string name="extension_installer_settings_shizuku_note">Update APK otomatis di background bekerja ketika Auto Update Extensions aktif dan Shizuku tetap berjalan dengan izin diberikan.</string>
 	<string name="extension_installer_settings_private_note">Update APK Private/Sandbox dapat dipasang secara internal ketika Auto Update Extensions aktif. Tidak membutuhkan Shizuku.</string>
 
+	<string name="extension_install_error_shizuku_connection_timeout">Shizuku tidak merespons tepat waktu. Biasanya ini hanya masalah sementara. Coba tekan Update lagi. Jika sering terjadi, buka Shizuku, pastikan masih berjalan dan izin DropSauce masih aktif, lalu coba kembali.</string>
+	<string name="extension_install_error_shizuku_connection">DropSauce tidak dapat terhubung ke layanan installer Shizuku. Buka Shizuku dan pastikan sedang berjalan serta izin DropSauce masih diberikan, lalu coba Update lagi.</string>
+	<string name="extension_install_error_package_timeout">Android terlalu lama menyelesaikan instalasi extension. Coba Update lagi. Jika terus terjadi, restart Shizuku atau gunakan Installer Sistem untuk extension ini.</string>
+	<string name="extension_install_error_blocked">Android memblokir instalasi extension. Periksa keamanan perangkat atau pembatasan instalasi, lalu coba lagi. Anda juga bisa memakai Installer Sistem untuk melihat konfirmasi dari Android.</string>
+	<string name="extension_install_error_aborted">Instalasi extension terhenti atau dibatalkan. Coba Update lagi. Jika sebelumnya Anda membatalkan popup Android, setujui pada percobaan berikutnya.</string>
+	<string name="extension_install_error_invalid">Android menolak APK extension karena tidak valid. Refresh daftar extension lalu coba Update lagi. Jika berulang, periksa atau ganti repository extension.</string>
+	<string name="extension_install_error_conflict">Extension bentrok dengan paket yang sudah terpasang, biasanya karena signature atau penyedianya berbeda. Hapus atau migrasikan extension lama, lalu pasang kembali. Jika ragu, gunakan Installer Sistem agar pesan rinci Android terlihat.</string>
+	<string name="extension_install_error_storage">Penyimpanan perangkat yang bisa digunakan tidak cukup untuk memasang extension. Kosongkan sebagian ruang, lalu coba Update lagi.</string>
+	<string name="extension_install_error_incompatible">Versi extension ini tidak kompatibel dengan perangkat atau versi Android Anda. Coba versi/repository lain atau gunakan extension yang kompatibel.</string>
+	<string name="extension_install_error_generic">Android melaporkan: %1$s\n\nCoba Update lagi. Jika terus gagal, pastikan Shizuku masih berjalan dan izinnya aktif, atau ganti ke Installer Sistem agar pesan rinci Android terlihat.</string>
+	<string name="extension_install_error_unknown_detail">Kesalahan instalasi tidak diketahui</string>
+
+	<!-- Existing installer errors translated with a recovery step for Indonesian UI. -->
+	<string name="shizuku_install_failed">Instalasi otomatis gagal. %1$s</string>
+	<string name="shizuku_invalid_package">APK extension yang diunduh tidak valid atau nama paketnya tidak sesuai. Refresh daftar lalu coba Update lagi. Jika masih sama, periksa atau ganti repository extension.</string>
+	<string name="extension_download_failed">Download extension gagal. Periksa koneksi internet lalu coba Update lagi. Jika hanya satu extension yang selalu gagal, refresh atau periksa repository extension tersebut.</string>
+	<string name="private_extension_install_failed">Gagal memasang extension Private/Sandbox: %1$s. Coba Update lagi. Jika terus gagal, coba instal ulang extension atau gunakan metode Installer Sistem.</string>
+	<string name="extension_install_permission_required_message">Aktifkan izin “Instal aplikasi tidak dikenal” untuk DropSauce, lalu kembali dan coba instal/update extension lagi.</string>
+
 	<string name="extension_update_all_success">%1$d extension berhasil diperbarui.</string>
 	<string name="extension_update_all_partial">%1$d extension berhasil diperbarui, %2$d gagal.</string>
 </resources>
