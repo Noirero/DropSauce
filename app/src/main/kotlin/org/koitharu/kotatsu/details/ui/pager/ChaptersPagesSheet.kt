@@ -126,17 +126,33 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		super.onStart()
 		val sheetDialog = dialog as? BottomSheetDialog
 		applyDetailsSheetSurface(sheetDialog)
-		// In the details screen the sheet opens at a centred, half-expanded position. Keep nested list
-		// swipes for the RecyclerViews; only direct drags on the header/toolbar should move the sheet.
 		if (viewModel is DetailsViewModel) {
-			sheetDialog?.behavior?.apply {
-				isFitToContents = false
-				isHideable = true
-				setDraggableOnNestedScroll(false)
-				skipCollapsed = true
-				halfExpandedRatio = HALF_EXPANDED_RATIO
+			configureDetailsChapterSheet(sheetDialog, resetToHalfExpanded = true)
+		}
+	}
+
+	private fun configureDetailsChapterSheet(
+		sheetDialog: BottomSheetDialog?,
+		resetToHalfExpanded: Boolean,
+	) {
+		val binding = viewBinding ?: return
+		binding.headerBar.enableHalfExpandedCollapseMode(HALF_EXPANDED_RATIO)
+		sheetDialog?.behavior?.apply {
+			isFitToContents = false
+			isHideable = true
+			// Keep all chapter-list gestures inside the content. The header provides the only manual drag
+			// path, restricted to its handle row and to half-expanded <-> collapsed.
+			isDraggable = false
+			setDraggableOnNestedScroll(false)
+			skipCollapsed = false
+			halfExpandedRatio = HALF_EXPANDED_RATIO
+			if (resetToHalfExpanded && state != BottomSheetBehavior.STATE_COLLAPSED) {
 				state = BottomSheetBehavior.STATE_HALF_EXPANDED
 			}
+		}
+		binding.headerBar.doOnLayout { header ->
+			// Leave the drag-handle row visible when collapsed so the existing upward drag can reopen it.
+			sheetDialog?.behavior?.peekHeight = header.height
 		}
 	}
 
@@ -221,11 +237,19 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 
 	override fun expandAndLock() {
 		super.expandAndLock()
+		if (viewModel is DetailsViewModel) {
+			// Selection mode must not punch through the chapter sheet's half-expanded upper bound.
+			(dialog as? BottomSheetDialog)?.behavior?.state = BottomSheetBehavior.STATE_HALF_EXPANDED
+		}
 		adjustLockState()
 	}
 
 	override fun unlock() {
 		super.unlock()
+		if (viewModel is DetailsViewModel) {
+			// BaseAdaptiveSheet unlocks native dragging; restore the chapter sheet's handle-only mode.
+			configureDetailsChapterSheet(dialog as? BottomSheetDialog, resetToHalfExpanded = false)
+		}
 		adjustLockState()
 	}
 
@@ -267,11 +291,11 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 		const val TAB_PAGES = 1
 		const val TAB_BOOKMARKS = 2
 
-		// How much of the screen height the sheet covers when it first opens at the centre position.
+		// How much of the screen height the sheet covers at its highest allowed position.
 		private const val HALF_EXPANDED_RATIO = 0.62f
 
-		// Slide offset (0 = centre/half, 1 = full screen) at which the drag handle starts collapsing.
-		// Kept above the half-expanded resting offset so the handle stays full at the centre position.
+		// Kept for the shared drag-handle animation path. The restricted chapter sheet never reaches the
+		// full-screen portion where this starts, so its handle stays fully visible.
 		private const val DRAG_HANDLE_COLLAPSE_START = 0.65f
 	}
 }

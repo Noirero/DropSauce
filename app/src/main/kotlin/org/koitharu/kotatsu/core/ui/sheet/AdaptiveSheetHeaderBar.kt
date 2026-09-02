@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.core.ui.sheet
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.InputDevice
 import android.view.LayoutInflater
@@ -45,6 +46,9 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	private var cachedSheetView: View? = null
 	private var cachedParentHeight = 0
 	private var velocityTracker: VelocityTracker? = null
+	private var halfExpandedCollapseRatio: Float? = null
+	private var dragStartedOnHandle = false
+	private val dragHandleHitRect = Rect()
 
 	var title: CharSequence?
 		get() = binding.shTextViewTitle.text
@@ -55,6 +59,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	init {
 		orientation = VERTICAL
 		binding.shButtonClose.setOnClickListener { dismissSheet() }
+		binding.shButtonCollapse.setOnClickListener { collapseSheet() }
 		context.withStyledAttributes(
 			attrs,
 			R.styleable.AdaptiveSheetHeaderBar, defStyleAttr,
@@ -67,7 +72,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		super.onAttachedToWindow()
 		if (isInEditMode) {
 			val isTabled = resources.getBoolean(R.bool.is_tablet)
-			binding.shDragHandle.isGone = isTabled
+			binding.shDragHandleContainer.isGone = isTabled
 			binding.shLayoutSidesheet.isVisible = isTabled
 		} else {
 			setBottomSheetBehavior(findParentSheetBehavior())
@@ -83,6 +88,18 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		super.onDetachedFromWindow()
 	}
 
+	/**
+	 * Restricts this bottom-sheet header to two positions: the supplied half-expanded position and
+	 * collapsed. Native sheet dragging should be disabled by the caller while this mode is active so
+	 * only a gesture that starts in the drag-handle row can move the sheet. Other header users keep the
+	 * original unrestricted behaviour because this mode is opt-in.
+	 */
+	fun enableHalfExpandedCollapseMode(halfExpandedRatio: Float) {
+		require(halfExpandedRatio in 0f..1f)
+		halfExpandedCollapseRatio = halfExpandedRatio
+		updateCollapseButtonVisibility()
+	}
+
 	override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
 		val behavior = sheetBehavior as? AdaptiveSheetBehavior.Bottom ?: return super.onInterceptTouchEvent(ev)
 		if (behavior.isDraggable) return super.onInterceptTouchEvent(ev)
@@ -90,6 +107,12 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		when (ev.actionMasked) {
 			MotionEvent.ACTION_DOWN -> {
 				isIntercepting = false
+				dragStartedOnHandle = halfExpandedCollapseRatio == null || isInsideDragHandleRow(ev)
+				if (!dragStartedOnHandle) {
+					velocityTracker?.recycle()
+					velocityTracker = null
+					return false
+				}
 				interceptStartY = ev.rawY
 				val sv = findOrGetSheetView()
 				if (sv != null) {
@@ -101,6 +124,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 				velocityTracker = VelocityTracker.obtain().also { it.addMovement(ev) }
 			}
 			MotionEvent.ACTION_MOVE -> {
+				if (!dragStartedOnHandle) return false
 				velocityTracker?.addMovement(ev)
 				if (!isIntercepting && abs(ev.rawY - interceptStartY) > touchSlop) {
 					isIntercepting = true
@@ -113,6 +137,7 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 					velocityTracker = null
 				}
 				isIntercepting = false
+				dragStartedOnHandle = false
 			}
 		}
 		return false
@@ -122,8 +147,15 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		val behavior = sheetBehavior as? AdaptiveSheetBehavior.Bottom ?: return super.onTouchEvent(event)
 		if (behavior.isDraggable) return super.onTouchEvent(event)
 
-		val sv = cachedSheetView ?: return true
-		val parentHeight = cachedParentHeight.takeIf { it > 0 } ?: return true
+		if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+			dragStartedOnHandle = halfExpandedCollapseRatio == null || isInsideDragHandleRow(event)
+		}
+		if (!dragStartedOnHandle) return false
+
+		val sv = cachedSheetView ?: findOrGetSheetView() ?: return true
+		val parentHeight = cachedParentHeight.takeIf { it > 0 }
+			?: (sv.parent as? View)?.height?.also { cachedParentHeight = it }
+			?: return true
 
 		velocityTracker?.addMovement(event)
 
@@ -138,7 +170,10 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 			}
 			MotionEvent.ACTION_MOVE -> {
 				val dy = (event.rawY - dragStartRawY).toInt()
-				val newTop = (sheetStartTop + dy).coerceIn(0, parentHeight)
+				val restrictedRatio = halfExpandedCollapseRatio
+				val minTop = restrictedRatio?.let { halfExpandedTop(parentHeight, it) } ?: 0
+				val maxTop = restrictedRatio?.let { collapsedTop(parentHeight, minTop) } ?: parentHeight
+				val newTop = (sheetStartTop + dy).coerceIn(minTop, maxTop)
 				sv.offsetTopAndBottom(newTop - sv.top)
 				return true
 			}
@@ -149,18 +184,31 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 				vt?.recycle()
 				velocityTracker = null
 
-				val halfExpandedOffset = (parentHeight * (1f - HALF_EXPANDED_RATIO)).toInt()
+				val restrictedRatio = halfExpandedCollapseRatio
 				val currentTop = sv.top
-
-				val newState = when {
-					yVel < -FLING_VELOCITY -> AdaptiveSheetBehavior.STATE_EXPANDED
-					yVel > FLING_VELOCITY -> AdaptiveSheetBehavior.STATE_HIDDEN
-					currentTop < halfExpandedOffset / 2 -> AdaptiveSheetBehavior.STATE_EXPANDED
-					currentTop > halfExpandedOffset + (parentHeight - halfExpandedOffset) / 2 -> AdaptiveSheetBehavior.STATE_HIDDEN
-					else -> BottomSheetBehavior.STATE_HALF_EXPANDED
+				val newState = if (restrictedRatio != null) {
+					val halfTop = halfExpandedTop(parentHeight, restrictedRatio)
+					val collapsedTop = collapsedTop(parentHeight, halfTop)
+					val midpoint = halfTop + (collapsedTop - halfTop) / 2
+					when {
+						yVel < -FLING_VELOCITY -> BottomSheetBehavior.STATE_HALF_EXPANDED
+						yVel > FLING_VELOCITY -> AdaptiveSheetBehavior.STATE_COLLAPSED
+						currentTop <= midpoint -> BottomSheetBehavior.STATE_HALF_EXPANDED
+						else -> AdaptiveSheetBehavior.STATE_COLLAPSED
+					}
+				} else {
+					val halfExpandedOffset = halfExpandedTop(parentHeight, HALF_EXPANDED_RATIO)
+					when {
+						yVel < -FLING_VELOCITY -> AdaptiveSheetBehavior.STATE_EXPANDED
+						yVel > FLING_VELOCITY -> AdaptiveSheetBehavior.STATE_HIDDEN
+						currentTop < halfExpandedOffset / 2 -> AdaptiveSheetBehavior.STATE_EXPANDED
+						currentTop > halfExpandedOffset + (parentHeight - halfExpandedOffset) / 2 -> AdaptiveSheetBehavior.STATE_HIDDEN
+						else -> BottomSheetBehavior.STATE_HALF_EXPANDED
+					}
 				}
 				settleToState(sv, behavior, newState)
 				isIntercepting = false
+				dragStartedOnHandle = false
 				return true
 			}
 		}
@@ -171,8 +219,11 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		val behavior = sheetBehavior ?: return super.onGenericMotionEvent(event)
 		if (event.source and InputDevice.SOURCE_CLASS_POINTER != 0) {
 			if (event.actionMasked == MotionEvent.ACTION_SCROLL) {
+				val restricted = halfExpandedCollapseRatio != null && behavior is AdaptiveSheetBehavior.Bottom
 				if (event.getAxisValue(MotionEvent.AXIS_VSCROLL) < 0f) {
-					behavior.state = if (
+					behavior.state = if (restricted) {
+						AdaptiveSheetBehavior.STATE_COLLAPSED
+					} else if (
 						behavior is AdaptiveSheetBehavior.Bottom
 						&& behavior.state == AdaptiveSheetBehavior.STATE_EXPANDED
 					) {
@@ -181,7 +232,11 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 						AdaptiveSheetBehavior.STATE_HIDDEN
 					}
 				} else {
-					behavior.state = AdaptiveSheetBehavior.STATE_EXPANDED
+					behavior.state = if (restricted) {
+						BottomSheetBehavior.STATE_HALF_EXPANDED
+					} else {
+						AdaptiveSheetBehavior.STATE_EXPANDED
+					}
 				}
 				return true
 			}
@@ -222,10 +277,19 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	private fun settleToState(sv: View, behavior: AdaptiveSheetBehavior.Bottom, newState: Int) {
 		if (behavior.state == newState) {
 			// Behavior setter is a no-op when state hasn't changed — animate back manually
-			val halfOffset = (cachedParentHeight * (1f - HALF_EXPANDED_RATIO)).toInt()
+			val restrictedRatio = halfExpandedCollapseRatio
+			val halfOffset = halfExpandedTop(
+				cachedParentHeight,
+				restrictedRatio ?: HALF_EXPANDED_RATIO,
+			)
 			val targetTop = when (newState) {
 				AdaptiveSheetBehavior.STATE_EXPANDED -> 0
 				BottomSheetBehavior.STATE_HALF_EXPANDED -> halfOffset
+				AdaptiveSheetBehavior.STATE_COLLAPSED -> if (restrictedRatio != null) {
+					collapsedTop(cachedParentHeight, halfOffset)
+				} else {
+					cachedParentHeight
+				}
 				else -> cachedParentHeight
 			}
 			val startTop = sv.top
@@ -247,6 +311,19 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 		}
 	}
 
+	private fun halfExpandedTop(parentHeight: Int, ratio: Float): Int {
+		return (parentHeight * (1f - ratio)).roundToInt()
+	}
+
+	private fun collapsedTop(parentHeight: Int, halfTop: Int): Int {
+		return (parentHeight - height).coerceAtLeast(halfTop)
+	}
+
+	private fun isInsideDragHandleRow(event: MotionEvent): Boolean {
+		binding.shDragHandleContainer.getHitRect(dragHandleHitRect)
+		return dragHandleHitRect.contains(event.x.toInt(), event.y.toInt())
+	}
+
 	private fun findOrGetSheetView(): View? {
 		val cached = cachedSheetView
 		if (cached != null && cached.isAttachedToWindow) return cached
@@ -258,11 +335,23 @@ class AdaptiveSheetHeaderBar @JvmOverloads constructor(
 	}
 
 	private fun setBottomSheetBehavior(behavior: AdaptiveSheetBehavior?) {
-		binding.shDragHandle.isVisible = behavior is AdaptiveSheetBehavior.Bottom
+		binding.shDragHandleContainer.isVisible = behavior is AdaptiveSheetBehavior.Bottom
 		binding.shLayoutSidesheet.isVisible = behavior is AdaptiveSheetBehavior.Side
 		sheetBehavior?.removeCallback(this)
 		sheetBehavior = behavior
 		behavior?.addCallback(this)
+		updateCollapseButtonVisibility()
+	}
+
+	private fun updateCollapseButtonVisibility() {
+		binding.shButtonCollapse.isVisible =
+			halfExpandedCollapseRatio != null && sheetBehavior is AdaptiveSheetBehavior.Bottom
+	}
+
+	private fun collapseSheet() {
+		if (halfExpandedCollapseRatio != null) {
+			(sheetBehavior as? AdaptiveSheetBehavior.Bottom)?.state = AdaptiveSheetBehavior.STATE_COLLAPSED
+		}
 	}
 
 	private fun dismissSheet() {
