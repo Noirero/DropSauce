@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="alternative_search_title_hint">Search title</string>
+	<string name="alternative_search_again">Search</string>
+</resources>
