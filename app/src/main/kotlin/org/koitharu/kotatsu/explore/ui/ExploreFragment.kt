@@ -8,21 +8,28 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.view.ActionMode
 import androidx.core.graphics.Insets
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.badge.BadgeDrawable
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
@@ -368,6 +375,98 @@ class ExploreFragment :
 		}
 		container.addView(sourceAllSwitch)
 
+		val searchInput = TextInputEditText(context).apply {
+			isSingleLine = true
+			setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
+		}
+		container.addView(
+			TextInputLayout(context).apply {
+				hint = getString(R.string.search_extensions)
+				setStartIconDrawable(R.drawable.ic_search)
+				endIconMode = TextInputLayout.END_ICON_CLEAR_TEXT
+				isHintEnabled = true
+				addView(
+					searchInput,
+					LinearLayout.LayoutParams(
+						LinearLayout.LayoutParams.MATCH_PARENT,
+						LinearLayout.LayoutParams.WRAP_CONTENT,
+					),
+				)
+			},
+			LinearLayout.LayoutParams(
+				LinearLayout.LayoutParams.MATCH_PARENT,
+				LinearLayout.LayoutParams.WRAP_CONTENT,
+			).apply { topMargin = rowPadding / 2 },
+		)
+
+		val alphabetGroup = ChipGroup(context).apply {
+			isSingleSelection = true
+			isSelectionRequired = true
+			isSingleLine = true
+		}
+		container.addView(
+			HorizontalScrollView(context).apply {
+				isHorizontalScrollBarEnabled = false
+				addView(alphabetGroup)
+			},
+			LinearLayout.LayoutParams(
+				LinearLayout.LayoutParams.MATCH_PARENT,
+				LinearLayout.LayoutParams.WRAP_CONTENT,
+			).apply { topMargin = rowPadding / 2 },
+		)
+
+		val noMatches = TextView(context).apply {
+			setText(R.string.no_matching_extensions)
+			setPadding(0, rowPadding, 0, rowPadding)
+			isVisible = false
+		}
+		container.addView(noMatches)
+
+		var selectedInitial: Char? = null
+		var searchText = ""
+		val normalizedNames = entries.associate { entry ->
+			entry.source.sourceId to entry.source.displayName.trim().lowercase()
+		}
+
+		fun updateVisibleSources() {
+			var visibleCount = 0
+			for ((sourceId, toggle) in sourceSwitches) {
+				val name = normalizedNames[sourceId].orEmpty()
+				val matchesSearch = searchText.isBlank() || searchText in name
+				val matchesInitial = selectedInitial == null || name.firstOrNull()?.uppercaseChar() == selectedInitial
+				toggle.isVisible = matchesSearch && matchesInitial
+				if (toggle.isVisible) visibleCount++
+			}
+			noMatches.isVisible = visibleCount == 0
+		}
+
+		fun addInitialChip(label: String, initial: Char?, enabled: Boolean = true): Chip {
+			return Chip(context).apply {
+				id = View.generateViewId()
+				text = label
+				isCheckable = true
+				isEnabled = enabled
+				setOnClickListener {
+					selectedInitial = initial
+					updateVisibleSources()
+				}
+				alphabetGroup.addView(this)
+			}
+		}
+
+		val allInitialsChip = addInitialChip(getString(R.string.all_short), null)
+		val availableInitials = normalizedNames.values.mapNotNullTo(HashSet()) {
+			it.firstOrNull()?.uppercaseChar()?.takeIf { char -> char in 'A'..'Z' }
+		}
+		for (initial in 'A'..'Z') {
+			addInitialChip(initial.toString(), initial, initial in availableInitials)
+		}
+		alphabetGroup.check(allInitialsChip.id)
+		searchInput.doAfterTextChanged {
+			searchText = it?.toString().orEmpty().trim().lowercase()
+			updateVisibleSources()
+		}
+
 		entries.sortedWith(
 			compareBy<MihonSourceFilterEntry> { getExternalExtensionLanguageDisplayName(it.source.language) }
 				.thenBy { it.source.displayName.lowercase() },
@@ -385,6 +484,7 @@ class ExploreFragment :
 			sourceSwitches[entry.source.sourceId] = toggle
 			container.addView(toggle)
 		}
+		updateVisibleSources()
 
 		return {
 			SourceFilterState(

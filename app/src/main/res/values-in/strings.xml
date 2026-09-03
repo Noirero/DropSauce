@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="search_extensions">Cari extension</string>
+    <string name="no_matching_extensions">Tidak ada extension yang cocok</string>
+    <string name="all_short">Semua</string>
     <string name="go_to_top">Ke paling atas</string>
     <string name="go_to_bottom">Ke paling bawah</string>
     <string name="favourites_total_placeholder">Jumlah total judul</string>

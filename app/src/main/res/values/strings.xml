@@ -282,6 +282,9 @@
     <string name="source_filter_languages">Languages</string>
     <string name="source_filter_individual">Individual sources</string>
     <string name="source_filter_summary">Choose which sources participate in Explore and global search.</string>
+    <string name="search_extensions">Search extensions</string>
+    <string name="no_matching_extensions">No matching extensions</string>
+    <string name="all_short">All</string>
     <string name="extension_sources">Sources</string>
     <string name="local_library_only">Local library only</string>
     <string name="never">Never</string>
