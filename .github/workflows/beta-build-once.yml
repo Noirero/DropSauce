@@ -30,7 +30,15 @@ jobs:
           cache: gradle
 
       - name: Apply source fixes
-        run: python3 .github/source-fix-once.py apply
+        run: |
+          python3 .github/source-fix-once.py apply
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/src/main/kotlin/org/koitharu/kotatsu/core/db/dao/ChaptersDao.kt')
+          text = path.read_text()
+          text = text.replace('current.', 'cur.').replace('FROM chapters AS current', 'FROM chapters AS cur')
+          path.write_text(text)
+          PY
 
       - name: Verify preview Kotlin and Room queries
         run: |
