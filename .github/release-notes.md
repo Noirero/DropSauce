@@ -1,5 +1,6 @@
 ## Changelog 2
 
+- Extension yang meminta “Open WebView to refresh token” kini menawarkan tindakan untuk membuka WebView dan memuat ulang chapter setelah pengguna kembali, bukan hanya menampilkan tombol Tutup.
 - Badge jumlah kategori Disukai kembali muncul dan kini dihitung langsung oleh database agar tampil jauh lebih cepat, termasuk pada library besar.
 - Pemilihan kategori melalui “Favoritkan ini” kini baru diterapkan lewat tombol Oke dan dialog ditutup setelah penyimpanan berhasil, sehingga hasilnya jelas dan tidak terpotong oleh penutupan dialog.
 - Item chapter terakhir memperoleh ruang aman di atas tepi layar/navigation bar agar tetap terlihat penuh dan mudah ditekan.
