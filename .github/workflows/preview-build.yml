@@ -70,7 +70,8 @@ jobs:
           BUILD_GRADLE="app/build.gradle"
           BASE_VERSION=$(grep -E "versionName = '[^']+'" "$BUILD_GRADLE" | head -n1 | sed -E "s/.*versionName = '([^']+)'.*/\1/")
           VERSION_NAME="${BASE_VERSION}-beta.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
-          VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER * 10 + GITHUB_RUN_ATTEMPT))
+          # Keep versionCode monotonic even when a Beta build is started by a different workflow.
+          VERSION_CODE=$(( $(date -u +%s) / 60 ))
           export VERSION_NAME VERSION_CODE
           python3 - <<'PY'
           import os
