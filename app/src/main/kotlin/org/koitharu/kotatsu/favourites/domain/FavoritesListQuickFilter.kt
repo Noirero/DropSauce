@@ -38,15 +38,10 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 		selectedOptions: Set<ListFilterOption>,
 	): List<ChipsView.ChipModel> {
 		val options = getSourceOptions()
-		pruneStaleSourceFilters(selectedOptions, options)
-		if (options.isEmpty()) {
+		val selectedSources = selectedOptions.filterIsInstance<ListFilterOption.Source>().toSet()
+		if (options.isEmpty() && selectedSources.isEmpty()) {
 			return emptyList()
 		}
-		val selectedSourceNames = selectedOptions
-			.filterIsInstance<ListFilterOption.Source>()
-			.mapTo(HashSet()) { it.mangaSource.name }
-		val selectedSources = options
-			.filterTo(LinkedHashSet<ListFilterOption.Source>()) { it.mangaSource.name in selectedSourceNames }
 		return listOf(
 			ChipsView.ChipModel(
 				icon = R.drawable.ic_filter_funnel,
@@ -71,18 +66,6 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 			it.name
 		}.map {
 			ListFilterOption.Source(it)
-		}
-	}
-
-	private fun pruneStaleSourceFilters(
-		selectedOptions: Set<ListFilterOption>,
-		availableSourceOptions: List<ListFilterOption.Source>,
-	) {
-		val availableSourceNames = availableSourceOptions.mapTo(HashSet()) { it.mangaSource.name }
-		for (selectedOption in selectedOptions.filterIsInstance<ListFilterOption.Source>()) {
-			if (selectedOption.mangaSource.name !in availableSourceNames) {
-				setFilterOption(selectedOption, isApplied = false)
-			}
 		}
 	}
 

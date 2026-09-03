@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.MangaSource
 import org.koitharu.kotatsu.core.model.getLanguageCode
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.model.isNovelSource
@@ -31,6 +32,7 @@ import org.koitharu.kotatsu.core.util.ext.flattenLatest
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
+import org.koitharu.kotatsu.favourites.domain.FavouriteSourceFilterStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteUnreadCounter
 import org.koitharu.kotatsu.favourites.domain.FavoritesListQuickFilter
 import org.koitharu.kotatsu.favourites.domain.FavouritesRepository
@@ -65,6 +67,17 @@ private const val PAGE_SIZE = 16
 private const val DATABASE_WINDOW_INITIAL = PAGE_SIZE * 4
 private const val DATABASE_WINDOW_MAX = 4096
 
+private fun mergeSourceFilters(
+	localFilters: Set<ListFilterOption>,
+	type: FavouriteContentType,
+	sourceSelections: Map<FavouriteContentType, Set<String>>,
+): Set<ListFilterOption> = buildSet {
+	addAll(localFilters.filterNot { it is ListFilterOption.Source })
+	sourceSelections[type].orEmpty().mapTo(this) { sourceName ->
+		ListFilterOption.Source(MangaSource(sourceName))
+	}
+}
+
 @HiltViewModel
 class FavouritesListViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
@@ -80,6 +93,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val displayPreferences: FavouriteDisplayPreferences,
 	private val localMangaIndex: LocalMangaIndex,
 	private val unreadCounter: FavouriteUnreadCounter,
+	private val sourceFilterStore: FavouriteSourceFilterStore,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -126,6 +140,22 @@ class FavouritesListViewModel @Inject constructor(
 	) { query, type, pageLimit, preferences ->
 		DisplayState(query, type, pageLimit, preferences.getValue(type))
 	}
+
+	private val effectiveFilters = combine(
+		quickFilter.appliedOptions,
+		contentTypeStore.selectedType,
+		sourceFilterStore.state,
+	) { localFilters, type, sourceSelections ->
+		mergeSourceFilters(localFilters, type, sourceSelections)
+	}.stateIn(
+		viewModelScope + Dispatchers.Default,
+		SharingStarted.Eagerly,
+		mergeSourceFilters(
+			quickFilter.appliedOptions.value,
+			contentTypeStore.selectedType.value,
+			sourceFilterStore.state.value,
+		),
+	)
 
 	override val listMode: StateFlow<ListMode> = activeDisplayOptions
 		.map { it.listMode }
@@ -175,7 +205,7 @@ class FavouritesListViewModel @Inject constructor(
 		pinnedIds,
 		displayState,
 	) { list, _, scalingTip, pinned, display ->
-		val filters = quickFilter.appliedOptions.value
+		val filters = effectiveFilters.value
 		val wantNovel = display.type == FavouriteContentType.NOVEL
 		// A query change shrinks databaseWindow before Room necessarily returns the smaller list. Limit
 		// the stale snapshot here too, so a new keystroke never scans a previously loaded 16k list once.
@@ -215,12 +245,28 @@ class FavouritesListViewModel @Inject constructor(
 
 	override fun onRetry() = Unit
 
-	override fun setFilterOption(option: ListFilterOption, isApplied: Boolean) =
-		quickFilter.setFilterOption(option, isApplied)
+	override fun setFilterOption(option: ListFilterOption, isApplied: Boolean) {
+		if (option is ListFilterOption.Source) {
+			sourceFilterStore.set(contentTypeStore.selectedType.value, option.mangaSource.name, isApplied)
+		} else {
+			quickFilter.setFilterOption(option, isApplied)
+		}
+	}
 
-	override fun toggleFilterOption(option: ListFilterOption) = quickFilter.toggleFilterOption(option)
+	override fun toggleFilterOption(option: ListFilterOption) {
+		if (option is ListFilterOption.Source) {
+			val type = contentTypeStore.selectedType.value
+			val isSelected = option.mangaSource.name in sourceFilterStore.state.value[type].orEmpty()
+			sourceFilterStore.set(type, option.mangaSource.name, !isSelected)
+		} else {
+			quickFilter.toggleFilterOption(option)
+		}
+	}
 
-	override fun clearFilter() = quickFilter.clearFilter()
+	override fun clearFilter() {
+		quickFilter.clearFilter()
+		sourceFilterStore.clear(contentTypeStore.selectedType.value)
+	}
 
 	fun dismissScalingTip() {
 		settings.closeTip(TIP_UI_SCALING)
@@ -352,7 +398,7 @@ class FavouritesListViewModel @Inject constructor(
 
 	private fun observeFavorites() = combine(
 		sortOrder.filterNotNull(),
-		quickFilter.appliedOptions.combineWithSettings(),
+		effectiveFilters.combineWithSettings(),
 		pinnedIds,
 		databaseWindow,
 		contentTypeStore.selectedType,

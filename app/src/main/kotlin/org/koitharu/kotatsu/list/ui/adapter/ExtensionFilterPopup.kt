@@ -72,7 +72,9 @@ internal object ExtensionFilterPopup {
 			selectedSourceNames.clear()
 			rows.forEach { it.checkBox.isChecked = false }
 			updateResetButton(resetButton, isEnabled = false)
-			listener.onFilterOptionsCleared(filter.options)
+			// Clear selections that came from another category too; they are intentionally retained in
+			// the shared Favourites filter even when the current category has no matching row.
+			listener.onFilterOptionsCleared(filter.options + filter.selectedOptions)
 		}
 		updateResetButton(resetButton, selectedSourceNames.isNotEmpty())
 
