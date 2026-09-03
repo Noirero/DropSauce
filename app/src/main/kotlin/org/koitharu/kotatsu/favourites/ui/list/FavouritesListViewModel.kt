@@ -33,6 +33,7 @@ import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
 import org.koitharu.kotatsu.details.data.DetailsNavigationCache
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
+import org.koitharu.kotatsu.favourites.domain.DownloadedFavouritesSortPreferences
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -99,6 +100,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val unreadCounter: FavouriteUnreadCounter,
 	private val sourceFilterStore: FavouriteSourceFilterStore,
 	private val detailsNavigationCache: DetailsNavigationCache,
+	private val downloadedSortPreferences: DownloadedFavouritesSortPreferences,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -189,10 +191,10 @@ class FavouritesListViewModel @Inject constructor(
 			displayPreferences.current(contentTypeStore.selectedType.value).gridColumns,
 		)
 
-	val sortOrder: StateFlow<ListSortOrder?> = if (categoryId == NO_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
-		settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) { allFavoritesSortOrder }
-	} else {
-		repository.observeCategory(categoryId).withErrorHandling().map { it?.order }
+	val sortOrder: StateFlow<ListSortOrder?> = when (categoryId) {
+		DOWNLOADED_FAVOURITES_CATEGORY_ID -> downloadedSortPreferences.state
+		NO_ID -> settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) { allFavoritesSortOrder }
+		else -> repository.observeCategory(categoryId).withErrorHandling().map { it?.order }
 	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
 
 	val pinnedIds: StateFlow<List<Long>> = settings.observeAsFlow(

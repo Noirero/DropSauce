@@ -28,7 +28,6 @@ import org.koitharu.kotatsu.core.util.ext.stableMangaCoverKey
 import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
-import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.list.ui.MangaListFragment
 import org.koitharu.kotatsu.list.ui.adapter.MangaListAdapter
 import org.koitharu.kotatsu.list.ui.config.ListConfigSection
@@ -145,12 +144,7 @@ class FavouritesListFragment : MangaListFragment() {
 	override fun onEmptyActionClick() = viewModel.clearFilter()
 
 	override fun onFilterClick(view: View?) {
-		val configCategoryId = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
-			NO_ID
-		} else {
-			categoryId
-		}
-		router.showListSortSheet(ListConfigSection.Favorites(configCategoryId))
+		router.showListSortSheet(ListConfigSection.Favorites(categoryId))
 	}
 
 	fun scrollToTop() {
