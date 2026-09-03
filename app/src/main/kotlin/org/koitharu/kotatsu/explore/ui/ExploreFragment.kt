@@ -466,7 +466,7 @@ class ExploreFragment :
 
 			R.id.action_shortcut -> {
 				val source = selectedSources.singleOrNull() ?: return false
-				router.openSourceSettings(source)
+				viewModel.requestPinShortcut(source)
 				mode?.finish()
 			}
 
