@@ -4,21 +4,27 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,7 +45,6 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.ComposeAlertDialogFragment
 import org.koitharu.kotatsu.core.ui.dialog.ExpressiveDialogCard
-import org.koitharu.kotatsu.core.ui.dialog.ExpressivePillButton
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.joinToStringWithLimit
 import org.koitharu.kotatsu.core.util.ext.observeEvent
@@ -73,46 +78,75 @@ class FavoriteDialog : ComposeAlertDialogFragment() {
 			icon = painterResource(R.drawable.ic_heart),
 			title = title,
 		) {
-			Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+			LazyColumn(
+				modifier = Modifier
+					.fillMaxWidth()
+					.heightIn(max = 280.dp),
+			) {
 				content.forEach { model ->
-					when (model) {
-						is LoadingState -> Box(
-							modifier = Modifier
-								.fillMaxWidth()
-								.padding(24.dp),
-							contentAlignment = Alignment.Center,
-						) {
-							CircularProgressIndicator()
+					item {
+						when (model) {
+							is LoadingState -> Box(
+								modifier = Modifier
+									.fillMaxWidth()
+									.padding(24.dp),
+								contentAlignment = Alignment.Center,
+							) {
+								CircularProgressIndicator()
+							}
+
+							is EmptyState -> Text(
+								text = stringResource(model.textPrimary),
+								style = MaterialTheme.typography.bodyMedium,
+								color = MaterialTheme.colorScheme.onSurfaceVariant,
+								modifier = Modifier
+									.fillMaxWidth()
+									.padding(vertical = 24.dp),
+							)
+
+							is MangaCategoryItem -> CategoryRow(model, enabled = !isSaving)
 						}
-
-						is EmptyState -> Text(
-							text = stringResource(model.textPrimary),
-							style = MaterialTheme.typography.bodyMedium,
-							color = MaterialTheme.colorScheme.onSurfaceVariant,
-							modifier = Modifier
-								.fillMaxWidth()
-								.padding(vertical = 24.dp),
-						)
-
-						is MangaCategoryItem -> CategoryRow(model, enabled = !isSaving)
 					}
 				}
 			}
 			Spacer(Modifier.size(16.dp))
-			ExpressivePillButton(
-				text = stringResource(android.R.string.ok),
-				primary = true,
-				enabled = !isSaving,
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				horizontalArrangement = Arrangement.spacedBy(8.dp),
+				verticalAlignment = Alignment.CenterVertically,
 			) {
-				viewModel.save()
-			}
-			Spacer(Modifier.size(8.dp))
-			ExpressivePillButton(
-				text = stringResource(R.string.manage),
-				primary = false,
-				enabled = !isSaving,
-			) {
-				viewModel.save(openCategoryManagement = true)
+				TextButton(
+					onClick = { dismiss() },
+					enabled = !isSaving,
+					modifier = Modifier
+						.weight(1f)
+						.height(48.dp),
+				) {
+					Text(stringResource(android.R.string.cancel))
+				}
+				FilledTonalButton(
+					onClick = {
+						viewModel.prepareCategoryManagement()
+						router.openFavoriteCategoryCreate()
+					},
+					enabled = !isSaving,
+					modifier = Modifier.size(48.dp),
+					contentPadding = PaddingValues(0.dp),
+				) {
+					Text(
+						text = "+",
+						style = MaterialTheme.typography.titleLarge,
+					)
+				}
+				Button(
+					onClick = { viewModel.save() },
+					enabled = !isSaving,
+					modifier = Modifier
+						.weight(1f)
+						.height(48.dp),
+				) {
+					Text(stringResource(android.R.string.ok))
+				}
 			}
 		}
 	}
