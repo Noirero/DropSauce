@@ -8,19 +8,30 @@ import android.view.View
 import androidx.appcompat.view.ActionMode
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import coil3.request.ImageRequest
+import coil3.size.Size
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.list.ListSelectionController
+import org.koitharu.kotatsu.core.util.ext.mangaExtra
 import org.koitharu.kotatsu.core.util.ext.observe
+import org.koitharu.kotatsu.core.util.ext.stableMangaCoverKey
+import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
 import org.koitharu.kotatsu.list.ui.MangaListFragment
 import org.koitharu.kotatsu.list.ui.adapter.MangaListAdapter
 import org.koitharu.kotatsu.list.ui.config.ListConfigSection
+import org.koitharu.kotatsu.list.ui.model.ListModel
+import org.koitharu.kotatsu.list.ui.model.MangaListModel
 import org.koitharu.kotatsu.list.ui.size.DynamicItemSizeResolver
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 
 @AndroidEntryPoint
 class FavouritesListFragment : MangaListFragment() {
@@ -28,6 +39,10 @@ class FavouritesListFragment : MangaListFragment() {
 	override val viewModel by viewModels<FavouritesListViewModel>()
 
 	override val isSwipeRefreshEnabled = false
+	override val paginationOffset = 12
+
+	private val coverPrefetchSemaphore = Semaphore(3)
+	private val prefetchedCovers = LinkedHashSet<String>()
 
 	val categoryId
 		get() = viewModel.categoryId
@@ -43,6 +58,38 @@ class FavouritesListFragment : MangaListFragment() {
 			if (first >= 0 && last >= first && first < adapter.itemCount) {
 				adapter.notifyItemRangeChanged(first, (last - first + 1).coerceAtMost(adapter.itemCount - first))
 			}
+		}
+		viewModel.content.observe(viewLifecycleOwner, ::prefetchCovers)
+	}
+
+	override fun onResume() {
+		super.onResume()
+		prefetchCovers(viewModel.content.value)
+	}
+
+	private fun prefetchCovers(items: List<ListModel>) {
+		if (!isResumed) return
+		val columns = viewModel.gridColumns.value ?: 2
+		val width = (resources.displayMetrics.widthPixels / columns.coerceAtLeast(1)).coerceAtLeast(120)
+		val size = Size(width, width * 18 / 13)
+		for (item in items.filterIsInstance<MangaListModel>().takeLast(COVER_PREFETCH_BATCH)) {
+			val coverUrl = item.coverUrl ?: continue
+			val key = "${item.id}:$coverUrl"
+			if (!prefetchedCovers.add(key)) continue
+			viewLifecycleScope.launch {
+				coverPrefetchSemaphore.withPermit {
+					val request = ImageRequest.Builder(requireContext())
+						.data(coverUrl)
+						.size(size)
+						.mangaExtra(item.manga)
+						.stableMangaCoverKey(item.manga, coverUrl)
+						.build()
+					runCatchingCancellable { coil.execute(request) }
+				}
+			}
+		}
+		while (prefetchedCovers.size > MAX_REMEMBERED_COVERS) {
+			prefetchedCovers.remove(prefetchedCovers.first())
 		}
 	}
 
@@ -119,6 +166,8 @@ class FavouritesListFragment : MangaListFragment() {
 	companion object {
 
 		const val NO_ID = 0L
+		private const val COVER_PREFETCH_BATCH = 24
+		private const val MAX_REMEMBERED_COVERS = 256
 
 		fun newInstance(categoryId: Long) = FavouritesListFragment().withArgs(1) {
 			putLong(AppRouter.KEY_ID, categoryId)

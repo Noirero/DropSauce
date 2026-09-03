@@ -81,6 +81,7 @@ abstract class MangaListFragment :
 	private var spanResolver: GridSpanResolver? = null
 	private val spanSizeLookup = SpanSizeLookup()
 	open val isSwipeRefreshEnabled = true
+	protected open val paginationOffset = 4
 
 	protected abstract val viewModel: MangaListViewModel
 
@@ -108,7 +109,7 @@ abstract class MangaListFragment :
 			registryOwner = this,
 			callback = this,
 		)
-		paginationListener = PaginationScrollListener(4, this)
+		paginationListener = PaginationScrollListener(paginationOffset, this)
 		with(binding.recyclerView) {
 			setHasFixedSize(true)
 			adapter = listAdapter
