@@ -116,10 +116,12 @@ fun MangaSource.searchLanguageCode(): String = when (this) {
 
 fun MangaSource.matchesPreferredLanguage(preferredLanguages: Set<String>): Boolean {
 	val sourceLanguage = searchLanguageCode()
+	val sourceBaseLanguage = sourceLanguage.substringBefore('-')
 	return preferredLanguages.any { preferred ->
 		val normalized = preferred.normalizedLanguageCode()
 		normalized == sourceLanguage ||
-			('-' !in normalized && sourceLanguage.substringBefore('-') == normalized)
+			(('-' !in normalized || '-' !in sourceLanguage) &&
+				normalized.substringBefore('-') == sourceBaseLanguage)
 	}
 }
 
