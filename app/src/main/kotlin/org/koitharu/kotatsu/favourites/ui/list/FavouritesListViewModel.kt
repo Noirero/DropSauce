@@ -346,10 +346,15 @@ class FavouritesListViewModel @Inject constructor(
 		if (missing.isEmpty()) return
 		detailsPrefetchJob?.cancel()
 		detailsPrefetchJob = viewModelScope.launch(Dispatchers.Default) {
-			detailsNavigationCache.putAll(
-				mangaDataRepository.attachCachedChapters(missing),
-				cardSnapshot::getHistory,
-			)
+			val snapshots = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+				missing.map { item ->
+					val localChapters = localMangaIndex.get(item.id, withDetails = true)?.manga?.chapters
+					if (localChapters.isNullOrEmpty()) item else item.copy(chapters = localChapters)
+				}
+			} else {
+				mangaDataRepository.attachCachedChapters(missing)
+			}
+			detailsNavigationCache.putAll(snapshots, cardSnapshot::getHistory)
 		}
 	}
 
