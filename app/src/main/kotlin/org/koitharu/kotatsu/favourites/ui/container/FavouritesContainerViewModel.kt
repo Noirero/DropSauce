@@ -199,6 +199,7 @@ class FavouritesContainerViewModel @Inject constructor(
 
 		val memberships = searchRepository.getMemberships()
 		val counts = HashMap<Long, Int>(typedCategories.size)
+		val visibleMatchingIds = HashSet<Long>()
 		val wantNovel = type == FavouriteContentType.NOVEL
 		// Searching category counts no longer loads every full Manga + tags. A single lightweight
 		// projection supplies just id/title/author/source, while memberships supply category ids.
@@ -210,9 +211,10 @@ class FavouritesContainerViewModel @Inject constructor(
 		for ((index, membership) in memberships.withIndex()) {
 			if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
 			if (membership.mangaId !in matchingIds || membership.categoryId !in categoryIds) continue
+			visibleMatchingIds += membership.mangaId
 			counts[membership.categoryId] = (counts[membership.categoryId] ?: 0) + 1
 		}
-		return RemoteCounts(matchingIds.size, counts)
+		return RemoteCounts(visibleMatchingIds.size, counts)
 	}
 
 	private fun List<FavouriteCategory>.toUi(
@@ -259,7 +261,7 @@ class FavouritesContainerViewModel @Inject constructor(
 		val entries = favouritesRepository.getDownloadedEntries().filter { entry ->
 			MangaSource(entry.source).isNovelSource == wantNovel
 		}
-		return if (query.isBlank()) entries.size else searchMatcher.matchingIds(entries, query).size
+		return searchMatcher.matchingIds(entries, query).size
 	}
 
 	fun hide(categoryId: Long) {

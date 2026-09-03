@@ -42,12 +42,14 @@ class FavouriteContentTypeStore @Inject constructor(
 	}
 
 	fun getLastCategoryId(type: FavouriteContentType): Long? {
-		return prefs.getLong(lastCategoryKey(type), NO_CATEGORY_ID).takeUnless { it == NO_CATEGORY_ID }
+		val key = lastCategoryKey(type)
+		return if (prefs.contains(key)) prefs.getLong(key, 0L) else null
 	}
 
 	fun setLastCategoryId(type: FavouriteContentType, categoryId: Long) {
-		if (prefs.getLong(lastCategoryKey(type), NO_CATEGORY_ID) == categoryId) return
-		prefs.edit { putLong(lastCategoryKey(type), categoryId) }
+		val key = lastCategoryKey(type)
+		if (prefs.contains(key) && prefs.getLong(key, 0L) == categoryId) return
+		prefs.edit { putLong(key, categoryId) }
 	}
 
 	fun isCategoryForType(categoryId: Long, type: FavouriteContentType): Boolean {
@@ -87,7 +89,6 @@ class FavouriteContentTypeStore @Inject constructor(
 	private fun lastCategoryKey(type: FavouriteContentType) = "last_category_${type.name.lowercase()}"
 
 	private companion object {
-		const val NO_CATEGORY_ID = Long.MIN_VALUE
 		const val PREFS_NAME = "favourite_content_types"
 		const val KEY_SELECTED_TYPE = "selected_type"
 		const val KEY_NOVEL_CATEGORY_IDS = "novel_category_ids"
