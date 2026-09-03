@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.annotation.WorkerThread
 import dagger.Reusable
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -96,18 +98,27 @@ class AdBlock @Inject constructor(
 		@BaseHttpClient private val okHttpClient: OkHttpClient,
 	) {
 
-		suspend fun updateListIfStale(maxAgeMillis: Long = LIST_REFRESH_INTERVAL): Boolean {
+		suspend fun updateListIfStale(maxAgeMillis: Long = LIST_REFRESH_INTERVAL): Boolean =
+			updateMutex.withLock {
+				if (isListFresh(maxAgeMillis)) false else updateListLocked()
+			}
+
+		suspend fun updateList(): Boolean = updateMutex.withLock {
+			updateListLocked()
+		}
+
+		private fun isListFresh(maxAgeMillis: Long): Boolean {
 			val file = listFile(context)
 			if (file.isFile && file.length() > 0L) {
 				val age = System.currentTimeMillis() - file.lastModified()
 				if (age in 0 until maxAgeMillis) {
-					return false
+					return true
 				}
 			}
-			return updateList()
+			return false
 		}
 
-		suspend fun updateList(): Boolean {
+		private suspend fun updateListLocked(): Boolean {
 			val file = listFile(context)
 			val dateFormat = SimpleDateFormat(CommonHeaders.DATE_FORMAT, Locale.ENGLISH).apply {
 				timeZone = TimeZone.getTimeZone("GMT")
@@ -154,6 +165,7 @@ class AdBlock @Inject constructor(
 	private companion object {
 
 		private val listGeneration = AtomicLong(0L)
+		private val updateMutex = Mutex()
 
 		fun listFile(context: Context): File {
 			val root = File(context.noBackupFilesDir, LIST_DIR).apply { mkdirs() }
