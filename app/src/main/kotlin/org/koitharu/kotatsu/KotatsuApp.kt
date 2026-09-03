@@ -52,19 +52,29 @@ class KotatsuApp : BaseApp() {
 				CRASH_LOG_EXPORT_KEY,
 				ActivityResultContracts.CreateDocument("text/plain"),
 			) { uri ->
-				if (uri != null) {
-					processLifecycleScope.launch(Dispatchers.IO) {
-						val saved = CrashLogStore.exportText(activity, uri)
-						if (saved) {
-							CrashLogStore.clearPending(activity)
-						}
-						activity.runOnUiThread {
-							if (!activity.isFinishing && !activity.isDestroyed) {
-								Toast.makeText(
-									activity,
-									if (saved) "Crash log saved as .txt" else "Failed to save crash log",
-									Toast.LENGTH_SHORT,
-								).show()
+				if (uri == null) {
+					// Save closes the recovered-log dialog before the picker opens. If the picker is cancelled,
+					// make the still-pending report available again instead of hiding it for this whole process.
+					recoveredCrashDialogShown = false
+					showRecoveredCrashDialogIfPending(activity)
+					return@register
+				}
+				processLifecycleScope.launch(Dispatchers.IO) {
+					val saved = CrashLogStore.exportText(activity, uri)
+					if (saved) {
+						CrashLogStore.clearPending(activity)
+					}
+					activity.runOnUiThread {
+						if (!activity.isFinishing && !activity.isDestroyed) {
+							Toast.makeText(
+								activity,
+								if (saved) "Crash log saved as .txt" else "Failed to save crash log",
+								Toast.LENGTH_SHORT,
+							).show()
+							if (!saved) {
+								// Keep Copy/Save/Close reachable after a provider/write failure too.
+								recoveredCrashDialogShown = false
+								showRecoveredCrashDialogIfPending(activity)
 							}
 						}
 					}
@@ -73,7 +83,13 @@ class KotatsuApp : BaseApp() {
 		}
 
 		override fun onActivityResumed(activity: Activity) {
-			if (recoveredCrashDialogShown || activity !is MainActivity) return
+		if (activity is MainActivity) {
+			showRecoveredCrashDialogIfPending(activity)
+		}
+	}
+
+		private fun showRecoveredCrashDialogIfPending(activity: MainActivity) {
+			if (recoveredCrashDialogShown || activity.isFinishing || activity.isDestroyed) return
 			processLifecycleScope.launch(Dispatchers.IO) {
 				// MainActivity can resume before ApplicationExitInfo recovery finishes. Waiting here avoids
 				// missing an ANR/native-crash report until the user happens to leave and return later.
@@ -106,6 +122,8 @@ class KotatsuApp : BaseApp() {
 									launcher.launch(CrashLogStore.suggestedTextFileName())
 								}.onFailure {
 									Toast.makeText(activity, "Unable to open file picker", Toast.LENGTH_SHORT).show()
+									recoveredCrashDialogShown = false
+									showRecoveredCrashDialogIfPending(activity)
 								}
 							}
 						}
