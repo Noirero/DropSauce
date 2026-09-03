@@ -1,9 +1,12 @@
 package org.koitharu.kotatsu.local.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,19 +44,44 @@ class LocalFavouritesRepository @Inject constructor(
 	suspend fun refresh() = mutex.withLock {
 		val roots = storageManager.getReadableDirs()
 		val mangaFolders = runInterruptible(Dispatchers.IO) {
-			findMangaFolders(roots)
+			findMangaFolders(roots).sortedWith(compareBy(AlphanumComparator()) { it.name })
+		}
+		if (mangaFolders.isEmpty()) {
+			_items.value = emptyList()
+			return@withLock
 		}
 
 		val parsed = ArrayList<Manga>(mangaFolders.size)
-		for (folder in mangaFolders) {
-			runCatchingCancellable {
-				LocalMangaParser.getOrNull(folder)?.getManga(withDetails = false)?.manga
-			}.onFailure {
-				it.printStackTraceDebug()
-			}.getOrNull()?.let(parsed::add)
+		val publishProgressively = _items.value.isEmpty()
+		val dispatcher = Dispatchers.IO.limitedParallelism(LOCAL_PARSE_PARALLELISM)
+		coroutineScope {
+			val results = Channel<Manga?>(Channel.UNLIMITED)
+			for (folder in mangaFolders) {
+				launch(dispatcher) {
+					val manga = runCatchingCancellable {
+						LocalMangaParser.getOrNull(folder)?.getManga(withDetails = false)?.manga
+					}.onFailure {
+						it.printStackTraceDebug()
+					}.getOrNull()
+					results.send(manga)
+				}
+			}
+			repeat(mangaFolders.size) {
+				results.receive()?.let(parsed::add)
+				if (
+					publishProgressively && parsed.isNotEmpty() &&
+					(parsed.size == 1 || parsed.size % LOCAL_PUBLISH_BATCH_SIZE == 0)
+				) {
+					publish(parsed)
+				}
+			}
+			results.close()
 		}
+		publish(parsed)
+	}
 
-		_items.value = parsed
+	private fun publish(items: List<Manga>) {
+		_items.value = items
 			.distinctBy { it.url }
 			.sortedWith(compareBy(AlphanumComparator()) { it.title })
 	}
@@ -100,5 +128,7 @@ class LocalFavouritesRepository @Inject constructor(
 
 	private companion object {
 		const val LOCAL_FOLDER_NAME = "local"
+		const val LOCAL_PARSE_PARALLELISM = 4
+		const val LOCAL_PUBLISH_BATCH_SIZE = 8
 	}
 }
