@@ -2,7 +2,6 @@ package org.koitharu.kotatsu.favourites.domain
 
 import dagger.Reusable
 import org.koitharu.kotatsu.core.db.MangaDatabase
-import org.koitharu.kotatsu.core.db.entity.ChapterEntity
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode
 import org.koitharu.kotatsu.history.data.HistoryEntity
 import org.koitharu.kotatsu.history.data.toMangaHistory
@@ -56,12 +55,29 @@ class FavouriteUnreadCounter @Inject constructor(
 		if (!includeUnread) return Snapshot(histories, emptyMap())
 
 		val chaptersDao = database.getChaptersDao()
-		val chaptersByManga = ids.chunked(DB_QUERY_BATCH_SIZE)
-			.flatMap { chaptersDao.findAll(it) }
-			.groupBy { it.mangaId }
-		val unread = HashMap<Long, Int>(chaptersByManga.size)
-		for ((mangaId, chapters) in chaptersByManga) {
-			unread[mangaId] = calculateUnreadCount(chapters, histories[mangaId])
+		val logicalCounts = ids.chunked(DB_QUERY_BATCH_SIZE)
+			.flatMap { chaptersDao.findLogicalCounts(it) }
+			.associate { it.mangaId to it.chapterCount }
+		val exactUnread = histories.values
+			.chunked(DB_HISTORY_QUERY_BATCH_SIZE)
+			.flatMap { chunk ->
+				chaptersDao.findUnreadAfterCurrent(
+					mangaIds = chunk.map { it.mangaId },
+					chapterIds = chunk.map { it.chapterId },
+				)
+			}
+			.associateBy { it.mangaId to it.chapterId }
+
+		val unread = HashMap<Long, Int>(ids.size)
+		for (mangaId in ids) {
+			val logicalCount = logicalCounts[mangaId] ?: 0
+			val history = histories[mangaId]
+			unread[mangaId] = when {
+				history == null -> logicalCount
+				logicalCount <= 0 -> 0
+				else -> exactUnread[mangaId to history.chapterId]?.unreadCount
+					?: calculateFallbackUnread(logicalCount, history)
+			}
 		}
 		return Snapshot(histories, unread)
 	}
@@ -69,28 +85,8 @@ class FavouriteUnreadCounter @Inject constructor(
 	suspend fun getUnreadCount(mangaId: Long): Int =
 		getSnapshot(listOf(mangaId), includeUnread = true).unreadCounts[mangaId] ?: 0
 
-	private fun calculateUnreadCount(chapters: List<ChapterEntity>, history: HistoryEntity?): Int {
-		if (chapters.isEmpty()) return 0
-		if (history == null) {
-			// Multiple scanlator branches can contain the same logical chapter. Before the user has
-			// selected/read a branch, use the largest branch instead of summing duplicate branches.
-			return chapters.logicalChapterCount()
-		}
-
-		val current = chapters.firstOrNull { it.chapterId == history.chapterId }
-		if (current != null) {
-			val branchChapters = chapters.filter { it.branch == current.branch }
-			val currentIndex = branchChapters.indexOfFirst { it.chapterId == history.chapterId }
-			if (currentIndex >= 0) {
-				// History progress in DropSauce advances chapter-by-chapter, so the current history
-				// chapter is considered read and every chapter after it is unread.
-				return (branchChapters.size - currentIndex - 1).coerceAtLeast(0)
-			}
-		}
-
-		// Chapter ids can be re-keyed by an extension update. Fall back to the persisted progress
-		// snapshot so a stale id does not suddenly mark the whole title unread.
-		val total = history.chaptersCount.takeIf { it > 0 } ?: chapters.logicalChapterCount()
+	private fun calculateFallbackUnread(logicalCount: Int, history: HistoryEntity): Int {
+		val total = history.chaptersCount.takeIf { it > 0 } ?: logicalCount
 		if (total <= 0) return 0
 		val read = ceil(history.percent.coerceIn(0f, 1f).toDouble() * total.toDouble())
 			.toInt()
@@ -98,16 +94,10 @@ class FavouriteUnreadCounter @Inject constructor(
 		return (total - read).coerceAtLeast(0)
 	}
 
-	private fun List<ChapterEntity>.logicalChapterCount(): Int {
-		if (isEmpty()) return 0
-		return groupBy { it.branch }
-			.maxOfOrNull { (_, items) -> items.size }
-			?: 0
-	}
-
 	private companion object {
 		// SQLite versions used by older supported Android releases can cap host parameters at 999.
 		// Keep headroom for generated statements and future query changes.
 		const val DB_QUERY_BATCH_SIZE = 500
+		const val DB_HISTORY_QUERY_BATCH_SIZE = 400
 	}
 }

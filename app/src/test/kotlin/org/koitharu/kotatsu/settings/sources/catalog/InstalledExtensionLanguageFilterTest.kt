@@ -23,6 +23,32 @@ class InstalledExtensionLanguageFilterTest {
 		assertFalse(installedExtensionMatchesLanguage(emptyList(), "en", "ru"))
 	}
 
+	@Test
+	fun `universal package language remains eligible for a specific language`() {
+		assertTrue(installedExtensionMatchesLanguage(emptyList(), "all", "ja"))
+	}
+
+	@Test
+	fun `uninstalled multi-source entry matches every published source language`() {
+		val entry = ExternalExtensionRepoEntry(
+			name = "Multi",
+			packageName = "extension.multi",
+			apkName = "multi.apk",
+			lang = "all",
+			versionCode = 1,
+			versionName = "1.0",
+			sources = listOf(
+				ExternalExtensionRepoSource(id = "1", name = "Japanese", lang = "ja"),
+				ExternalExtensionRepoSource(id = "2", name = "Chinese", lang = "zh"),
+			),
+		)
+
+		assertTrue(extensionEntryMatchesLanguage(entry, emptyList(), "ja"))
+		assertTrue(extensionEntryMatchesLanguage(entry, emptyList(), "ZH"))
+		// Older repositories can expose only a universal package language without per-source metadata.
+		assertTrue(extensionEntryMatchesLanguage(entry.copy(sources = emptyList()), emptyList(), "ko"))
+	}
+
 	private fun source(sourceId: Long, language: String) = MihonMangaSource(
 		catalogueSource = object : CatalogueSource {
 			override val id = sourceId

@@ -157,7 +157,11 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 				},
 			)
 			.filters(filterOptions)
-			.groupBy("favourites.manga_id")
+			.apply {
+				if (categoryId == 0L) {
+					groupBy("favourites.manga_id")
+				}
+			}
 			.orderBy(getOrderBy(order, pinned))
 			.limit(limit)
 			.build(),

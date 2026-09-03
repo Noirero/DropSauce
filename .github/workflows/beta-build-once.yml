@@ -1,57 +1,16 @@
-name: Source Fix Once
+name: Beta Build Once
 
+# Temporary helper kept manual-only after the requested Beta build.
 on:
-  push:
-    branches:
-      - beta
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  source_fix:
-    name: Patch and verify source
+  beta:
+    name: Build beta APK
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
-      - name: Checkout beta
-        uses: actions/checkout@v5
-        with:
-          ref: beta
-          fetch-depth: 1
-
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Apply source fixes
-        run: |
-          python3 .github/source-fix-once.py apply
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('app/src/main/kotlin/org/koitharu/kotatsu/core/db/dao/ChaptersDao.kt')
-          text = path.read_text()
-          text = text.replace('current.', 'cur.').replace('FROM chapters AS current', 'FROM chapters AS cur')
-          path.write_text(text)
-          PY
-
-      - name: Verify preview Kotlin and Room queries
-        run: |
-          chmod +x gradlew
-          git diff --check
-          ./gradlew :app:compilePreviewKotlin --no-daemon --stacktrace
-
-      - name: Commit verified fixes
-        run: |
-          python3 .github/source-fix-once.py finalize
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m 'Speed up favourites and restore extension languages'
-          git push origin HEAD:beta
+      - name: Manual helper disabled
+        run: echo "Use preview-build.yml for normal manual Beta builds."
