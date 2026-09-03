@@ -186,28 +186,17 @@ class FavouritesContainerViewModel @Inject constructor(
 		type: FavouriteContentType,
 		query: String,
 	): RemoteCounts {
-		val memberships = searchRepository.getMemberships()
 		val categoryIds = typedCategories.mapTo(HashSet(typedCategories.size)) { it.id }
-		val counts = HashMap<Long, Int>(typedCategories.size)
-		val wantNovel = type == FavouriteContentType.NOVEL
 
 		if (query.isBlank()) {
-			val allIds = HashSet<Long>()
-			val sourceTypeCache = HashMap<String, Boolean>()
-			for ((index, membership) in memberships.withIndex()) {
-				if ((index and CANCELLATION_CHECK_MASK) == 0) currentCoroutineContext().ensureActive()
-				val isNovel = sourceTypeCache.getOrPut(membership.source) {
-					MangaSource(membership.source).isNovelSource
-				}
-				if (isNovel != wantNovel) continue
-				allIds.add(membership.mangaId)
-				if (membership.categoryId in categoryIds) {
-					counts[membership.categoryId] = (counts[membership.categoryId] ?: 0) + 1
-				}
-			}
-			return RemoteCounts(allIds.size, counts)
+			if (categoryIds.isEmpty()) return RemoteCounts(0, emptyMap())
+			val counts = favouritesRepository.getCategoryCounts(categoryIds)
+			return RemoteCounts(favouritesRepository.getDistinctMangaCount(categoryIds), counts)
 		}
 
+		val memberships = searchRepository.getMemberships()
+		val counts = HashMap<Long, Int>(typedCategories.size)
+		val wantNovel = type == FavouriteContentType.NOVEL
 		// Searching category counts no longer loads every full Manga + tags. A single lightweight
 		// projection supplies just id/title/author/source, while memberships supply category ids.
 		val sourceTypeCache = HashMap<String, Boolean>()

@@ -37,6 +37,12 @@ class FavouritesRepository @Inject constructor(
 	private val db: MangaDatabase,
 	private val localObserver: LocalFavoritesObserver,
 ) {
+	/** Count-only access used by the library header; keeps full favourite entities off the hot path. */
+	suspend fun getCategoryCounts(categoryIds: Collection<Long>): Map<Long, Int> =
+		db.getFavouritesDao().findCategoryCounts(categoryIds).associate { it.categoryId to it.itemCount }
+
+	suspend fun getDistinctMangaCount(categoryIds: Collection<Long>): Int =
+		db.getFavouritesDao().findDistinctMangaCount(categoryIds)
 
 	suspend fun getAllManga(): List<Manga> {
 		val entities = db.getFavouritesDao().findAll()

@@ -1,7 +1,10 @@
 ## Changelog 2
 
+- Badge jumlah kategori Disukai kembali muncul dan kini dihitung langsung oleh database agar tampil jauh lebih cepat, termasuk pada library besar.
+- Pemilihan kategori melalui “Favoritkan ini” kini baru diterapkan lewat tombol Oke dan dialog ditutup setelah penyimpanan berhasil, sehingga hasilnya jelas dan tidak terpotong oleh penutupan dialog.
+- Item chapter terakhir memperoleh ruang aman di atas tepi layar/navigation bar agar tetap terlihat penuh dan mudah ditekan.
+- Halaman manga potret otomatis mengisi lebar layar saat reader diputar ke lanskap, sehingga gambar tidak lagi mengecil di tengah layar dan tetap dapat digeser vertikal.
 - Downloader kini dapat menjalankan beberapa Manga/Novel dari source yang sama secara paralel hingga batas performa yang dipilih; Jeda dan Batal juga merespons sejak worker masih antre sehingga tidak perlu menunggu download lain selesai lebih dulu.
-- Badge jumlah kategori Disukai kembali muncul ketika penghitungan kategori selesai, termasuk saat tab awalnya dibuat sebelum count tersedia.
 - Filter konten Jelajah kini tampil langsung sebagai kontrol Semua / SFW / NSFW di atas daftar source, langsung memperbarui source yang ditampilkan, dan klasifikasi manual source Mihon disimpan per exact source ID.
 - Filter Source di Jelajah kini memiliki ON/OFF semua yang benar-benar independen untuk Languages dan Individual sources; mematikan bahasa tidak mengubah pilihan source individual, dan perubahan dikumpulkan lokal lalu diterapkan sekali saat menekan Oke agar toggle tetap responsif.
 - Tombol collapse pada panel Bab/Chapter kembali berfungsi untuk menutup panel tanpa membuat scroll atau swipe daftar chapter menyeret sheet.

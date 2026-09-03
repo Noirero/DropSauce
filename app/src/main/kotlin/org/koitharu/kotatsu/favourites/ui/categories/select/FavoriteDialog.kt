@@ -39,7 +39,6 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.ui.ComposeAlertDialogFragment
 import org.koitharu.kotatsu.core.ui.dialog.ExpressiveDialogCard
-import org.koitharu.kotatsu.core.ui.dialog.ExpressiveDialogTextButton
 import org.koitharu.kotatsu.core.ui.dialog.ExpressivePillButton
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.joinToStringWithLimit
@@ -58,12 +57,17 @@ class FavoriteDialog : ComposeAlertDialogFragment() {
 		viewModel.onError.observeEvent(viewLifecycleOwner) { e ->
 			Toast.makeText(context ?: return@observeEvent, e.getDisplayMessage(resources), Toast.LENGTH_SHORT).show()
 		}
+		viewModel.onSaved.observeEvent(viewLifecycleOwner) { openCategoryManagement ->
+			dismiss()
+			if (openCategoryManagement) router.openFavoriteCategories()
+		}
 	}
 
 	@Composable
 	override fun Content() {
 		val context = LocalContext.current
 		val content by viewModel.content.collectAsState()
+		val isSaving by viewModel.isSaving.collectAsState()
 		val title = remember { viewModel.manga.joinToStringWithLimit(context, 92) { it.title } }
 		ExpressiveDialogCard(
 			icon = painterResource(R.drawable.ic_heart),
@@ -90,32 +94,42 @@ class FavoriteDialog : ComposeAlertDialogFragment() {
 								.padding(vertical = 24.dp),
 						)
 
-						is MangaCategoryItem -> CategoryRow(model)
+						is MangaCategoryItem -> CategoryRow(model, enabled = !isSaving)
 					}
 				}
 			}
 			Spacer(Modifier.size(16.dp))
-			ExpressivePillButton(text = stringResource(R.string.manage), primary = true) {
-				viewModel.prepareCategoryManagement()
-				dismiss()
-				router.openFavoriteCategories()
+			ExpressivePillButton(
+				text = stringResource(android.R.string.ok),
+				primary = true,
+				enabled = !isSaving,
+			) {
+				viewModel.save()
 			}
 			Spacer(Modifier.size(8.dp))
-			ExpressiveDialogTextButton(text = stringResource(R.string.done)) { dismiss() }
+			ExpressivePillButton(
+				text = stringResource(R.string.manage),
+				primary = false,
+				enabled = !isSaving,
+			) {
+				viewModel.save(openCategoryManagement = true)
+			}
 		}
 	}
 
 	@Composable
-	private fun CategoryRow(item: MangaCategoryItem) {
+	private fun CategoryRow(item: MangaCategoryItem, enabled: Boolean) {
 		val toggle = {
-			viewModel.setChecked(item.category.id, item.checkedState != MaterialCheckBox.STATE_CHECKED)
+			if (enabled) {
+				viewModel.setChecked(item.category.id, item.checkedState != MaterialCheckBox.STATE_CHECKED)
+			}
 		}
 		Row(
 			modifier = Modifier
 				.fillMaxWidth()
 				.heightIn(min = 52.dp)
 				.clip(RoundedCornerShape(16.dp))
-				.clickable { toggle() }
+				.clickable(enabled = enabled) { toggle() }
 				.padding(horizontal = 8.dp),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
@@ -125,7 +139,7 @@ class FavoriteDialog : ComposeAlertDialogFragment() {
 					MaterialCheckBox.STATE_INDETERMINATE -> ToggleableState.Indeterminate
 					else -> ToggleableState.Off
 				},
-				onClick = { toggle() },
+				onClick = if (enabled) ({ toggle() }) else null,
 			)
 			Spacer(Modifier.size(8.dp))
 			Text(
