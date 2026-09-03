@@ -41,13 +41,14 @@ import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
 import org.koitharu.kotatsu.explore.ui.model.ExploreSources
 import org.koitharu.kotatsu.explore.ui.model.RecommendationsItem
+import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
+import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageFlag
 import org.koitharu.kotatsu.list.ui.model.EmptyState
 import org.koitharu.kotatsu.list.ui.model.ListHeader
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.mihon.MihonExtensionLoader
-import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.settings.sources.catalog.ExtensionInstallMode
@@ -301,8 +302,13 @@ class ExploreViewModel @Inject constructor(
 						getExternalExtensionLanguageDisplayName(language.ifBlank { "other" })
 					}
 					.forEach { (language, languageSources) ->
+						val normalizedLanguage = language.ifBlank { "other" }
 						result += ListHeader(
-							getExternalExtensionLanguageDisplayName(language.ifBlank { "other" }),
+							buildString {
+								append(getExternalExtensionLanguageDisplayName(normalizedLanguage))
+								append(' ')
+								append(getExternalExtensionLanguageFlag(normalizedLanguage))
+							},
 							payload = HEADER_LANGUAGE_GROUP,
 						)
 						languageSources.mapTo(result) { MangaSourceItem(it, isGrid) }

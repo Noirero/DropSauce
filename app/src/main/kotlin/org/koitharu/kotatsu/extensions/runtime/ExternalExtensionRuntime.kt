@@ -105,6 +105,68 @@ fun getExternalExtensionLanguageDisplayName(langCode: String): String {
 	}
 }
 
+/** Emoji used beside language groups in Explore. Region-qualified tags always keep their region. */
+fun getExternalExtensionLanguageFlag(langCode: String): String {
+	val normalized = langCode.trim().replace('_', '-')
+	val locale = Locale.forLanguageTag(normalized)
+	val language = locale.language.lowercase(Locale.ROOT)
+	if (normalized.isBlank() || language == "other") return "🏳️"
+	if (language == "all" || language == "mul") return "🌐"
+	val country = locale.country.takeIf { it.length == 2 }
+		?: DEFAULT_LANGUAGE_COUNTRIES[language]
+		?: return "🌐"
+	return country.uppercase(Locale.ROOT).map { letter ->
+		String(Character.toChars(REGIONAL_INDICATOR_A + (letter.code - 'A'.code)))
+	}.joinToString(separator = "")
+}
+
+private val DEFAULT_LANGUAGE_COUNTRIES = mapOf(
+	"ar" to "SA",
+	"bn" to "BD",
+	"bg" to "BG",
+	"ca" to "ES",
+	"cs" to "CZ",
+	"da" to "DK",
+	"de" to "DE",
+	"el" to "GR",
+	"en" to "GB",
+	"es" to "ES",
+	"fa" to "IR",
+	"fi" to "FI",
+	"fil" to "PH",
+	"fr" to "FR",
+	"he" to "IL",
+	"hi" to "IN",
+	"hr" to "HR",
+	"hu" to "HU",
+	"id" to "ID",
+	"it" to "IT",
+	"ja" to "JP",
+	"ko" to "KR",
+	"lt" to "LT",
+	"ms" to "MY",
+	"my" to "MM",
+	"nl" to "NL",
+	"no" to "NO",
+	"pl" to "PL",
+	"pt" to "PT",
+	"ro" to "RO",
+	"ru" to "RU",
+	"sk" to "SK",
+	"sr" to "RS",
+	"sv" to "SE",
+	"ta" to "IN",
+	"te" to "IN",
+	"th" to "TH",
+	"tr" to "TR",
+	"uk" to "UA",
+	"ur" to "PK",
+	"vi" to "VN",
+	"zh" to "CN",
+)
+
+private const val REGIONAL_INDICATOR_A = 0x1F1E6
+
 /**
  * Returns the language's own name (autonym) — e.g. "Français", "日本語", "Español" — instead of
  * the name translated into the device language. Used wherever an extension's language is shown
