@@ -59,6 +59,7 @@ import org.koitharu.kotatsu.settings.compose.NavigationSettingsItem
 import org.koitharu.kotatsu.settings.compose.SettingsGroup
 import org.koitharu.kotatsu.settings.compose.SettingsItem
 import org.koitharu.kotatsu.settings.compose.SettingsScaffold
+import java.text.NumberFormat
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -461,9 +462,8 @@ private fun BackupOperationProgress(state: BackupOperationTracker.State.Running)
 	val stage = stringResource(state.stageRes)
 	val progress = state.progress
 	val subtitle = if (!progress.isIndeterminate && progress.total > 0) {
-		val percent = ((progress.progress.toFloat() / progress.total) * 100f).toInt().coerceIn(0, 100)
 		"$stage • ${stringResource(R.string.backup_operation_progress_fraction, progress.progress, progress.total)} • " +
-			stringResource(R.string.backup_operation_progress_percent, percent)
+			formatProgressPercent(progress)
 	} else {
 		stage
 	}
@@ -483,4 +483,21 @@ private fun BackupOperationProgress(state: BackupOperationTracker.State.Running)
 			)
 		}
 	}
+}
+
+private fun formatProgressPercent(progress: Progress): String {
+	if (progress.total <= 0) return "0%"
+	val fractionDigits = when {
+		progress.total <= 100 -> 0
+		progress.total <= 1_000 -> 1
+		progress.total <= 10_000 -> 2
+		progress.total <= 100_000 -> 3
+		else -> 4
+	}
+	val percent = (progress.progress.toDouble() / progress.total.toDouble() * 100.0).coerceIn(0.0, 100.0)
+	val formatter = NumberFormat.getNumberInstance().apply {
+		minimumFractionDigits = 0
+		maximumFractionDigits = fractionDigits
+	}
+	return "${formatter.format(percent)}%"
 }
