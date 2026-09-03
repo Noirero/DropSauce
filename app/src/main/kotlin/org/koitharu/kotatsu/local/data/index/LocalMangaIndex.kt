@@ -43,6 +43,21 @@ class LocalMangaIndex @Inject constructor(
 	}
 
 	suspend fun update() = mutex.withLock {
+		rebuildIndexLocked()
+	}
+
+	suspend fun updateIfRequired() {
+		if (!isUpdateRequired()) return
+		mutex.withLock {
+			// Another caller may have completed the rebuild while this one was waiting. Re-check under
+			// the same lock so cold-start list/filter requests cannot trigger duplicate full storage scans.
+			if (isUpdateRequired()) {
+				rebuildIndexLocked()
+			}
+		}
+	}
+
+	private suspend fun rebuildIndexLocked() {
 		db.withTransaction {
 			val dao = db.getLocalMangaIndexDao()
 			dao.clear()
@@ -52,12 +67,6 @@ class LocalMangaIndex @Inject constructor(
 		}
 		currentVersion = VERSION
 		cachedList = null
-	}
-
-	suspend fun updateIfRequired() {
-		if (isUpdateRequired()) {
-			update()
-		}
 	}
 
 	suspend fun get(mangaId: Long, withDetails: Boolean): LocalManga? {
@@ -128,6 +137,8 @@ class LocalMangaIndex @Inject constructor(
 
 		private const val PREF_NAME = "_local_index"
 		private const val KEY_VERSION = "ver"
-		private const val VERSION = 1
+		// Scanner semantics changed to recognize legacy 00.Novel/<Title>/Chapter.epub layouts.
+		// Bump the persisted index version so existing installs rebuild once and pick those entries up.
+		private const val VERSION = 2
 	}
 }
