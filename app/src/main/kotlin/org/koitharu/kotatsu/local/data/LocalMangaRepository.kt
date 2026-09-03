@@ -147,7 +147,17 @@ class LocalMangaRepository @Inject constructor(
 		}.manga
 		LocalMangaUtil(subject).deleteChapters(ids)
 		val updated = getDetails(subject)
-		localStorageChanges.emit(LocalManga(updated))
+		if (updated.chapters.isNullOrEmpty()) {
+			// local_index represents a title that has downloadable content. Keeping an index/cover-only
+			// container after its final chapter is removed would leave the virtual Downloaded category
+			// with a false-positive entry and allow it to reappear after a storage rescan.
+			if (!delete(updated)) {
+				localMangaIndex.delete(updated.id)
+				localStorageChanges.emit(null)
+			}
+		} else {
+			localStorageChanges.emit(LocalManga(updated))
+		}
 	}
 
 	suspend fun getRemoteManga(localManga: Manga): Manga? = runCatchingCancellable {
