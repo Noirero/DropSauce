@@ -57,10 +57,15 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	}
 
 	private suspend fun getSourceOptions(): List<ListFilterOption.Source> {
+		// An empty category has no source filter to resolve. Checking the lightweight database list
+		// first lets its empty state render immediately instead of waiting for extension discovery.
+		val categorySources = repository.findSources(categoryId)
+		if (categorySources.isEmpty()) return emptyList()
+
 		mihonExtensionManager.ensureReady(forceRefresh = !didRefreshExtensions)
 		didRefreshExtensions = true
 		val installedSources = mihonExtensionManager.getMihonMangaSources()
-		return repository.findSources(categoryId).mapNotNull { source ->
+		return categorySources.mapNotNull { source ->
 			installedSources.firstOrNull { it == source }
 		}.distinctBy {
 			it.name
