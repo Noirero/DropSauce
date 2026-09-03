@@ -382,12 +382,16 @@ class LocalMangaRepository @Inject constructor(
 	}
 
 	private fun scanNovelRoot(novelRoot: File, result: MutableList<File>) {
-		novelRoot.withChildren { novelSources ->
-			novelSources.filterNot { it.isHidden || it.shouldSkip() }.forEach { sourceDir ->
-				if (sourceDir.isDirectory) {
-					sourceDir.withChildren { novels ->
+		novelRoot.withChildren { children ->
+			children.filterNot { it.isHidden || it.shouldSkip() }.forEach { child ->
+				if (child.isDirectory && child.isDownloadSourceDirectory()) {
+					child.withChildren { novels ->
 						novels.filterNot { it.isHidden || it.shouldSkip() }.forEach(result::add)
 					}
+				} else {
+					// Legacy `00.Novel/<Title>/Chapter.epub` has no source level. Keep the title
+					// directory intact instead of treating each chapter artifact as a separate novel.
+					result.add(child)
 				}
 			}
 		}
