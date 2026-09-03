@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.download.ui.worker
 
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,7 +26,8 @@ class DownloadConcurrencyController @Inject constructor() {
 		limit: Int,
 		block: suspend () -> T,
 	): T {
-		acquire(limit.coerceAtLeast(1))
+		val pausingHandle = PausingHandle.current()
+		acquire(limit.coerceAtLeast(1), pausingHandle)
 		return try {
 			block()
 		} finally {
@@ -37,11 +39,13 @@ class DownloadConcurrencyController @Inject constructor() {
 		}
 	}
 
-	private suspend fun acquire(limit: Int) {
+	private suspend fun acquire(limit: Int, pausingHandle: PausingHandle) {
 		while (true) {
+			// A download paused while queued must remain outside the active slots until it resumes.
+			pausingHandle.yield()
 			val observedRevision = revision.value
 			val acquired = mutex.withLock {
-				if (activeDownloads < limit) {
+				if (activeDownloads < limit && !pausingHandle.isPaused) {
 					activeDownloads++
 					true
 				} else {
@@ -49,9 +53,11 @@ class DownloadConcurrencyController @Inject constructor() {
 				}
 			}
 			if (acquired) return
-			// StateFlow prevents a lost wake-up if a slot is released between the check above and
-			// this suspension: a changed revision is observed immediately.
-			revision.first { it != observedRevision }
+			// Wake for either a released slot or a pause command. This avoids a queued worker sitting
+			// inside revision.first() until some unrelated download completes before it notices pause.
+			combine(revision, pausingHandle.pauseState) { currentRevision, paused ->
+				currentRevision != observedRevision || paused
+			}.first { it }
 		}
 	}
 
