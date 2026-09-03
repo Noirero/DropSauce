@@ -3,6 +3,7 @@ package org.koitharu.kotatsu.favourites.ui.list
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,6 +17,7 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
+import org.koitharu.kotatsu.details.data.DetailsNavigationCache
 import org.koitharu.kotatsu.favourites.domain.FavouritesSearchMatcher
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.debounceFavouritesSearch
@@ -30,8 +32,11 @@ import org.koitharu.kotatsu.list.ui.model.MangaDetailedListModel
 import org.koitharu.kotatsu.list.ui.model.MangaGridModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
 import org.koitharu.kotatsu.local.data.LocalFavouritesRepository
+import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.domain.model.LocalManga
+import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import javax.inject.Inject
 
 private const val LOCAL_SEARCH_PAGE_SIZE = 16
@@ -42,11 +47,14 @@ class LocalFavouritesListViewModel @Inject constructor(
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges private val localStorageChanges: SharedFlow<LocalManga?>,
 	private val localFavouritesRepository: LocalFavouritesRepository,
+	private val localMangaRepository: LocalMangaRepository,
 	private val mangaListMapper: MangaListMapper,
 	private val searchMatcher: FavouritesSearchMatcher,
+	private val detailsNavigationCache: DetailsNavigationCache,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges) {
 
 	private val limit = MutableStateFlow(LOCAL_SEARCH_PAGE_SIZE)
+	private var detailsPrefetchJob: Job? = null
 	private var lastSearchQuery = FavouritesContainerFragment.searchQuery.value.trim()
 	private val searchQuery = FavouritesContainerFragment.searchQuery
 		.debounceFavouritesSearch()
@@ -85,7 +93,7 @@ class LocalFavouritesListViewModel @Inject constructor(
 		val ordered = if (pinnedSet.isEmpty()) {
 			searched
 		} else {
-			ArrayList<org.koitharu.kotatsu.parsers.model.Manga>(searched.size).also { result ->
+			ArrayList<Manga>(searched.size).also { result ->
 				for (id in pinned) {
 					searched.firstOrNull { it.id == id }?.let(result::add)
 				}
@@ -113,6 +121,7 @@ class LocalFavouritesListViewModel @Inject constructor(
 			)
 		} else {
 			val visible = ordered.take(pageLimit)
+			prefetchDetailsSnapshots(visible)
 			ArrayList<ListModel>(visible.size).also { result ->
 				mangaListMapper.toListModelList(
 					destination = result,
@@ -163,5 +172,17 @@ class LocalFavouritesListViewModel @Inject constructor(
 		val current = settings.getPinnedFavourites(LOCAL_FAVOURITES_CATEGORY_ID)
 		val updated = if (isPinned) current + (ids - current.toSet()) else current - ids
 		settings.setPinnedFavourites(LOCAL_FAVOURITES_CATEGORY_ID, updated)
+	}
+
+	private fun prefetchDetailsSnapshots(items: List<Manga>) {
+		val missing = items.filterNot { detailsNavigationCache.contains(it.id) }
+		if (missing.isEmpty()) return
+		detailsPrefetchJob?.cancel()
+		detailsPrefetchJob = viewModelScope.launch(Dispatchers.Default) {
+			val snapshots = missing.mapNotNull { item ->
+				runCatchingCancellable { localMangaRepository.getDetails(item) }.getOrNull()
+			}
+			detailsNavigationCache.putAll(snapshots) { null }
+		}
 	}
 }
