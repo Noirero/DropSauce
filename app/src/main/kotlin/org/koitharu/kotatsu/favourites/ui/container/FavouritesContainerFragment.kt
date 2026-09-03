@@ -49,6 +49,7 @@ import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
+import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import javax.inject.Inject
@@ -70,9 +71,19 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private var pagerAdapter: FavouritesContainerAdapter? = null
 	private var categories: List<FavouriteTabModel> = emptyList()
 	private var isEmptyState = false
+	private var displayedContentType: FavouriteContentType? = null
+	private var pendingCategoryRestore: FavouriteContentType? = null
 
 	private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
 		override fun onPageSelected(position: Int) {
+			if (pendingCategoryRestore == null) {
+				currentCategory()?.let { category ->
+					contentTypeStore.setLastCategoryId(
+						displayedContentType ?: contentTypeStore.selectedType.value,
+						category.id,
+					)
+				}
+			}
 			updateCategoryPickerLabel()
 			activity?.invalidateOptionsMenu()
 		}
@@ -115,7 +126,6 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			}
 			if (contentTypeStore.selectedType.value != type) {
 				contentTypeStore.setSelectedType(type)
-				binding.pager.setCurrentItem(0, false)
 			}
 		}
 		onContentTypeChanged(contentTypeStore.selectedType.value)
@@ -246,6 +256,10 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	private fun onContentTypeChanged(type: FavouriteContentType) {
+		if (displayedContentType != type) {
+			displayedContentType = type
+			pendingCategoryRestore = type
+		}
 		val checkedId = if (type == FavouriteContentType.NOVEL) {
 			R.id.button_content_novel
 		} else {
@@ -270,14 +284,29 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		categories = value
 		activity?.invalidateOptionsMenu()
 		viewBinding?.run {
-			if (value.isNotEmpty() && pager.currentItem >= value.size) {
-				pager.setCurrentItem(0, false)
-			}
 			tabs.post {
-				viewBinding?.let { applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value)) }
+				val binding = viewBinding ?: return@post
+				val restoreType = pendingCategoryRestore
+				if (restoreType != null && isCategoryListForType(value, restoreType)) {
+					val categoryId = contentTypeStore.getLastCategoryId(restoreType)
+					val target = value.indexOfFirst { it.id == categoryId }.takeIf { it >= 0 } ?: 0
+					pendingCategoryRestore = null
+					if (value.isNotEmpty()) {
+						binding.pager.setCurrentItem(target, false)
+						contentTypeStore.setLastCategoryId(restoreType, value[target].id)
+					}
+				} else if (restoreType == null && value.isNotEmpty() && binding.pager.currentItem >= value.size) {
+					binding.pager.setCurrentItem(0, false)
+				}
+				applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
 			}
 		}
 	}
+
+	private fun isCategoryListForType(
+		items: List<FavouriteTabModel>,
+		type: FavouriteContentType,
+	): Boolean = items.any { it.id == LOCAL_FAVOURITES_CATEGORY_ID } == (type == FavouriteContentType.MANGA)
 
 	private fun onEmptyStateChanged(isEmpty: Boolean) {
 		isEmptyState = isEmpty
