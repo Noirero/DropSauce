@@ -42,16 +42,23 @@ class FavouriteUnreadCounter @Inject constructor(
 	}
 
 	/**
-	 * Loads the card metadata for a whole visible Favourites page in at most two Room queries instead
-	 * of querying history/chapters again for every card.
+	 * Loads card metadata in two Room queries for a normal visible page. Very large Favourites pages
+	 * are split into bounded chunks so the generated `IN (...)` statements stay below SQLite host
+	 * parameter limits on older Android versions instead of failing after deep pagination.
 	 */
 	suspend fun getSnapshot(mangaIds: Collection<Long>, includeUnread: Boolean): Snapshot {
 		if (mangaIds.isEmpty()) return Snapshot(emptyMap(), emptyMap())
 		val ids = mangaIds.distinct()
-		val histories = database.getHistoryDao().findByIds(ids).associateBy { it.mangaId }
+		val historyDao = database.getHistoryDao()
+		val histories = ids.chunked(DB_QUERY_BATCH_SIZE)
+			.flatMap { historyDao.findByIds(it) }
+			.associateBy { it.mangaId }
 		if (!includeUnread) return Snapshot(histories, emptyMap())
 
-		val chaptersByManga = database.getChaptersDao().findAll(ids).groupBy { it.mangaId }
+		val chaptersDao = database.getChaptersDao()
+		val chaptersByManga = ids.chunked(DB_QUERY_BATCH_SIZE)
+			.flatMap { chaptersDao.findAll(it) }
+			.groupBy { it.mangaId }
 		val unread = HashMap<Long, Int>(chaptersByManga.size)
 		for ((mangaId, chapters) in chaptersByManga) {
 			unread[mangaId] = calculateUnreadCount(chapters, histories[mangaId])
@@ -96,5 +103,11 @@ class FavouriteUnreadCounter @Inject constructor(
 		return groupBy { it.branch }
 			.maxOfOrNull { (_, items) -> items.size }
 			?: 0
+	}
+
+	private companion object {
+		// SQLite versions used by older supported Android releases can cap host parameters at 999.
+		// Keep headroom for generated statements and future query changes.
+		const val DB_QUERY_BATCH_SIZE = 500
 	}
 }
