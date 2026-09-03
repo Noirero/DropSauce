@@ -11,11 +11,15 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import eu.kanade.tachiyomi.source.online.HttpSource
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.exceptions.InteractiveActionRequiredException
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.network.webview.adblock.AdBlock
 import org.koitharu.kotatsu.core.parser.CachingMangaRepository
 import org.koitharu.kotatsu.core.parser.MangaRepository
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
@@ -23,9 +27,14 @@ import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.nullIfEmpty
+import javax.inject.Inject
+import javax.inject.Provider
 
 @AndroidEntryPoint
 class BrowserActivity : BaseBrowserActivity() {
+
+	@Inject
+	lateinit var adBlockUpdaterProvider: Provider<AdBlock.Updater>
 
 	private var successCookieUrl: String? = null
 	private var successCookieName: String? = null
@@ -74,6 +83,7 @@ class BrowserActivity : BaseBrowserActivity() {
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = true)
 		viewBinding.webView.webViewClient = BrowserClient(this, adBlock, sourceHeaders)
 		lifecycleScope.launch {
+			prepareAdBlock()
 			try {
 				proxyProvider.applyWebViewConfig()
 			} catch (e: Exception) {
@@ -144,6 +154,34 @@ class BrowserActivity : BaseBrowserActivity() {
 			setResult(RESULT_OK)
 		}
 		super.finish()
+	}
+
+	private suspend fun prepareAdBlock() {
+		if (!adBlock.isEnabled) return
+		val updater = adBlockUpdaterProvider.get()
+		if (!adBlock.hasRuleList()) {
+			withContext(Dispatchers.IO) {
+				tryUpdateAdBlock(updater, force = true)
+			}
+		} else {
+			lifecycleScope.launch(Dispatchers.IO) {
+				tryUpdateAdBlock(updater, force = false)
+			}
+		}
+	}
+
+	private suspend fun tryUpdateAdBlock(updater: AdBlock.Updater, force: Boolean) {
+		try {
+			if (force) {
+				updater.updateList()
+			} else {
+				updater.updateListIfStale()
+			}
+		} catch (e: CancellationException) {
+			throw e
+		} catch (e: Throwable) {
+			e.printStackTraceDebug()
+		}
 	}
 
 	private fun getSourceHeaders(source: MangaSource): Map<String, String> {
