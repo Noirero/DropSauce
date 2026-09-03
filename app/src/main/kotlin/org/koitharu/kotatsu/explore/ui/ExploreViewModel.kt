@@ -182,10 +182,13 @@ class ExploreViewModel @Inject constructor(
 		sourcesRepository.setMihonLanguageEnabled(language, enabled)
 	}
 
-	fun applyMihonSourceFilter(states: Map<Long, Boolean>) {
-		if (states.isEmpty()) return
+	fun applyMihonSourceFilter(
+		sourceStates: Map<Long, Boolean>,
+		languageStates: Map<String, Boolean>,
+	) {
+		if (sourceStates.isEmpty() && languageStates.isEmpty()) return
 		launchJob(Dispatchers.Default) {
-			sourcesRepository.setMihonSourceStates(states)
+			sourcesRepository.setMihonFilterStates(sourceStates, languageStates)
 		}
 	}
 
