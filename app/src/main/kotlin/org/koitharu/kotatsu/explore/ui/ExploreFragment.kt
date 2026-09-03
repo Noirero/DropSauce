@@ -45,6 +45,7 @@ import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
 import org.koitharu.kotatsu.databinding.FragmentExploreBinding
 import org.koitharu.kotatsu.explore.data.ExploreContentClass
+import org.koitharu.kotatsu.explore.data.ExploreContentFilter
 import org.koitharu.kotatsu.explore.data.MihonSourceFilterEntry
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreAdapter
@@ -100,6 +101,17 @@ class ExploreFragment :
 			addItemDecoration(TypedListSpacingDecoration(context, false))
 		}
 		header.buttonManage.setOnClickListener { router.openSourcesCatalog(isExternalOnly = true) }
+		header.toggleContentFilter.addOnButtonCheckedListener { _, checkedId, isChecked ->
+			if (!isChecked) return@addOnButtonCheckedListener
+			val filter = when (checkedId) {
+				R.id.button_content_filter_sfw -> ExploreContentFilter.SFW
+				R.id.button_content_filter_nsfw -> ExploreContentFilter.NSFW
+				else -> ExploreContentFilter.ALL
+			}
+			if (viewModel.contentFilter.value != filter) {
+				viewModel.setContentFilter(filter)
+			}
+		}
 
 		binding.pager.adapter = ExploreSourcesPagerAdapter(::onPageCreated)
 		binding.pager.offscreenPageLimit = 1
@@ -117,6 +129,16 @@ class ExploreFragment :
 		actionModeDelegate.addListener(this)
 		addMenuProvider(ExploreMenuProvider(router, viewModel, ::showSourceFilterDialog))
 		viewModel.headerContent.observe(viewLifecycleOwner, headerAdapter)
+		viewModel.contentFilter.observe(viewLifecycleOwner) { filter ->
+			val checkedId = when (filter) {
+				ExploreContentFilter.SFW -> R.id.button_content_filter_sfw
+				ExploreContentFilter.NSFW -> R.id.button_content_filter_nsfw
+				ExploreContentFilter.ALL -> R.id.button_content_filter_all
+			}
+			if (header.toggleContentFilter.checkedButtonId != checkedId) {
+				header.toggleContentFilter.check(checkedId)
+			}
+		}
 		viewModel.hasExtensionUpdates.observe(viewLifecycleOwner) { hasUpdates ->
 			manageBadge = header.buttonManage.bindBadge(manageBadge, if (hasUpdates) "" else null)
 		}
@@ -196,11 +218,13 @@ class ExploreFragment :
 	override fun onActionModeStarted(mode: ActionMode) {
 		viewBinding?.pager?.isUserInputEnabled = false
 		viewBinding?.header?.tabsKind?.setTabsEnabled(false)
+		viewBinding?.header?.toggleContentFilter?.isEnabled = false
 	}
 
 	override fun onActionModeFinished(mode: ActionMode) {
 		viewBinding?.pager?.isUserInputEnabled = true
 		viewBinding?.header?.tabsKind?.setTabsEnabled(true)
+		viewBinding?.header?.toggleContentFilter?.isEnabled = true
 	}
 
 	override fun onListHeaderClick(item: ListHeader, view: View) {
@@ -442,7 +466,7 @@ class ExploreFragment :
 
 			R.id.action_shortcut -> {
 				val source = selectedSources.singleOrNull() ?: return false
-				viewModel.requestPinShortcut(source)
+				router.openSourceSettings(source)
 				mode?.finish()
 			}
 
