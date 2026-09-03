@@ -208,8 +208,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	}
 
 	private fun HttpSource.requiresUnfilteredTokenWebView(): Boolean {
-		return name.contains("SchaleNetwork", ignoreCase = true) ||
-			javaClass.name.contains(".koharu.", ignoreCase = true)
+		return requiresUnfilteredTokenWebView(name, javaClass.name)
 	}
 
 	private fun getCookieValue(url: String, cookieName: String): String? {
@@ -246,4 +245,11 @@ class BrowserActivity : BaseBrowserActivity() {
 
 		const val TAG = "BrowserActivity"
 	}
+}
+
+internal fun requiresUnfilteredTokenWebView(sourceName: String, className: String): Boolean {
+	val identity = "$sourceName $className"
+		.lowercase()
+		.filter(Char::isLetterOrDigit)
+	return "schalenetwork" in identity || "koharu" in identity
 }
