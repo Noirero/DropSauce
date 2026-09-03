@@ -4,7 +4,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import org.koitharu.kotatsu.R
-import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -16,49 +15,98 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	@Assisted private val categoryId: Long,
 	private val settings: AppSettings,
 	private val repository: FavouritesRepository,
-	networkState: NetworkState,
+	private val filterStore: FavouriteQuickFilterStore,
 	private val mihonExtensionManager: MihonExtensionManager,
 ) : MangaListQuickFilter(settings) {
 
 	private var didRefreshExtensions = false
 
 	init {
-		setFilterOption(ListFilterOption.Downloaded, !networkState.value)
+		isStateFilterEnabled = false
 	}
 
-	override suspend fun getAvailableFilterOptions(): List<ListFilterOption> = buildList {
-		add(ListFilterOption.Downloaded)
-		if (settings.isTrackerEnabled) {
-			add(ListFilterOption.Macro.NEW_CHAPTERS)
-		}
-		add(ListFilterOption.Macro.COMPLETED)
+	override val appliedOptions
+		get() = filterStore.state
+
+	override fun setFilterOption(option: ListFilterOption, isApplied: Boolean) {
+		filterStore.set(option, isApplied)
 	}
+
+	override fun toggleFilterOption(option: ListFilterOption) {
+		filterStore.toggle(option)
+	}
+
+	override fun clearFilter() {
+		filterStore.clear()
+	}
+
+	override suspend fun getAvailableFilterOptions(): List<ListFilterOption> = emptyList()
 
 	override suspend fun getAdditionalChips(
 		selectedOptions: Set<ListFilterOption>,
-	): List<ChipsView.ChipModel> {
+	): List<ChipsView.ChipModel> = buildList {
+		val progress = selectedOptions.filterIsInstance<ListFilterOption.ReadingProgress>().firstOrNull()
+		val continueReading = ListFilterOption.ReadingProgress.IN_PROGRESS
+		add(
+			ChipsView.ChipModel(
+				titleResId = R.string.favorites_continue_reading,
+				isChecked = progress == continueReading,
+				isCheckedIconVisible = false,
+				data = continueReading,
+			),
+		)
+
+		if (settings.isTrackerEnabled) {
+			add(
+				ChipsView.ChipModel(
+					titleResId = R.string.favorites_new_chapters,
+					icon = R.drawable.ic_updated,
+					isChecked = ListFilterOption.Macro.NEW_CHAPTERS in selectedOptions,
+					isCheckedIconVisible = false,
+					data = ListFilterOption.Macro.NEW_CHAPTERS,
+				),
+			)
+		}
+
+		if (categoryId != DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			add(
+				ChipsView.ChipModel(
+					titleResId = R.string.favorites_on_device,
+					icon = R.drawable.ic_storage,
+					isChecked = ListFilterOption.Downloaded in selectedOptions,
+					isCheckedIconVisible = false,
+					data = ListFilterOption.Downloaded,
+				),
+			)
+		}
+
 		val options = getSourceOptions()
 		val selectedSources = selectedOptions.filterIsInstance<ListFilterOption.Source>().toSet()
-		if (options.isEmpty() && selectedSources.isEmpty()) {
-			return emptyList()
-		}
-		return listOf(
+		val publicationState = selectedOptions.filterIsInstance<ListFilterOption.State>().firstOrNull()
+		val advancedCount =
+			(if (selectedSources.isNotEmpty()) 1 else 0) +
+				(if (publicationState != null) 1 else 0) +
+				(if (progress != null && progress != continueReading) 1 else 0)
+		add(
 			ChipsView.ChipModel(
+				titleResId = R.string.favorites_filter,
 				icon = R.drawable.ic_filter_funnel,
-				isChecked = selectedSources.isNotEmpty(),
+				counter = advancedCount,
+				isChecked = advancedCount > 0,
 				isCheckedIconVisible = false,
-				isIconOnly = true,
+				isDropdown = true,
 				data = ExtensionFilter(
 					options = options,
 					selectedOptions = selectedSources,
+					readingProgress = progress,
+					publicationState = publicationState,
+					isAdvanced = true,
 				),
 			),
 		)
 	}
 
 	private suspend fun getSourceOptions(): List<ListFilterOption.Source> {
-		// An empty category has no source filter to resolve. Checking the lightweight database list
-		// first lets its empty state render immediately instead of waiting for extension discovery.
 		val categorySources = repository.findSources(categoryId)
 		if (categorySources.isEmpty()) return emptyList()
 
@@ -76,7 +124,6 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 
 	@AssistedFactory
 	interface Factory {
-
 		fun create(categoryId: Long): FavoritesListQuickFilter
 	}
 }

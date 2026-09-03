@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.core.db
 
 import androidx.sqlite.db.SimpleSQLiteQuery
 import org.koitharu.kotatsu.list.domain.ListFilterOption
+import org.koitharu.kotatsu.list.domain.ReadingProgress.Companion.PROGRESS_COMPLETED
 import java.util.LinkedList
 
 class MangaQueryBuilder(
@@ -101,9 +102,19 @@ class MangaQueryBuilder(
 
 	private fun getConditionOrThrow(option: ListFilterOption): String = when (option) {
 		is ListFilterOption.Inverted -> "NOT(${getConditionOrThrow(option.option)})"
+		is ListFilterOption.ReadingProgress -> option.toSqlCondition()
 		else -> requireNotNull(conditionCallback.getCondition(option)) {
 			"Unsupported filter option $option"
 		}
+	}
+
+	private fun ListFilterOption.ReadingProgress.toSqlCondition(): String = when (this) {
+		ListFilterOption.ReadingProgress.UNREAD ->
+			"NOT EXISTS(SELECT 1 FROM history WHERE history.manga_id = $table.manga_id AND history.percent > 0)"
+		ListFilterOption.ReadingProgress.IN_PROGRESS ->
+			"EXISTS(SELECT 1 FROM history WHERE history.manga_id = $table.manga_id AND history.percent > 0 AND history.percent < $PROGRESS_COMPLETED)"
+		ListFilterOption.ReadingProgress.COMPLETED ->
+			"EXISTS(SELECT 1 FROM history WHERE history.manga_id = $table.manga_id AND history.percent >= $PROGRESS_COMPLETED)"
 	}
 
 	fun interface ConditionCallback {
