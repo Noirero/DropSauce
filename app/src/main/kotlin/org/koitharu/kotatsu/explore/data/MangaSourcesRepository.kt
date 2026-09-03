@@ -30,8 +30,12 @@ data class ResolvedSource(
 
 data class MihonSourceFilterEntry(
 	val source: MihonMangaSource,
-	val isEnabled: Boolean,
-)
+	val isSourceEnabled: Boolean,
+	val isLanguageEnabled: Boolean,
+) {
+	val isEnabled: Boolean
+		get() = isSourceEnabled && isLanguageEnabled
+}
 
 /** Extracts the stable Mihon source id even when the extension has not finished loading yet. */
 internal fun storedMihonSourceId(source: MangaSource): Long? = when (source) {
@@ -203,6 +207,7 @@ class MangaSourcesRepository @Inject constructor(
 			.filterNot { hideNsfw && it.isNsfw }
 			.filterNot { it.pkgName in hiddenPackages }
 			.filterNot { it.sourceId.toString() in disabledSourceIds }
+			.filterNot { disabledLanguageKey(it.language) in disabledSourceIds }
 	}
 
 	/**
@@ -227,26 +232,42 @@ class MangaSourcesRepository @Inject constructor(
 		setMihonSourceStates(sourceIds.associateWith { enabled })
 	}
 
-	/** Applies a mixed source selection with one preference write and one downstream refresh. */
-	@Synchronized
+	fun setMihonLanguageEnabled(language: String, enabled: Boolean) {
+		setMihonLanguageStates(mapOf(language to enabled))
+	}
+
 	fun setMihonSourceStates(states: Map<Long, Boolean>) {
-		if (states.isEmpty()) return
+		setMihonFilterStates(sourceStates = states, languageStates = emptyMap())
+	}
+
+	fun setMihonLanguageStates(states: Map<String, Boolean>) {
+		setMihonFilterStates(sourceStates = emptyMap(), languageStates = states)
+	}
+
+	/**
+	 * Applies source-level and language-level selection together with one preference write. Language
+	 * tokens live beside numeric source ids but never replace them, so both filter layers stay fully
+	 * independent while Explore/global search still receive a single downstream refresh.
+	 */
+	@Synchronized
+	fun setMihonFilterStates(
+		sourceStates: Map<Long, Boolean>,
+		languageStates: Map<String, Boolean>,
+	) {
+		if (sourceStates.isEmpty() && languageStates.isEmpty()) return
 		val before = settings.mihonDisabledSourceIds
 		val updated = before.toMutableSet()
-		for ((sourceId, enabled) in states) {
-			if (enabled) updated.remove(sourceId.toString()) else updated.add(sourceId.toString())
+		for ((sourceId, enabled) in sourceStates) {
+			val key = sourceId.toString()
+			if (enabled) updated.remove(key) else updated.add(key)
+		}
+		for ((language, enabled) in languageStates) {
+			val key = disabledLanguageKey(language)
+			if (enabled) updated.remove(key) else updated.add(key)
 		}
 		if (updated != before) {
 			settings.mihonDisabledSourceIds = updated
 		}
-	}
-
-	fun setMihonLanguageEnabled(language: String, enabled: Boolean) {
-		val ids = getAllMihonSources().filter {
-			it.language.equals(language, ignoreCase = true) ||
-				(language.equals("other", ignoreCase = true) && it.language.isBlank())
-		}.map { it.sourceId }
-		setMihonSourcesEnabled(ids, enabled)
 	}
 
 	/** Novel plugins mixed straight into Explore alongside manga sources. */
@@ -319,7 +340,13 @@ class MangaSourcesRepository @Inject constructor(
 			observeAllMihonSources(),
 			settings.observeAsFlow(AppSettings.KEY_MIHON_DISABLED_SOURCE_IDS) { mihonDisabledSourceIds },
 		) { sources, disabled ->
-			sources.map { MihonSourceFilterEntry(it, it.sourceId.toString() !in disabled) }
+			sources.map { source ->
+				MihonSourceFilterEntry(
+					source = source,
+					isSourceEnabled = source.sourceId.toString() !in disabled,
+					isLanguageEnabled = disabledLanguageKey(source.language) !in disabled,
+				)
+			}
 		}.distinctUntilChanged()
 	}
 
@@ -348,7 +375,7 @@ class MangaSourcesRepository @Inject constructor(
 			manager.installedExtensions,
 			manager.isLoading,
 			settings.observeAsFlow(AppSettings.KEY_DISABLE_NSFW) { isNsfwContentDisabled },
-		) { _: Any?, _: Any?, _: Any? ->
+		) { _: Any?, _: Any? ->
 			getAllMihonSources()
 		}.distinctUntilChanged()
 	}
@@ -382,8 +409,14 @@ class MangaSourcesRepository @Inject constructor(
 		return normalized
 	}
 
+	private fun normalizedLanguage(language: String): String = language.ifBlank { "other" }.lowercase()
+
+	private fun disabledLanguageKey(language: String): String =
+		DISABLED_LANGUAGE_PREFIX + normalizedLanguage(language)
+
 	private companion object {
 		private const val KEY_PINNED_ORDER = "pinned_order"
 		private const val PIN_SEPARATOR = "\n"
+		private const val DISABLED_LANGUAGE_PREFIX = "lang:"
 	}
 }
