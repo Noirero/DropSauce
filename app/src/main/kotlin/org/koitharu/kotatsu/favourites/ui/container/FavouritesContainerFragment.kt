@@ -162,6 +162,17 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat = insets
 
+	override fun onResume() {
+		super.onResume()
+		if (isHidden) return
+		searchScopeActive.value = true
+		installFavouriteSearchHandler()
+		onContentTypeChanged(contentTypeStore.selectedType.value)
+		if (searchSessionActive.value) {
+			enterInlineSearch()
+		}
+	}
+
 	override fun onHiddenChanged(hidden: Boolean) {
 		super.onHiddenChanged(hidden)
 		searchScopeActive.value = !hidden
