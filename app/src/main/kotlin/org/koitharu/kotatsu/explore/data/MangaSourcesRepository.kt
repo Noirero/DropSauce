@@ -375,7 +375,7 @@ class MangaSourcesRepository @Inject constructor(
 			manager.installedExtensions,
 			manager.isLoading,
 			settings.observeAsFlow(AppSettings.KEY_DISABLE_NSFW) { isNsfwContentDisabled },
-		) { _: Any?, _: Any? ->
+		) { _: Any?, _: Any?, _: Any? ->
 			getAllMihonSources()
 		}.distinctUntilChanged()
 	}
