@@ -224,7 +224,16 @@ class FavouritesListViewModel @Inject constructor(
 			list.take(currentWindow)
 		}
 		val candidates = if (display.fromBottom) windowed.asReversed() else windowed
-		val typed = candidates.filter { it.source.isNovelSource == wantNovel }
+		val typed = candidates.filter { manga ->
+			val isNovel = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID && manga.source.isLocal) {
+				val normalizedUrl = manga.url.replace('\\', '/')
+				normalizedUrl.contains("/00.Novel/", ignoreCase = true) ||
+					normalizedUrl.substringBefore('#').substringBefore('?').endsWith(".epub", ignoreCase = true)
+			} else {
+				manga.source.isNovelSource
+			}
+			isNovel == wantNovel
+		}
 		val searched = searchMatcher.filter(typed, display.query)
 		maybeExpandDatabaseWindow(
 			loadedCount = candidates.size,

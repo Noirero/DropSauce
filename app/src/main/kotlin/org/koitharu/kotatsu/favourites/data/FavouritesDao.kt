@@ -63,13 +63,15 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 
 	@Query(
 		"SELECT manga.manga_id AS manga_id, manga.title AS title, manga.author AS author, manga.source AS source " +
-			"FROM local_index INNER JOIN manga ON manga.manga_id = local_index.manga_id",
+			"FROM local_index INNER JOIN manga ON manga.manga_id = local_index.manga_id " +
+			"WHERE manga.source != 'LOCAL' OR local_index.path LIKE '%/downloads/%'",
 	)
 	abstract suspend fun findDownloadedSearchEntries(): List<FavouriteSearchEntry>
 
 	@Query(
 		"SELECT manga.source AS source, COUNT(DISTINCT local_index.manga_id) AS item_count " +
 			"FROM local_index INNER JOIN manga ON manga.manga_id = local_index.manga_id " +
+			"WHERE manga.source != 'LOCAL' OR local_index.path LIKE '%/downloads/%' " +
 			"GROUP BY manga.source",
 	)
 	abstract suspend fun findDownloadedCountsBySource(): List<FavouriteSourceCount>
@@ -130,6 +132,7 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 	): Flow<List<MangaWithTags>> = observeDownloadedImpl(
 		MangaQueryBuilder("manga", ::getDownloadedCondition)
 			.join("INNER JOIN local_index ON local_index.manga_id = manga.manga_id")
+			.where("manga.source != 'LOCAL' OR local_index.path LIKE '%/downloads/%'")
 			.filters(filterOptions - ListFilterOption.Downloaded)
 			.orderBy(getDownloadedOrderBy(order, pinned))
 			.limit(limit)

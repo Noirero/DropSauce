@@ -1,45 +1,16 @@
-name: Downloaded Category Refine Once
+name: Beta Build Once
 
+# Temporary helper kept manual-only after the requested Beta build.
 on:
-  push:
-    branches:
-      - beta
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify:
-    name: Refine and verify downloaded category
+  beta:
+    name: Build beta APK
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout beta
-        uses: actions/checkout@v4
-        with:
-          ref: beta
-          fetch-depth: 2
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Apply downloaded category refinement
-        run: python3 .github/downloaded-category-refine-once.py
-
-      - name: Verify preview Kotlin and Room queries
-        run: ./gradlew :app:compilePreviewKotlin --no-daemon
-
-      - name: Commit verified refinement
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/downloaded-category-refine-once.py
-          git checkout HEAD^ -- .github/workflows/beta-build-once.yml
-          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/data/FavouritesDao.kt
-          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/ui/list/FavouritesListViewModel.kt
-          git add .github/workflows/beta-build-once.yml
-          git commit -m "Keep local imports out of Downloaded favourites"
-          git push origin HEAD:beta
+      - name: Manual helper disabled
+        run: echo "Use preview-build.yml for normal manual Beta builds."
