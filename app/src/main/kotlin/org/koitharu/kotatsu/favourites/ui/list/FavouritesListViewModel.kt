@@ -466,16 +466,14 @@ class FavouritesListViewModel @Inject constructor(
 			queryLimit
 		}
 		isPaginationReady.set(false)
-		val categoryFilters = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
-			filters + ListFilterOption.Downloaded
-		} else {
-			filters
-		}
+		val categoryFilters = filters
 		// Pinned rows belong at the start of the complete list. A reversed tail query must ignore the
 		// pin-first SQL clause or it would return those rows instead of the actual bottom page.
 		val effectivePinned = if (bottom) emptyList() else pinned.takeIfDefaultState(categoryFilters)
 		val queryOrder = if (bottom) order.type.toSortOrder(!order.isAscending) else order
-		if (categoryId == NO_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+		if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			repository.observeDownloaded(queryOrder, categoryFilters, effectiveLimit, effectivePinned)
+		} else if (categoryId == NO_ID) {
 			repository.observeAll(queryOrder, categoryFilters, effectiveLimit, effectivePinned)
 		} else {
 			repository.observeAll(categoryId, queryOrder, categoryFilters, effectiveLimit, effectivePinned)

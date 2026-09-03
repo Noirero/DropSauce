@@ -79,6 +79,13 @@ class FavouritesRepository @Inject constructor(
 		return entities.toMangaList()
 	}
 
+	fun observeDownloaded(
+		order: ListSortOrder,
+		filterOptions: Set<ListFilterOption>,
+		limit: Int,
+		pinned: List<Long> = emptyList(),
+	): Flow<List<Manga>> = localObserver.observeDownloaded(order, filterOptions, limit, pinned)
+
 	fun observeAll(
 		order: ListSortOrder,
 		filterOptions: Set<ListFilterOption>,

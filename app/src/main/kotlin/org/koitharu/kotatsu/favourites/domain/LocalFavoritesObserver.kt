@@ -2,8 +2,11 @@ package org.koitharu.kotatsu.favourites.domain
 
 import dagger.Reusable
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.toManga
+import org.koitharu.kotatsu.core.db.entity.toMangaList
 import org.koitharu.kotatsu.core.db.entity.toMangaTags
 import org.koitharu.kotatsu.favourites.data.FavouriteManga
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -15,7 +18,7 @@ import javax.inject.Inject
 
 @Reusable
 class LocalFavoritesObserver @Inject constructor(
-	localMangaIndex: LocalMangaIndex,
+	private val localMangaIndex: LocalMangaIndex,
 	private val db: MangaDatabase,
 ) : LocalObserveMapper<FavouriteManga, Manga>(localMangaIndex) {
 
@@ -31,6 +34,16 @@ class LocalFavoritesObserver @Inject constructor(
 		filterOptions: Set<ListFilterOption>,
 		limit: Int
 	): Flow<List<Manga>> = db.getFavouritesDao().observeAll(categoryId, order, filterOptions, limit).mapToLocal()
+
+	fun observeDownloaded(
+		order: ListSortOrder,
+		filterOptions: Set<ListFilterOption>,
+		limit: Int,
+		pinned: List<Long>,
+	): Flow<List<Manga>> = db.getFavouritesDao()
+		.observeDownloaded(order, filterOptions, limit, pinned)
+		.onStart { localMangaIndex.updateIfRequired() }
+		.map { it.toMangaList() }
 
 	override fun toManga(e: FavouriteManga) = e.manga.toManga(e.tags.toMangaTags(), null)
 
