@@ -336,11 +336,6 @@ class MihonBackupManager @Inject constructor(
   ) {
     val now = System.currentTimeMillis()
     val totalChapters = backup.backupManga.sumOf { it.chapters.size }
-    BackupOperationTracker.update(
-      BackupOperationTracker.Kind.MIHON_RESTORE,
-      if (totalChapters > 0) Progress(0, totalChapters) else Progress.INDETERMINATE,
-      R.string.backup_operation_restoring,
-    )
 
     val pending = backup.backupManga.map { item ->
       val sourceName = resolveStoredSourceName(item.source, backup.backupSources)
@@ -584,18 +579,30 @@ class MihonBackupManager @Inject constructor(
     }
     pending.forEach { item -> item.favourites.forEach { db.getFavouritesDao().upsert(it) } }
 
+    if (totalChapters > 0) {
+      // Exact chapter progress starts only when chapter persistence starts. Building the restore
+      // snapshot and writing manga metadata can take a while for huge backups, so showing 0/50000
+      // during that preparation makes the restore look frozen even though it is still working.
+      BackupOperationTracker.update(
+        BackupOperationTracker.Kind.MIHON_RESTORE,
+        Progress(0, totalChapters),
+        R.string.backup_operation_restoring,
+      )
+    }
+
     var restoredChapterCount = 0
     pending.forEach { item ->
       restoreChapters(item.manga.id, item.chapters)
-      if (totalChapters > 0) {
-        repeat(item.chapters.size) {
-          restoredChapterCount += 1
-          BackupOperationTracker.update(
-            BackupOperationTracker.Kind.MIHON_RESTORE,
-            Progress(restoredChapterCount, totalChapters),
-            R.string.backup_operation_restoring,
-          )
-        }
+      if (totalChapters > 0 && item.chapters.isNotEmpty()) {
+        // Publish one stable cumulative value per restored manga/novel. Emitting once for every
+        // chapter in a tight loop lets StateFlow/Compose conflate thousands of intermediate states
+        // and wastes work; the per-title update remains visible while the next title is restored.
+        restoredChapterCount += item.chapters.size
+        BackupOperationTracker.update(
+          BackupOperationTracker.Kind.MIHON_RESTORE,
+          Progress(restoredChapterCount, totalChapters),
+          R.string.backup_operation_restoring,
+        )
       }
     }
 
