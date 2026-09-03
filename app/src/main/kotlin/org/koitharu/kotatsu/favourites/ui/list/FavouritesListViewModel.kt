@@ -32,6 +32,7 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
 import org.koitharu.kotatsu.details.data.DetailsNavigationCache
+import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -105,6 +106,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val refreshTrigger = MutableStateFlow(Any())
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val databaseWindow = MutableStateFlow(DATABASE_WINDOW_INITIAL)
+	private val fromBottom = MutableStateFlow(false)
 	private val isPaginationReady = AtomicBoolean(false)
 	private var detailsPrefetchJob: Job? = null
 	private var lastSortOrder: ListSortOrder? = null
@@ -142,8 +144,9 @@ class FavouritesListViewModel @Inject constructor(
 		contentTypeStore.selectedType,
 		limit,
 		displayPreferences.state,
-	) { query, type, pageLimit, preferences ->
-		DisplayState(query, type, pageLimit, preferences.getValue(type))
+		fromBottom,
+	) { query, type, pageLimit, preferences, bottom ->
+		DisplayState(query, type, pageLimit, preferences.getValue(type), bottom)
 	}
 
 	private val effectiveFilters = combine(
@@ -186,7 +189,7 @@ class FavouritesListViewModel @Inject constructor(
 			displayPreferences.current(contentTypeStore.selectedType.value).gridColumns,
 		)
 
-	val sortOrder: StateFlow<ListSortOrder?> = if (categoryId == NO_ID) {
+	val sortOrder: StateFlow<ListSortOrder?> = if (categoryId == NO_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
 		settings.observeAsFlow(AppSettings.KEY_FAVORITES_ORDER) { allFavoritesSortOrder }
 	} else {
 		repository.observeCategory(categoryId).withErrorHandling().map { it?.order }
@@ -215,11 +218,12 @@ class FavouritesListViewModel @Inject constructor(
 		// A query change shrinks databaseWindow before Room necessarily returns the smaller list. Limit
 		// the stale snapshot here too, so a new keystroke never scans a previously loaded 16k list once.
 		val currentWindow = databaseWindow.value
-		val candidates = if (currentWindow == Int.MAX_VALUE || list.size <= currentWindow) {
+		val windowed = if (currentWindow == Int.MAX_VALUE || list.size <= currentWindow) {
 			list
 		} else {
 			list.take(currentWindow)
 		}
+		val candidates = if (display.fromBottom) windowed.asReversed() else windowed
 		val typed = candidates.filter { it.source.isNovelSource == wantNovel }
 		val searched = searchMatcher.filter(typed, display.query)
 		maybeExpandDatabaseWindow(
@@ -287,7 +291,7 @@ class FavouritesListViewModel @Inject constructor(
 	fun removeFromFavourites(ids: Set<Long>) {
 		if (ids.isEmpty()) return
 		launchJob(Dispatchers.Default) {
-			val handle = if (categoryId == NO_ID) {
+			val handle = if (categoryId == NO_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
 				repository.removeFromFavourites(ids)
 			} else {
 				repository.removeFromCategory(categoryId, ids)
@@ -304,6 +308,24 @@ class FavouritesListViewModel @Inject constructor(
 		if (databaseWindow.value < preferredWindow) {
 			databaseWindow.value = preferredWindow
 		}
+	}
+
+	fun requestBottomPage(): Boolean {
+		if (fromBottom.value) return false
+		isPaginationReady.set(false)
+		limit.value = PAGE_SIZE
+		databaseWindow.value = DATABASE_WINDOW_INITIAL
+		fromBottom.value = true
+		return true
+	}
+
+	fun requestTopPage(): Boolean {
+		if (!fromBottom.value) return false
+		isPaginationReady.set(false)
+		limit.value = PAGE_SIZE
+		databaseWindow.value = DATABASE_WINDOW_INITIAL
+		fromBottom.value = false
+		return true
 	}
 
 	private fun prefetchDetailsSnapshots(
@@ -423,10 +445,11 @@ class FavouritesListViewModel @Inject constructor(
 	private fun observeFavorites() = combine(
 		sortOrder.filterNotNull(),
 		effectiveFilters.combineWithSettings(),
-		pinnedIds,
+		combine(pinnedIds, fromBottom) { pinned, bottom -> pinned to bottom },
 		databaseWindow,
 		contentTypeStore.selectedType,
-	) { order, filters, pinned, queryLimit, contentType ->
+	) { order, filters, pinnedAndBottom, queryLimit, contentType ->
+		val (pinned, bottom) = pinnedAndBottom
 		val configurationChanged =
 			(lastSortOrder != null && lastSortOrder != order) ||
 				(lastFilters != null && lastFilters != filters) ||
@@ -443,11 +466,19 @@ class FavouritesListViewModel @Inject constructor(
 			queryLimit
 		}
 		isPaginationReady.set(false)
-		val effectivePinned = pinned.takeIfDefaultState(filters)
-		if (categoryId == NO_ID) {
-			repository.observeAll(order, filters, effectiveLimit, effectivePinned)
+		val categoryFilters = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			filters + ListFilterOption.Downloaded
 		} else {
-			repository.observeAll(categoryId, order, filters, effectiveLimit, effectivePinned)
+			filters
+		}
+		// Pinned rows belong at the start of the complete list. A reversed tail query must ignore the
+		// pin-first SQL clause or it would return those rows instead of the actual bottom page.
+		val effectivePinned = if (bottom) emptyList() else pinned.takeIfDefaultState(categoryFilters)
+		val queryOrder = if (bottom) order.type.toSortOrder(!order.isAscending) else order
+		if (categoryId == NO_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			repository.observeAll(queryOrder, categoryFilters, effectiveLimit, effectivePinned)
+		} else {
+			repository.observeAll(categoryId, queryOrder, categoryFilters, effectiveLimit, effectivePinned)
 		}
 	}.flattenLatest()
 
@@ -491,5 +522,6 @@ class FavouritesListViewModel @Inject constructor(
 		val type: FavouriteContentType,
 		val limit: Int,
 		val options: FavouriteDisplayPreferences.Options,
+		val fromBottom: Boolean,
 	)
 }

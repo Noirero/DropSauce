@@ -49,6 +49,7 @@ import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
+import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import javax.inject.Inject
 
@@ -73,6 +74,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
 		override fun onPageSelected(position: Int) {
 			updateCategoryPickerLabel()
+			activity?.invalidateOptionsMenu()
 		}
 	}
 
@@ -127,7 +129,17 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		displayPreferences.state.observe(viewLifecycleOwner) {
 			applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
 		}
-		addMenuProvider(FavouritesContainerMenuProvider(router))
+		addMenuProvider(
+			FavouritesContainerMenuProvider(
+				router = router,
+				isAllFavouritesSelected = { currentCategory()?.id == FavouritesListFragment.NO_ID },
+				totalTitle = {
+					getString(R.string.favourites_total_format, currentCategory()?.count ?: 0)
+				},
+				onGoToTop = { currentFavouritesList()?.scrollToTop() },
+				onGoToBottom = { currentFavouritesList()?.scrollToBottom() },
+			),
+		)
 		viewModel.onActionDone.observeEvent(viewLifecycleOwner, ReversibleActionObserver(binding.pager))
 
 		searchBackCallback = object : OnBackPressedCallback(false) {
@@ -254,6 +266,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	private fun onCategoriesChanged(value: List<FavouriteTabModel>) {
 		categories = value
+		activity?.invalidateOptionsMenu()
 		viewBinding?.run {
 			if (value.isNotEmpty() && pager.currentItem >= value.size) {
 				pager.setCurrentItem(0, false)
@@ -335,6 +348,14 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			viewBinding?.pager ?: return null,
 		)
 	}
+
+	private fun currentCategory(): FavouriteTabModel? {
+		val position = viewBinding?.pager?.currentItem ?: return null
+		return categories.getOrNull(position)
+	}
+
+	private fun currentFavouritesList(): FavouritesListFragment? =
+		findCurrentFragment() as? FavouritesListFragment
 
 	private fun installFavouriteSearchHandler() {
 		val searchBar = activity?.findViewById<SearchBar>(R.id.search_bar) ?: return

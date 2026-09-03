@@ -8,6 +8,7 @@ import android.view.View
 import androidx.appcompat.view.ActionMode
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import coil3.request.ImageRequest
 import coil3.size.Size
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -27,6 +28,7 @@ import org.koitharu.kotatsu.core.util.ext.stableMangaCoverKey
 import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
+import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.list.ui.MangaListFragment
 import org.koitharu.kotatsu.list.ui.adapter.MangaListAdapter
 import org.koitharu.kotatsu.list.ui.config.ListConfigSection
@@ -46,6 +48,7 @@ class FavouritesListFragment : MangaListFragment() {
 	private val coverPrefetchSemaphore = Semaphore(3)
 	private val prefetchedCovers = LinkedHashSet<String>()
 	private var coverPrefetchJob: Job? = null
+	private var pendingScrollPosition: PendingScroll? = null
 
 	val categoryId
 		get() = viewModel.categoryId
@@ -62,7 +65,20 @@ class FavouritesListFragment : MangaListFragment() {
 				adapter.notifyItemRangeChanged(first, (last - first + 1).coerceAtMost(adapter.itemCount - first))
 			}
 		}
-		viewModel.content.observe(viewLifecycleOwner, ::prefetchCovers)
+		viewModel.content.observe(viewLifecycleOwner) { items ->
+			prefetchCovers(items)
+			pendingScrollPosition?.let { target ->
+				pendingScrollPosition = null
+				binding.recyclerView.post {
+					val position = if (target == PendingScroll.BOTTOM) {
+						(binding.recyclerView.adapter?.itemCount ?: 0) - 1
+					} else {
+						0
+					}
+					if (position >= 0) binding.recyclerView.scrollToPosition(position)
+				}
+			}
+		}
 	}
 
 	override fun onResume() {
@@ -129,7 +145,31 @@ class FavouritesListFragment : MangaListFragment() {
 	override fun onEmptyActionClick() = viewModel.clearFilter()
 
 	override fun onFilterClick(view: View?) {
-		router.showListSortSheet(ListConfigSection.Favorites(categoryId))
+		val configCategoryId = if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			NO_ID
+		} else {
+			categoryId
+		}
+		router.showListSortSheet(ListConfigSection.Favorites(configCategoryId))
+	}
+
+	fun scrollToTop() {
+		if (viewModel.requestTopPage()) {
+			pendingScrollPosition = PendingScroll.TOP
+		} else {
+			(viewBinding?.recyclerView?.layoutManager as? LinearLayoutManager)
+				?.scrollToPositionWithOffset(0, 0)
+		}
+	}
+
+	fun scrollToBottom() {
+		if (viewModel.requestBottomPage()) {
+			pendingScrollPosition = PendingScroll.BOTTOM
+		} else {
+			val recyclerView = viewBinding?.recyclerView ?: return
+			val last = (recyclerView.adapter?.itemCount ?: 0) - 1
+			if (last >= 0) recyclerView.scrollToPosition(last)
+		}
 	}
 
 	override fun onCreateActionMode(
@@ -191,6 +231,8 @@ class FavouritesListFragment : MangaListFragment() {
 		val coverUrl: String,
 		val key: String,
 	)
+
+	private enum class PendingScroll { TOP, BOTTOM }
 
 	companion object {
 

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
@@ -25,6 +26,8 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
+import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
+import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_TITLE
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -60,7 +63,10 @@ class FavouritesContainerViewModel @Inject constructor(
 			FavouritesContainerFragment.searchQuery.value.trim(),
 		)
 
-	private val favouritesChanges = favouritesRepository.observeFavouritesChanges()
+	private val favouritesChanges = merge(
+		favouritesRepository.observeFavouritesChanges(),
+		favouritesRepository.observeDownloadedChanges(),
+	)
 		.onEach { searchRepository.invalidate() }
 
 	private val categoriesStateFlow = favouritesRepository.observeCategoriesForLibrary()
@@ -78,12 +84,10 @@ class FavouritesContainerViewModel @Inject constructor(
 		contentTypeStore.selectedType,
 		contentTypeStore.novelCategoryIds,
 		localFavouritesRepository.items,
-		displayPreferences.state,
-	) { type, _, localManga, preferences ->
+	) { type, _, localManga ->
 		ContentTypeState(
 			type = type,
 			localManga = localManga,
-			showCategoryCounts = preferences.getValue(type).showCategoryCounts,
 		)
 	}
 
@@ -132,11 +136,8 @@ class FavouritesContainerViewModel @Inject constructor(
 			query = query,
 			categoryIds = typedCategories.map { it.id },
 		)
-		if (!state.showCategoryCounts) {
-			return@mapLatest CountSnapshot(key, 0, emptyMap(), 0)
-		}
-
 		val remote = calculateRemoteCounts(typedCategories, state.type, query)
+		val downloadedCount = calculateDownloadedCount(state.type, query)
 		val localCount = if (state.type == FavouriteContentType.NOVEL) {
 			0
 		} else if (query.isBlank()) {
@@ -149,6 +150,7 @@ class FavouritesContainerViewModel @Inject constructor(
 			allCount = remote.allCount,
 			counts = remote.counts,
 			localCount = localCount,
+			downloadedCount = downloadedCount,
 		)
 	}.withErrorHandling()
 		.distinctUntilChanged()
@@ -171,6 +173,7 @@ class FavouritesContainerViewModel @Inject constructor(
 			counts = counts?.counts.orEmpty(),
 			includeLocal = structure.includeLocal,
 			localCount = counts?.localCount ?: 0,
+			downloadedCount = counts?.downloadedCount ?: 0,
 		)
 	}.withErrorHandling()
 		// Badge-only updates are handled directly by FavouritesContainerAdapter and no longer cause
@@ -218,12 +221,19 @@ class FavouritesContainerViewModel @Inject constructor(
 		counts: Map<Long, Int>,
 		includeLocal: Boolean,
 		localCount: Int,
+		downloadedCount: Int,
 	): List<FavouriteTabModel> {
-		if (isEmpty() && !showAll && !includeLocal) return emptyList()
 		val result = ArrayList<FavouriteTabModel>(
-			size + (if (showAll) 1 else 0) + (if (includeLocal) 1 else 0),
+			size + (if (showAll) 1 else 0) + (if (includeLocal) 1 else 0) + 1,
 		)
 		if (showAll) result.add(FavouriteTabModel(NO_ID, null, allCount))
+		result.add(
+			FavouriteTabModel(
+				DOWNLOADED_FAVOURITES_CATEGORY_ID,
+				DOWNLOADED_FAVOURITES_CATEGORY_TITLE,
+				downloadedCount,
+			),
+		)
 		if (includeLocal) {
 			result.add(
 				FavouriteTabModel(
@@ -237,8 +247,16 @@ class FavouritesContainerViewModel @Inject constructor(
 		return result
 	}
 
+	private suspend fun calculateDownloadedCount(type: FavouriteContentType, query: String): Int {
+		val wantNovel = type == FavouriteContentType.NOVEL
+		val entries = favouritesRepository.getDownloadedEntries().filter { entry ->
+			MangaSource(entry.source).isNovelSource == wantNovel
+		}
+		return if (query.isBlank()) entries.size else searchMatcher.matchingIds(entries, query).size
+	}
+
 	fun hide(categoryId: Long) {
-		if (categoryId == LOCAL_FAVOURITES_CATEGORY_ID) return
+		if (categoryId == LOCAL_FAVOURITES_CATEGORY_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) return
 		launchJob(Dispatchers.Default) {
 			if (categoryId == NO_ID) {
 				settings.isAllFavouritesVisible = false
@@ -253,7 +271,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	}
 
 	fun deleteCategory(categoryId: Long) {
-		if (categoryId == LOCAL_FAVOURITES_CATEGORY_ID) return
+		if (categoryId == LOCAL_FAVOURITES_CATEGORY_ID || categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) return
 		launchJob(Dispatchers.Default) {
 			favouritesRepository.removeCategories(setOf(categoryId))
 			contentTypeStore.removeCategories(setOf(categoryId))
@@ -268,7 +286,6 @@ class FavouritesContainerViewModel @Inject constructor(
 	private data class ContentTypeState(
 		val type: FavouriteContentType,
 		val localManga: List<Manga>,
-		val showCategoryCounts: Boolean,
 	)
 
 	private data class CategoryStructure(
@@ -295,9 +312,10 @@ class FavouritesContainerViewModel @Inject constructor(
 		val allCount: Int,
 		val counts: Map<Long, Int>,
 		val localCount: Int,
+		val downloadedCount: Int,
 	) {
 		companion object {
-			val EMPTY = CountSnapshot(null, 0, emptyMap(), 0)
+			val EMPTY = CountSnapshot(null, 0, emptyMap(), 0, 0)
 		}
 	}
 

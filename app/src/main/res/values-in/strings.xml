@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="go_to_top">Ke paling atas</string>
+    <string name="go_to_bottom">Ke paling bawah</string>
+    <string name="favourites_total_placeholder">Jumlah total judul</string>
+    <string name="favourites_total_format">Jumlah total judul: %1$,d</string>
     <string name="local_storage">Penyimpanan lokal</string>
     <string name="favourites">Disukai</string>
     <string name="history">Riwayat</string>

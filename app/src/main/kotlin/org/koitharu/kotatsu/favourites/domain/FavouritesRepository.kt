@@ -56,6 +56,9 @@ class FavouritesRepository @Inject constructor(
 	 */
 	suspend fun getMemberships(): List<FavouriteMembership> = db.getFavouritesDao().findMemberships()
 
+	/** Lightweight rows for the virtual Downloaded category; local_index is the source of truth. */
+	suspend fun getDownloadedEntries() = db.getFavouritesDao().findDownloadedSearchEntries()
+
 	suspend fun getLastManga(limit: Int): List<Manga> {
 		val entities = db.getFavouritesDao().findLast(limit)
 		return entities.toMangaList()
@@ -135,6 +138,11 @@ class FavouritesRepository @Inject constructor(
 			emitInitialState = true,
 		).map { Unit }
 	}
+
+	fun observeDownloadedChanges(): Flow<Unit> = db.invalidationTracker.createFlow(
+		"local_index",
+		emitInitialState = true,
+	).map { Unit }
 
 	fun observeCategories(): Flow<List<FavouriteCategory>> {
 		return db.getFavouriteCategoriesDao().observeAll().mapItems {
