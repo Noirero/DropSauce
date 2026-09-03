@@ -49,6 +49,7 @@ import okio.use
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.image.BitmapDecoderCompat
 import org.koitharu.kotatsu.core.model.ids
+import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.core.network.imageproxy.ImageProxyInterceptor
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
@@ -605,9 +606,10 @@ class DownloadWorker @AssistedInject constructor(
 			}
 		} else if (notificationThrottler.throttle()) {
 			notificationManager.notify(id.hashCode(), notification)
-		} else {
-			return@withLock
 		}
+		// WorkManager progress is lightweight compared with rebuilding a notification and must not be
+		// throttled: pause/resume state should become visible immediately even if a progress notification
+		// was posted a few milliseconds earlier.
 		setProgress(state.toWorkData())
 	}
 
