@@ -21,6 +21,7 @@ import kotlin.coroutines.suspendCoroutine
 class FavouritesContainerAdapter(
 	private val fragment: Fragment,
 	private val showCategoryCounts: () -> Boolean,
+	private val onListCommitted: (List<FavouriteTabModel>) -> Unit = {},
 ) : FragmentStateAdapter(fragment), FlowCollector<List<FavouriteTabModel>> {
 
 	private val differ = AsyncListDiffer(
@@ -57,6 +58,7 @@ class FavouritesContainerAdapter(
 			// directly instead, including visibility because initial tabs are normally created before the
 			// asynchronous count snapshot arrives.
 			updateTabBadgeNumbers(value)
+			onListCommitted(differ.currentList)
 			ContinuationResumeRunnable(cont).run()
 		}
 	}

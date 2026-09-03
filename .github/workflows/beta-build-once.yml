@@ -1,47 +1,16 @@
-name: Favourite Category Restore Once
+name: Beta Build Once
 
+# Temporary helper kept manual-only after the requested Beta build.
 on:
-  push:
-    branches:
-      - beta
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
-    name: Patch and verify favourites
+  beta:
+    name: Build beta APK
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
-      - name: Checkout beta
-        uses: actions/checkout@v5
-        with:
-          ref: beta
-          fetch-depth: 1
-
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Apply category restore fix
-        run: python3 .github/fix-favourite-category-restore.py
-
-      - name: Verify preview Kotlin and resources
-        run: |
-          chmod +x gradlew
-          git diff --check
-          ./gradlew :app:compilePreviewKotlin --no-daemon --stacktrace
-
-      - name: Commit verified fix
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Preserve favourite category across content tabs"
-          git push origin beta
+      - name: Manual helper disabled
+        run: echo "Use preview-build.yml for normal manual Beta builds."

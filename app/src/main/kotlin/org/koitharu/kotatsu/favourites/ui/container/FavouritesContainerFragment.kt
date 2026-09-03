@@ -77,12 +77,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
 		override fun onPageSelected(position: Int) {
 			if (pendingCategoryRestore == null) {
-				currentCategory()?.let { category ->
-					contentTypeStore.setLastCategoryId(
-						displayedContentType ?: contentTypeStore.selectedType.value,
-						category.id,
-					)
-				}
+				rememberCurrentCategory()
 			}
 			updateCategoryPickerLabel()
 			activity?.invalidateOptionsMenu()
@@ -103,13 +98,20 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			?: searchSessionActive.value
 		savedInstanceState?.getString(STATE_SEARCH_QUERY)?.let { searchQuery.value = it }
 		searchScopeActive.value = !isHidden
-		val adapter = FavouritesContainerAdapter(this) {
-			displayPreferences.current(contentTypeStore.selectedType.value).showCategoryCounts
-		}
+		val adapter = FavouritesContainerAdapter(
+			fragment = this,
+			showCategoryCounts = {
+				displayPreferences.current(contentTypeStore.selectedType.value).showCategoryCounts
+			},
+			onListCommitted = ::onCategoriesCommitted,
+		)
 		pagerAdapter = adapter
 		binding.pager.adapter = adapter
 		binding.pager.offscreenPageLimit = 1
-		binding.pager.recyclerView?.isNestedScrollingEnabled = false
+		binding.pager.recyclerView?.apply {
+			isNestedScrollingEnabled = false
+			itemAnimator = null
+		}
 		binding.pager.registerOnPageChangeCallback(pageChangeCallback)
 		TabLayoutMediator(
 			binding.tabs,
@@ -125,6 +127,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 				else -> FavouriteContentType.MANGA
 			}
 			if (contentTypeStore.selectedType.value != type) {
+				rememberCurrentCategory()
 				contentTypeStore.setSelectedType(type)
 			}
 		}
@@ -135,7 +138,6 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		}
 		actionModeDelegate.addListener(this)
 		viewModel.categories.observe(viewLifecycleOwner, adapter)
-		viewModel.categories.observe(viewLifecycleOwner, ::onCategoriesChanged)
 		viewModel.isEmpty.observe(viewLifecycleOwner, ::onEmptyStateChanged)
 		contentTypeStore.selectedType.observe(viewLifecycleOwner, ::onContentTypeChanged)
 		displayPreferences.state.observe(viewLifecycleOwner) {
@@ -170,6 +172,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	override fun onDestroyView() {
+		rememberCurrentCategory()
 		viewBinding?.pager?.unregisterOnPageChangeCallback(pageChangeCallback)
 		exitInlineSearch(clearQuery = false, endSession = false)
 		restoreGlobalSearchHandler()
@@ -280,27 +283,23 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		applyCategoryNavigation(displayPreferences.current(type))
 	}
 
-	private fun onCategoriesChanged(value: List<FavouriteTabModel>) {
+	private fun onCategoriesCommitted(value: List<FavouriteTabModel>) {
 		categories = value
 		activity?.invalidateOptionsMenu()
-		viewBinding?.run {
-			tabs.post {
-				val binding = viewBinding ?: return@post
-				val restoreType = pendingCategoryRestore
-				if (restoreType != null && isCategoryListForType(value, restoreType)) {
-					val categoryId = contentTypeStore.getLastCategoryId(restoreType)
-					val target = value.indexOfFirst { it.id == categoryId }.takeIf { it >= 0 } ?: 0
-					pendingCategoryRestore = null
-					if (value.isNotEmpty()) {
-						binding.pager.setCurrentItem(target, false)
-						contentTypeStore.setLastCategoryId(restoreType, value[target].id)
-					}
-				} else if (restoreType == null && value.isNotEmpty() && binding.pager.currentItem >= value.size) {
-					binding.pager.setCurrentItem(0, false)
-				}
-				applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
+		val binding = viewBinding ?: return
+		val restoreType = pendingCategoryRestore
+		if (restoreType != null && isCategoryListForType(value, restoreType)) {
+			val categoryId = contentTypeStore.getLastCategoryId(restoreType)
+			val target = value.indexOfFirst { it.id == categoryId }.takeIf { it >= 0 } ?: 0
+			if (value.isNotEmpty()) {
+				binding.pager.setCurrentItem(target, false)
+				contentTypeStore.setLastCategoryId(restoreType, value[target].id)
 			}
+			pendingCategoryRestore = null
+		} else if (restoreType == null && value.isNotEmpty() && binding.pager.currentItem >= value.size) {
+			binding.pager.setCurrentItem(0, false)
 		}
+		applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
 	}
 
 	private fun isCategoryListForType(
@@ -383,6 +382,12 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private fun currentCategory(): FavouriteTabModel? {
 		val position = viewBinding?.pager?.currentItem ?: return null
 		return categories.getOrNull(position)
+	}
+
+	private fun rememberCurrentCategory() {
+		val type = displayedContentType ?: return
+		val category = currentCategory() ?: return
+		contentTypeStore.setLastCategoryId(type, category.id)
 	}
 
 	private fun currentFavouritesList(): FavouritesListFragment? =
