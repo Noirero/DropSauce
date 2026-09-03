@@ -3,6 +3,8 @@ package org.koitharu.kotatsu.download.ui.worker
 import androidx.annotation.AnyThread
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -11,6 +13,9 @@ class PausingHandle : AbstractCoroutineContextElement(PausingHandle) {
 
 	private val paused = MutableStateFlow(false)
 	private val skipError = MutableStateFlow(false)
+
+	/** Lets concurrency waits wake immediately when a queued download is paused. */
+	internal val pauseState: StateFlow<Boolean> = paused.asStateFlow()
 
 	@Volatile
 	private var skipAllErrors = false
