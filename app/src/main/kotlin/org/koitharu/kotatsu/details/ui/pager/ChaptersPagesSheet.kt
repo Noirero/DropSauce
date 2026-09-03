@@ -240,7 +240,9 @@ class ChaptersPagesSheet : BaseAdaptiveSheet<SheetChaptersPagesBinding>(),
 	override fun expandAndLock() {
 		super.expandAndLock()
 		if (viewModel is DetailsViewModel) {
-			// Selection mode must not punch through the chapter sheet's half-expanded upper bound.
+			// Selection mode must not punch through the chapter sheet's half-expanded upper bound, and its
+			// explicit header control must obey the lock just like native sheet dragging does.
+			viewBinding?.headerBar?.setManualMovementEnabled(false)
 			(dialog as? BottomSheetDialog)?.behavior?.state = BottomSheetBehavior.STATE_HALF_EXPANDED
 		}
 		adjustLockState()
