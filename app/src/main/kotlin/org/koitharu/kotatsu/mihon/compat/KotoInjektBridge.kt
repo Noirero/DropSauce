@@ -18,6 +18,7 @@ import nl.adaptivity.xmlutil.XmlDeclMode
 import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
 import eu.kanade.tachiyomi.network.AndroidCookieJar
+import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import org.koitharu.kotatsu.core.network.CacheLimitInterceptor
@@ -114,6 +115,32 @@ class KotoNetworkHelper(
 			// server/extension cache policy, which avoids needless API and cover refetches.
 			.filterNot { it is CacheLimitInterceptor }
 			.forEach(::addNetworkInterceptor)
+
+		// Some extensions replace the CookieJar on a client derived from NetworkHelper.client.
+		// Keep the WebView-authenticated session available even in that case by applying it at the
+		// final network-request stage. Network interceptors run again for redirects, so cookies are
+		// looked up against the actual destination URL (including image/CDN hosts) instead of the
+		// source base URL. Only Cookie is changed; Referer, User-Agent and extension-specific headers
+		// remain untouched. If both sides provide the same cookie name, the live WebView value wins.
+		addNetworkInterceptor { chain ->
+			val request = chain.request()
+			val webViewCookies = androidCookieJar.get(request.url)
+			if (webViewCookies.isEmpty()) {
+				chain.proceed(request)
+			} else {
+				val currentCookieHeader = request.header("Cookie")
+				val mergedCookieHeader = mergeCookieHeaders(currentCookieHeader, webViewCookies)
+				if (mergedCookieHeader == currentCookieHeader) {
+					chain.proceed(request)
+				} else {
+					chain.proceed(
+						request.newBuilder()
+							.header("Cookie", mergedCookieHeader)
+							.build(),
+					)
+				}
+			}
+		}
 	}.build()
 
 	@Deprecated("The regular client handles Cloudflare by default")
@@ -121,6 +148,19 @@ class KotoNetworkHelper(
 		get() = client
 
 	override fun defaultUserAgentProvider(): String = userAgentProvider()
+}
+
+private fun mergeCookieHeaders(existingHeader: String?, webViewCookies: List<Cookie>): String {
+	val webViewCookieNames = webViewCookies.asSequence().mapTo(HashSet()) { it.name }
+	val preservedExistingCookies = existingHeader
+		.orEmpty()
+		.split(';')
+		.map(String::trim)
+		.filter { cookie ->
+			cookie.isNotEmpty() && cookie.substringBefore('=').trim() !in webViewCookieNames
+		}
+	val currentWebViewCookies = webViewCookies.map { cookie -> "${cookie.name}=${cookie.value}" }
+	return (preservedExistingCookies + currentWebViewCookies).joinToString("; ")
 }
 
 @Singleton
