@@ -1077,8 +1077,13 @@ internal fun extensionEntryMatchesLanguage(
 	selectedLanguage: String?,
 ): Boolean {
 	if (selectedLanguage == null) return true
-	if (installedSources.orEmpty().any { extensionLanguageMatches(it.language, selectedLanguage) }) return true
-	if (entry.sources.any { source -> source.lang?.let { extensionLanguageMatches(it, selectedLanguage) } == true }) return true
+	if (!installedSources.isNullOrEmpty()) {
+		return installedSources.any { extensionLanguageMatches(it.language, selectedLanguage) }
+	}
+	val publishedLanguages = entry.sources.mapNotNull { it.lang?.takeIf(String::isNotBlank) }
+	if (publishedLanguages.isNotEmpty()) {
+		return publishedLanguages.any { extensionLanguageMatches(it, selectedLanguage) }
+	}
 	return entry.lang?.let { extensionLanguageMatches(it, selectedLanguage) } == true
 }
 
