@@ -4,10 +4,13 @@ import androidx.room.withTransaction
 import dagger.Reusable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.TABLE_FAVOURITES
 import org.koitharu.kotatsu.core.db.TABLE_FAVOURITE_CATEGORIES
@@ -30,6 +33,7 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.levenshteinDistance
 import org.koitharu.kotatsu.search.domain.SearchKind
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 @Reusable
@@ -162,6 +166,12 @@ class FavouritesRepository @Inject constructor(
 	fun observeCategoriesForLibrary(): Flow<List<FavouriteCategory>> {
 		return db.getFavouriteCategoriesDao().observeAllVisible().mapItems {
 			it.toFavouriteCategory()
+		}.onEach { categories ->
+			// The container already needs this small category list before it can create any page. Keep a
+			// snapshot so a newly opened category can obtain its sort order immediately instead of doing
+			// an extra Room round-trip before the manga query is allowed to start.
+			categorySnapshots.clear()
+			categories.associateByTo(categorySnapshots) { it.id }
 		}.distinctUntilChanged()
 	}
 
@@ -190,10 +200,12 @@ class FavouritesRepository @Inject constructor(
 		return db.getFavouritesDao().findCovers(order, limit)
 	}
 
-	fun observeCategory(id: Long): Flow<FavouriteCategory?> {
-		return db.getFavouriteCategoriesDao().observe(id)
-			.map { it?.toFavouriteCategory() }
-	}
+	fun observeCategory(id: Long): Flow<FavouriteCategory?> = flow {
+		categorySnapshots[id]?.let { emit(it) }
+		emitAll(
+			db.getFavouriteCategoriesDao().observe(id).map { it?.toFavouriteCategory() },
+		)
+	}.distinctUntilChanged()
 
 	fun observeCategories(mangaId: Long): Flow<Set<FavouriteCategory>> {
 		return db.getFavouritesDao().observeCategories(mangaId).map {
@@ -357,9 +369,9 @@ class FavouritesRepository @Inject constructor(
 	}
 
 	private fun observeOrder(categoryId: Long): Flow<ListSortOrder> {
-		return db.getFavouriteCategoriesDao().observe(categoryId)
+		return observeCategory(categoryId)
 			.filterNotNull()
-			.map { x -> ListSortOrder(x.order, ListSortOrder.NEWEST) }
+			.map { it.order }
 			.distinctUntilChanged()
 	}
 
@@ -383,5 +395,9 @@ class FavouritesRepository @Inject constructor(
 				db.getFavouritesDao().recover(mangaId = id, categoryId = categoryId)
 			}
 		}
+	}
+
+	private companion object {
+		val categorySnapshots = ConcurrentHashMap<Long, FavouriteCategory>()
 	}
 }
