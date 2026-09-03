@@ -249,6 +249,13 @@ class FavouritesContainerViewModel @Inject constructor(
 
 	private suspend fun calculateDownloadedCount(type: FavouriteContentType, query: String): Int {
 		val wantNovel = type == FavouriteContentType.NOVEL
+		if (query.isBlank()) {
+			return favouritesRepository.getDownloadedCountsBySource().sumOf { count ->
+				count.itemCount.takeIf {
+					MangaSource(count.source).isNovelSource == wantNovel
+				} ?: 0
+			}
+		}
 		val entries = favouritesRepository.getDownloadedEntries().filter { entry ->
 			MangaSource(entry.source).isNovelSource == wantNovel
 		}

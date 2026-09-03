@@ -68,6 +68,16 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 	)
 	abstract suspend fun findDownloadedSearchEntries(): List<FavouriteSearchEntry>
 
+	@Query(
+		"SELECT manga.source AS source, COUNT(DISTINCT favourites.manga_id) AS item_count " +
+			"FROM favourites INNER JOIN manga ON manga.manga_id = favourites.manga_id " +
+			"INNER JOIN local_index ON local_index.manga_id = favourites.manga_id " +
+			"WHERE favourites.deleted_at = 0 AND " +
+			"(SELECT show_in_lib FROM favourite_categories WHERE favourite_categories.category_id = favourites.category_id) = 1 " +
+			"GROUP BY manga.source",
+	)
+	abstract suspend fun findDownloadedCountsBySource(): List<FavouriteSourceCount>
+
 	@Transaction
 	@Query("SELECT * FROM favourites WHERE deleted_at = 0 GROUP BY manga_id ORDER BY created_at DESC LIMIT :limit")
 	abstract suspend fun findLast(limit: Int): List<FavouriteManga>

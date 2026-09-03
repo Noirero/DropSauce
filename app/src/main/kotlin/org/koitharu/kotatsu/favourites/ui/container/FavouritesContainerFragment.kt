@@ -92,7 +92,9 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			?: searchSessionActive.value
 		savedInstanceState?.getString(STATE_SEARCH_QUERY)?.let { searchQuery.value = it }
 		searchScopeActive.value = !isHidden
-		val adapter = FavouritesContainerAdapter(this)
+		val adapter = FavouritesContainerAdapter(this) {
+			displayPreferences.current(contentTypeStore.selectedType.value).showCategoryCounts
+		}
 		pagerAdapter = adapter
 		binding.pager.adapter = adapter
 		binding.pager.offscreenPageLimit = 1

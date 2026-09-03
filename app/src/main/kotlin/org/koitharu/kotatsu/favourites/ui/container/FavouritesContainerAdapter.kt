@@ -20,6 +20,7 @@ import kotlin.coroutines.suspendCoroutine
 
 class FavouritesContainerAdapter(
 	private val fragment: Fragment,
+	private val showCategoryCounts: () -> Boolean,
 ) : FragmentStateAdapter(fragment), FlowCollector<List<FavouriteTabModel>> {
 
 	private val differ = AsyncListDiffer(
@@ -63,7 +64,9 @@ class FavouritesContainerAdapter(
 	fun getItem(position: Int): FavouriteTabModel = differ.currentList[position]
 
 	private fun updateTabBadgeNumbers(items: List<FavouriteTabModel>) {
-		val tabs = fragment.view?.findViewById<TabLayout>(R.id.tabs) ?: return
+		val tabs = fragment.view?.findViewById<TabLayout>(R.id.tabs)
+			?: fragment.activity?.findViewById<TabLayout>(R.id.tabs)
+			?: return
 		if (tabs.tabCount != items.size) return
 		for (index in items.indices) {
 			val count = items[index].count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)
@@ -75,7 +78,7 @@ class FavouritesContainerAdapter(
 			// A tab commonly starts at count=0, so its badge is hidden by the configuration strategy.
 			// When the deferred count arrives we must explicitly reveal it; changing number alone does
 			// not change Material BadgeDrawable visibility.
-			badge.isVisible = count > 0
+			badge.isVisible = showCategoryCounts() && count > 0
 		}
 	}
 

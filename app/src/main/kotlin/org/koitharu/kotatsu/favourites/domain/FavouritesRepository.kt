@@ -59,6 +59,8 @@ class FavouritesRepository @Inject constructor(
 	/** Lightweight rows for the virtual Downloaded category; local_index is the source of truth. */
 	suspend fun getDownloadedEntries() = db.getFavouritesDao().findDownloadedSearchEntries()
 
+	suspend fun getDownloadedCountsBySource() = db.getFavouritesDao().findDownloadedCountsBySource()
+
 	suspend fun getLastManga(limit: Int): List<Manga> {
 		val entities = db.getFavouritesDao().findLast(limit)
 		return entities.toMangaList()
