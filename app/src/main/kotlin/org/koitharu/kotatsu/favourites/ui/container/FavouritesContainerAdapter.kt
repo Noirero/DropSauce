@@ -53,7 +53,8 @@ class FavouritesContainerAdapter(
 			// Count-only changes are deliberately excluded from the ViewPager diff below. Rebuilding
 			// tabs for every count update makes TabLayoutMediator recreate every Material badge and can
 			// monopolize the main thread on large/active libraries. Update the already attached badges
-			// directly instead; visibility remains controlled by FavouritesContainerFragment settings.
+			// directly instead, including visibility because initial tabs are normally created before the
+			// asynchronous count snapshot arrives.
 			updateTabBadgeNumbers(value)
 			ContinuationResumeRunnable(cont).run()
 		}
@@ -65,11 +66,16 @@ class FavouritesContainerAdapter(
 		val tabs = fragment.view?.findViewById<TabLayout>(R.id.tabs) ?: return
 		if (tabs.tabCount != items.size) return
 		for (index in items.indices) {
-			val badge = tabs.getTabAt(index)?.badge ?: continue
 			val count = items[index].count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)
+			val badge = tabs.getTabAt(index)?.getOrCreateBadge() ?: continue
+			badge.maxCharacterCount = 6
 			if (badge.number != count) {
 				badge.number = count
 			}
+			// A tab commonly starts at count=0, so its badge is hidden by the configuration strategy.
+			// When the deferred count arrives we must explicitly reveal it; changing number alone does
+			// not change Material BadgeDrawable visibility.
+			badge.isVisible = count > 0
 		}
 	}
 
