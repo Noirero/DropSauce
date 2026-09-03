@@ -31,10 +31,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -46,7 +49,6 @@ import okio.use
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.image.BitmapDecoderCompat
 import org.koitharu.kotatsu.core.model.ids
-import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.core.network.imageproxy.ImageProxyInterceptor
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
@@ -129,6 +131,7 @@ class DownloadWorker @AssistedInject constructor(
 
 	private val etaEstimator = RealtimeEtaEstimator()
 	private val notificationThrottler = Throttler(400)
+	private val statePublishMutex = Mutex()
 
 	override suspend fun doWork(): Result {
 		setForeground(getForegroundInfo())
@@ -136,15 +139,39 @@ class DownloadWorker @AssistedInject constructor(
 		publishState(DownloadState(manga = manga, isIndeterminate = true).also { lastPublishedState = it })
 		pruneResumeCache()
 		val downloadedIds = getDoneChapters(manga)
+		val pausingHandle = PausingHandle()
+		if (task.isPaused) {
+			pausingHandle.pause()
+		}
+		val pausingReceiver = PausingReceiver(id, pausingHandle)
+		ContextCompat.registerReceiver(
+			applicationContext,
+			pausingReceiver,
+			PausingReceiver.createIntentFilter(id),
+			ContextCompat.RECEIVER_NOT_EXPORTED,
+		)
 		return try {
-			val pausingHandle = PausingHandle()
-			if (task.isPaused) {
-				pausingHandle.pause()
-			}
-			val sourceKey = getConcurrencySourceKey(manga)
 			withContext(pausingHandle) {
-				concurrencyController.withSourcePermit(sourceKey, performanceSettings.parallelSourceLimit) {
-					downloadMangaImpl(manga, task, downloadedIds)
+				// Keep WorkManager progress in sync with pause/resume immediately, including while this
+				// worker is still waiting for a concurrency slot.
+				val pauseStateJob = launch {
+					pausingHandle.pauseState.drop(1).collect { paused ->
+						publishState(
+							currentState.copy(
+								isPaused = paused,
+								eta = if (paused) -1L else currentState.eta,
+								isStuck = if (paused) false else currentState.isStuck,
+							),
+						)
+					}
+				}
+				try {
+					concurrencyController.withPermit(performanceSettings.parallelSourceLimit) {
+						checkIsPaused()
+						downloadMangaImpl(manga, task, downloadedIds)
+					}
+				} finally {
+					pauseStateJob.cancel()
 				}
 			}
 			clearResumeMangaDir(manga.id)
@@ -168,6 +195,7 @@ class DownloadWorker @AssistedInject constructor(
 				).toWorkData(),
 			)
 		} finally {
+			runCatching { applicationContext.unregisterReceiver(pausingReceiver) }
 			notificationManager.cancel(id.hashCode())
 		}
 	}
@@ -185,11 +213,6 @@ class DownloadWorker @AssistedInject constructor(
 		)
 	}
 
-	private suspend fun getConcurrencySourceKey(manga: Manga): String {
-		if (!manga.isLocal) return manga.source.name
-		return localMangaRepository.getRemoteManga(manga)?.source?.name ?: manga.source.name
-	}
-
 	private suspend fun downloadMangaImpl(
 		subject: Manga,
 		task: DownloadTask,
@@ -197,14 +220,7 @@ class DownloadWorker @AssistedInject constructor(
 	) {
 		var manga = subject
 		val chaptersToSkip = excludedIds.toMutableSet()
-		val pausingReceiver = PausingReceiver(id, PausingHandle.current())
 		mangaLock.withLock(manga) {
-			ContextCompat.registerReceiver(
-				applicationContext,
-				pausingReceiver,
-				PausingReceiver.createIntentFilter(id),
-				ContextCompat.RECEIVER_NOT_EXPORTED,
-			)
 			val destination = localMangaRepository.getOutputDir(manga, task.destination)
 			checkNotNull(destination) { applicationContext.getString(R.string.cannot_find_available_storage) }
 			var output: LocalMangaOutput? = null
@@ -339,7 +355,6 @@ class DownloadWorker @AssistedInject constructor(
 				throw e
 			} finally {
 				withContext(NonCancellable) {
-					applicationContext.unregisterReceiver(pausingReceiver)
 					// cleanup() may still write to the output (salvaging a partial archive), so it goes first.
 					// It can fail on its own now that finalizing reports a failed move instead of silently
 					// destroying the download, and that must not skip the closing and sweeping below.
@@ -574,7 +589,7 @@ class DownloadWorker @AssistedInject constructor(
 		},
 	)
 
-	private suspend fun publishState(state: DownloadState) {
+	private suspend fun publishState(state: DownloadState) = statePublishMutex.withLock {
 		val previousState = currentState
 		lastPublishedState = state
 		if (previousState.isParticularProgress && state.isParticularProgress) {
@@ -591,7 +606,7 @@ class DownloadWorker @AssistedInject constructor(
 		} else if (notificationThrottler.throttle()) {
 			notificationManager.notify(id.hashCode(), notification)
 		} else {
-			return
+			return@withLock
 		}
 		setProgress(state.toWorkData())
 	}
