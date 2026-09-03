@@ -5,6 +5,7 @@ import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.db.entity.ChapterEntity
 import org.koitharu.kotatsu.core.prefs.ProgressIndicatorMode
 import org.koitharu.kotatsu.history.data.HistoryEntity
+import org.koitharu.kotatsu.history.data.toMangaHistory
 import org.koitharu.kotatsu.list.domain.ReadingProgress
 import kotlin.math.ceil
 import javax.inject.Inject
@@ -26,6 +27,8 @@ class FavouriteUnreadCounter @Inject constructor(
 		val unreadCounts: Map<Long, Int>,
 	) {
 		fun hasHistory(mangaId: Long): Boolean = mangaId in histories
+
+		fun getHistory(mangaId: Long) = histories[mangaId]?.toMangaHistory()
 
 		fun getProgress(mangaId: Long, mode: ProgressIndicatorMode): ReadingProgress? {
 			val history = histories[mangaId] ?: return null

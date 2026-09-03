@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.MangaSource
@@ -29,6 +31,7 @@ import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
+import org.koitharu.kotatsu.details.data.DetailsNavigationCache
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -86,7 +89,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val markAsReadUseCase: MarkAsReadUseCase,
 	quickFilterFactory: FavoritesListQuickFilter.Factory,
 	private val settings: AppSettings,
-	mangaDataRepository: MangaDataRepository,
+	private val mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
 	private val searchMatcher: FavouritesSearchMatcher,
 	private val contentTypeStore: FavouriteContentTypeStore,
@@ -94,6 +97,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val localMangaIndex: LocalMangaIndex,
 	private val unreadCounter: FavouriteUnreadCounter,
 	private val sourceFilterStore: FavouriteSourceFilterStore,
+	private val detailsNavigationCache: DetailsNavigationCache,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener {
 
 	val categoryId: Long = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -102,6 +106,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val databaseWindow = MutableStateFlow(DATABASE_WINDOW_INITIAL)
 	private val isPaginationReady = AtomicBoolean(false)
+	private var detailsPrefetchJob: Job? = null
 	private var lastSortOrder: ListSortOrder? = null
 	private var lastFilters: Set<ListFilterOption>? = null
 	private var lastContentType: FavouriteContentType? = null
@@ -301,6 +306,22 @@ class FavouritesListViewModel @Inject constructor(
 		}
 	}
 
+	private fun prefetchDetailsSnapshots(
+		items: List<Manga>,
+		cardSnapshot: FavouriteUnreadCounter.Snapshot,
+	) {
+		detailsNavigationCache.updateHistory(items.map { it.id }, cardSnapshot::getHistory)
+		val missing = items.filterNot { detailsNavigationCache.contains(it.id) }
+		if (missing.isEmpty()) return
+		detailsPrefetchJob?.cancel()
+		detailsPrefetchJob = viewModelScope.launch(Dispatchers.Default) {
+			detailsNavigationCache.putAll(
+				mangaDataRepository.attachCachedChapters(missing),
+				cardSnapshot::getHistory,
+			)
+		}
+	}
+
 	private suspend fun List<Manga>.mapList(
 		mode: ListMode,
 		filters: Set<ListFilterOption>,
@@ -334,6 +355,9 @@ class FavouritesListViewModel @Inject constructor(
 			mangaIds = map { it.id },
 			includeUnread = display.showUnread,
 		)
+		// The newest page is the one the user is currently most likely to tap. Keep this bounded so
+		// pagination through a large library never materialises every cached chapter at once.
+		prefetchDetailsSnapshots(takeLast(16), cardSnapshot)
 		val result = ArrayList<ListModel>(size + 2)
 		if (isScalingTipVisible) result += uiScalingTip
 		quickFilter.filterItem(filters)?.let(result::add)

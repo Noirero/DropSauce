@@ -1,5 +1,6 @@
 ## Changelog 2
 
+- Judul dari Disukai kini menyiapkan chapter tersimpan sebelum dibuka, sehingga tombol Baca/Lanjut dan daftar bab dapat muncul langsung sementara pembaruan extension berjalan di belakang.
 - Filter extension di Disukai kini tetap aktif dan tetap tercentang saat berpindah kategori, dengan pilihan terpisah untuk Manga dan Novel.
 - Extension yang meminta “Open WebView to refresh token” kini menawarkan tindakan untuk membuka WebView dan memuat ulang chapter setelah pengguna kembali, bukan hanya menampilkan tombol Tutup.
 - Badge jumlah kategori Disukai kembali muncul dan kini dihitung langsung oleh database agar tampil jauh lebih cepat, termasuk pada library besar.
