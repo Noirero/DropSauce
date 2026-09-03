@@ -49,7 +49,7 @@ android {
 			applicationIdSuffix = '.debug'
 		}
 		preview {
-			applicationIdSuffix = '.preview'
+			applicationId = 'org.noirero.miyorare.preview'
 			minifyEnabled = false
 			debuggable = true
 			signingConfig = signingConfigs.findByName('release') ?: signingConfigs.debug
