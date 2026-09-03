@@ -52,6 +52,9 @@ class KotatsuApp : BaseApp() {
 				CRASH_LOG_EXPORT_KEY,
 				ActivityResultContracts.CreateDocument("text/plain"),
 			) { uri ->
+				// A recreated MainActivity resets the dialog visibility flag. Re-assert it while handling a
+				// restored picker result so onActivityResumed cannot open a duplicate recovered-log dialog.
+				recoveredCrashDialogShown = true
 				if (uri == null) {
 					// Save closes the recovered-log dialog before the picker opens. If the picker is cancelled,
 					// make the still-pending report available again instead of hiding it for this whole process.
@@ -149,6 +152,9 @@ class KotatsuApp : BaseApp() {
 
 		override fun onActivityDestroyed(activity: Activity) {
 			if (activity is MainActivity) {
+				// The window-owned dialog disappears with this Activity. Keep the process-wide flag aligned
+				// with reality so a still-pending report can be shown by the replacement MainActivity.
+				recoveredCrashDialogShown = false
 				crashLogExportLauncher?.unregister()
 				crashLogExportLauncher = null
 			}
