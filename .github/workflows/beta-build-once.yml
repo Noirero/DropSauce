@@ -1,16 +1,48 @@
-name: Beta Build Once
+name: Source Language Filter Once
 
-# Temporary helper kept manual-only after the requested Beta build.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - beta
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  beta:
-    name: Build beta APK
+  verify:
+    name: Patch and verify source
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - name: Manual helper disabled
-        run: echo "Use preview-build.yml for normal manual Beta builds."
+      - name: Checkout beta
+        uses: actions/checkout@v5
+        with:
+          ref: beta
+          fetch-depth: 1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Apply exact language filtering
+        run: python3 .github/source-language-filter-once.py apply
+
+      - name: Verify preview Kotlin and Room queries
+        run: |
+          chmod +x gradlew
+          git diff --check
+          ./gradlew :app:compilePreviewKotlin --no-daemon --stacktrace
+
+      - name: Commit verified fix
+        run: |
+          python3 .github/source-language-filter-once.py cleanup
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Tighten extension language filtering"
+          git push origin HEAD:beta
