@@ -1,6 +1,7 @@
 package org.koitharu.kotatsu.explore.ui.adapter
 
 import android.view.View
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.text.bold
 import androidx.core.text.buildSpannedString
@@ -15,6 +16,7 @@ import org.koitharu.kotatsu.core.model.isExternalSource
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.model.unwrap
 import org.koitharu.kotatsu.core.ui.BaseListAdapter
+import org.koitharu.kotatsu.core.ui.dialog.buildAlertDialog
 import org.koitharu.kotatsu.core.ui.list.AdapterDelegateClickListenerAdapter
 import org.koitharu.kotatsu.core.ui.list.OnListItemClickListener
 import org.koitharu.kotatsu.core.util.ext.drawableStart
@@ -27,6 +29,7 @@ import org.koitharu.kotatsu.databinding.ItemRecommendationBinding
 import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
 import org.koitharu.kotatsu.explore.ui.model.RecommendationsItem
+import org.koitharu.kotatsu.kotatsumigration.ui.KotatsuMigrationService
 import org.koitharu.kotatsu.list.ui.adapter.ListItemType
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
@@ -39,9 +42,20 @@ fun exploreButtonsAD(
 	{ layoutInflater, parent -> ItemExploreButtonsBinding.inflate(layoutInflater, parent, false) },
 ) {
 
-	binding.buttonBookmarks.setOnClickListener(clickListener)
 	binding.buttonDownloads.setOnClickListener(clickListener)
 	binding.buttonLocal.setOnClickListener(clickListener)
+	binding.buttonMigration.setOnClickListener {
+		buildAlertDialog(context) {
+			setTitle(R.string.migrate_from_kotatsu)
+			setMessage(R.string.migrate_from_kotatsu_confirm)
+			setNegativeButton(android.R.string.cancel, null)
+			setPositiveButton(R.string.migrate_from_kotatsu) { _, _ ->
+				if (KotatsuMigrationService.start(context)) {
+					Toast.makeText(context, R.string.kotatsu_migration_running, Toast.LENGTH_SHORT).show()
+				}
+			}
+		}.show()
+	}
 }
 
 fun exploreRecommendationItemAD(
