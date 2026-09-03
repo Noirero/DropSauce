@@ -53,10 +53,9 @@ class FavouritesContainerAdapter(
 	override suspend fun emit(value: List<FavouriteTabModel>) = suspendCoroutine { cont ->
 		differ.submitList(value) {
 			// Count-only changes are deliberately excluded from the ViewPager diff below. Rebuilding
-			// tabs for every count update makes TabLayoutMediator recreate every Material badge and can
-			// monopolize the main thread on large/active libraries. Update the already attached badges
-			// directly instead, including visibility because initial tabs are normally created before the
-			// asynchronous count snapshot arrives.
+			// tabs for every count update makes TabLayoutMediator recreate every badge and can monopolize
+			// the main thread on large/active libraries. Update the attached badge and its reserved space
+			// directly instead.
 			updateTabBadgeNumbers(value)
 			onListCommitted(differ.currentList)
 			ContinuationResumeRunnable(cont).run()
@@ -70,17 +69,11 @@ class FavouritesContainerAdapter(
 			?: fragment.activity?.findViewById<TabLayout>(R.id.tabs)
 			?: return
 		if (tabs.tabCount != items.size) return
+		val showCounts = showCategoryCounts()
 		for (index in items.indices) {
-			val count = items[index].count.coerceAtMost(MAX_CATEGORY_BADGE_COUNT)
-			val badge = tabs.getTabAt(index)?.getOrCreateBadge() ?: continue
-			badge.maxCharacterCount = 6
-			if (badge.number != count) {
-				badge.number = count
-			}
-			// A tab commonly starts at count=0, so its badge is hidden by the configuration strategy.
-			// When the deferred count arrives we must explicitly reveal it; changing number alone does
-			// not change Material BadgeDrawable visibility.
-			badge.isVisible = showCategoryCounts() && count > 0
+			val item = items[index]
+			val tab = tabs.getTabAt(index) ?: continue
+			updateFavouriteTabBadge(tab, item.count, showCounts && item.count > 0)
 		}
 	}
 
@@ -95,9 +88,5 @@ class FavouritesContainerAdapter(
 			// after the differ commits the new list, avoiding TabLayoutMediator's full tab repopulation.
 			return oldItem.id == newItem.id && oldItem.title == newItem.title
 		}
-	}
-
-	private companion object {
-		const val MAX_CATEGORY_BADGE_COUNT = 99_999
 	}
 }
