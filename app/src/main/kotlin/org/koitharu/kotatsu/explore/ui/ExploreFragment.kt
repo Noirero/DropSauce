@@ -70,6 +70,11 @@ class ExploreFragment :
 	private val pages = arrayOfNulls<RecyclerView>(2)
 	private var barsInsets: Insets = Insets.NONE
 
+	private data class SourceFilterState(
+		val sourceStates: Map<Long, Boolean>,
+		val languageStates: Map<String, Boolean>,
+	)
+
 	override fun onCreateViewBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentExploreBinding {
 		return FragmentExploreBinding.inflate(inflater, container, false)
 	}
@@ -231,7 +236,9 @@ class ExploreFragment :
 			.setTitle(R.string.source_filter)
 			.setView(scroll)
 			.setPositiveButton(android.R.string.ok) { _, _ ->
-				stateProvider?.invoke()?.let(viewModel::applyMihonSourceFilter)
+				stateProvider?.invoke()?.let { state ->
+					viewModel.applyMihonSourceFilter(state.sourceStates, state.languageStates)
+				}
 			}
 			.show()
 	}
@@ -239,7 +246,7 @@ class ExploreFragment :
 	private fun addSourceFilterControls(
 		container: LinearLayout,
 		entries: List<MihonSourceFilterEntry>,
-	): () -> Map<Long, Boolean> {
+	): () -> SourceFilterState {
 		val context = container.context
 		val rowPadding = (12 * resources.displayMetrics.density).toInt()
 		fun header(text: CharSequence) {
@@ -255,32 +262,54 @@ class ExploreFragment :
 		}
 
 		val byLanguage = entries.groupBy { it.source.language.ifBlank { "other" }.lowercase() }
+		val languageStates = linkedMapOf<String, Boolean>()
+		byLanguage.forEach { (language, languageEntries) ->
+			languageStates[language] = languageEntries.firstOrNull()?.isLanguageEnabled != false
+		}
+		val sourceStates = linkedMapOf<Long, Boolean>()
+		entries.forEach { entry -> sourceStates[entry.source.sourceId] = entry.isSourceEnabled }
+
 		val languageSwitches = linkedMapOf<String, SwitchMaterial>()
 		val sourceSwitches = linkedMapOf<Long, SwitchMaterial>()
 		var languageAllSwitch: SwitchMaterial? = null
 		var sourceAllSwitch: SwitchMaterial? = null
 		var updating = false
 
-		fun updateAllSwitches() {
+		fun setSwitchesCheckedFast(switches: Collection<SwitchMaterial>, checked: Boolean) {
 			val wasUpdating = updating
 			updating = true
-			languageAllSwitch?.isChecked = languageSwitches.isNotEmpty() && languageSwitches.values.all { it.isChecked }
-			sourceAllSwitch?.isChecked = sourceSwitches.isNotEmpty() && sourceSwitches.values.all { it.isChecked }
+			for (toggle in switches) {
+				if (toggle.isChecked == checked) continue
+				toggle.isChecked = checked
+				// Avoid running hundreds of thumb animations during a bulk operation.
+				toggle.jumpDrawablesToCurrentState()
+			}
+			updating = wasUpdating
+		}
+
+		fun updateLanguageAllSwitch() {
+			val wasUpdating = updating
+			updating = true
+			languageAllSwitch?.isChecked = languageStates.isNotEmpty() && languageStates.values.all { it }
+			updating = wasUpdating
+		}
+
+		fun updateSourceAllSwitch() {
+			val wasUpdating = updating
+			updating = true
+			sourceAllSwitch?.isChecked = sourceStates.isNotEmpty() && sourceStates.values.all { it }
 			updating = wasUpdating
 		}
 
 		header(getString(R.string.source_filter_languages))
 		languageAllSwitch = SwitchMaterial(context).apply {
 			text = allLabel(getString(R.string.source_filter_languages))
-			isChecked = entries.all { it.isEnabled }
+			isChecked = languageStates.isNotEmpty() && languageStates.values.all { it }
 			setPadding(0, rowPadding / 2, 0, rowPadding / 2)
 			setOnCheckedChangeListener { _, checked ->
 				if (updating) return@setOnCheckedChangeListener
-				updating = true
-				languageSwitches.values.forEach { it.isChecked = checked }
-				sourceSwitches.values.forEach { it.isChecked = checked }
-				sourceAllSwitch?.isChecked = checked
-				updating = false
+				languageStates.keys.toList().forEach { languageStates[it] = checked }
+				setSwitchesCheckedFast(languageSwitches.values, checked)
 			}
 		}
 		container.addView(languageAllSwitch)
@@ -290,15 +319,12 @@ class ExploreFragment :
 			.forEach { (language, languageEntries) ->
 				val toggle = SwitchMaterial(context).apply {
 					text = getExternalExtensionLanguageDisplayName(language)
-					isChecked = languageEntries.all { it.isEnabled }
+					isChecked = languageEntries.firstOrNull()?.isLanguageEnabled != false
 					setPadding(0, rowPadding / 2, 0, rowPadding / 2)
 					setOnCheckedChangeListener { _, checked ->
 						if (updating) return@setOnCheckedChangeListener
-						updating = true
-						languageEntries.forEach { sourceSwitches[it.source.sourceId]?.isChecked = checked }
-						languageAllSwitch?.isChecked = languageSwitches.values.all { it.isChecked }
-						sourceAllSwitch?.isChecked = sourceSwitches.isNotEmpty() && sourceSwitches.values.all { it.isChecked }
-						updating = false
+						languageStates[language] = checked
+						updateLanguageAllSwitch()
 					}
 				}
 				languageSwitches[language] = toggle
@@ -308,15 +334,12 @@ class ExploreFragment :
 		header(getString(R.string.source_filter_individual))
 		sourceAllSwitch = SwitchMaterial(context).apply {
 			text = allLabel(getString(R.string.source_filter_individual))
-			isChecked = entries.all { it.isEnabled }
+			isChecked = sourceStates.isNotEmpty() && sourceStates.values.all { it }
 			setPadding(0, rowPadding / 2, 0, rowPadding / 2)
 			setOnCheckedChangeListener { _, checked ->
 				if (updating) return@setOnCheckedChangeListener
-				updating = true
-				sourceSwitches.values.forEach { it.isChecked = checked }
-				languageSwitches.values.forEach { it.isChecked = checked }
-				languageAllSwitch?.isChecked = checked
-				updating = false
+				sourceStates.keys.toList().forEach { sourceStates[it] = checked }
+				setSwitchesCheckedFast(sourceSwitches.values, checked)
 			}
 		}
 		container.addView(sourceAllSwitch)
@@ -327,30 +350,23 @@ class ExploreFragment :
 		).forEach { entry ->
 			val toggle = SwitchMaterial(context).apply {
 				text = "${entry.source.displayName} — ${entry.source.languageDisplayName}"
-				isChecked = entry.isEnabled
+				isChecked = entry.isSourceEnabled
 				setPadding(0, rowPadding / 2, 0, rowPadding / 2)
 				setOnCheckedChangeListener { _, checked ->
 					if (updating) return@setOnCheckedChangeListener
-					val language = entry.source.language.ifBlank { "other" }.lowercase()
-					val siblings = byLanguage[language].orEmpty()
-					updating = true
-					languageSwitches[language]?.isChecked = siblings.all { sibling ->
-						if (sibling.source.sourceId == entry.source.sourceId) checked
-						else sourceSwitches[sibling.source.sourceId]?.isChecked == true
-					}
-					updateAllSwitches()
-					updating = false
+					sourceStates[entry.source.sourceId] = checked
+					updateSourceAllSwitch()
 				}
 			}
 			sourceSwitches[entry.source.sourceId] = toggle
 			container.addView(toggle)
 		}
-		updateAllSwitches()
 
 		return {
-			entries.associate { entry ->
-				entry.source.sourceId to (sourceSwitches[entry.source.sourceId]?.isChecked ?: entry.isEnabled)
-			}
+			SourceFilterState(
+				sourceStates = sourceStates.toMap(),
+				languageStates = languageStates.toMap(),
+			)
 		}
 	}
 
