@@ -41,6 +41,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	private var initialCookieValue: String? = null
 	private var sourceHeaders: Map<String, String> = emptyMap()
 	private var mihonRepository: CachingMangaRepository? = null
+	private var bypassAdBlockForSource = false
 
 	override fun onCreate2(savedInstanceState: Bundle?, source: MangaSource, repository: MangaRepository?) {
 		successCookieUrl = intent?.getStringExtra(AppRouter.KEY_SUCCESS_COOKIE_URL)
@@ -58,7 +59,14 @@ class BrowserActivity : BaseBrowserActivity() {
 		// Mihon opens a source WebView with the source's own HttpSource headers. Some sites bind
 		// authenticated sessions / anti-bot cookies to those headers (especially User-Agent), so a
 		// generic WebView session may successfully log in but still be rejected by chapter requests.
-		sourceHeaders = getSourceHeaders(source)
+		val httpSource = (source as? MihonMangaSource)?.catalogueSource as? HttpSource
+		sourceHeaders = getSourceHeaders(httpSource)
+		// SchaleNetwork/Koharu creates the short-lived `clearance` token through JavaScript and stores
+		// it in WebView localStorage. Blocking even one token/script request can leave the page looking
+		// usable while the extension keeps receiving "Open webview to refresh token" forever.
+		// Keep authentication/token WebViews unfiltered for this source family; normal browser/source
+		// WebViews retain the user's ad-block setting.
+		bypassAdBlockForSource = httpSource?.requiresUnfilteredTokenWebView() == true
 		val explicitUserAgent = intent?.getStringExtra(AppRouter.KEY_USER_AGENT)?.nullIfEmpty()
 		val sourceUserAgent = sourceHeaders.entries
 			.firstOrNull { it.key.equals("user-agent", ignoreCase = true) }
@@ -81,7 +89,11 @@ class BrowserActivity : BaseBrowserActivity() {
 		}
 
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = true)
-		viewBinding.webView.webViewClient = BrowserClient(this, adBlock, sourceHeaders)
+		viewBinding.webView.webViewClient = BrowserClient(
+			callback = this,
+			adBlock = adBlock.takeUnless { bypassAdBlockForSource },
+			additionalHeaders = sourceHeaders,
+		)
 		lifecycleScope.launch {
 			prepareAdBlock()
 			try {
@@ -157,7 +169,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	}
 
 	private suspend fun prepareAdBlock() {
-		if (!adBlock.isEnabled) return
+		if (!adBlock.isEnabled || bypassAdBlockForSource) return
 		val updater = adBlockUpdaterProvider.get()
 		if (!adBlock.hasRuleList()) {
 			withContext(Dispatchers.IO) {
@@ -184,9 +196,8 @@ class BrowserActivity : BaseBrowserActivity() {
 		}
 	}
 
-	private fun getSourceHeaders(source: MangaSource): Map<String, String> {
-		val httpSource = (source as? MihonMangaSource)?.catalogueSource as? HttpSource
-			?: return emptyMap()
+	private fun getSourceHeaders(httpSource: HttpSource?): Map<String, String> {
+		if (httpSource == null) return emptyMap()
 		return runCatching {
 			httpSource.headers
 				.toMultimap()
@@ -194,6 +205,11 @@ class BrowserActivity : BaseBrowserActivity() {
 		}.onFailure {
 			it.printStackTraceDebug()
 		}.getOrDefault(emptyMap())
+	}
+
+	private fun HttpSource.requiresUnfilteredTokenWebView(): Boolean {
+		return name.contains("SchaleNetwork", ignoreCase = true) ||
+			javaClass.name.contains(".koharu.", ignoreCase = true)
 	}
 
 	private fun getCookieValue(url: String, cookieName: String): String? {
