@@ -1,16 +1,49 @@
-name: Beta Build Once
+name: Source Fix Once
 
-# Temporary helper kept manual-only after the requested Beta build.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - beta
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  beta:
-    name: Build beta APK
+  source_fix:
+    name: Patch and verify source
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - name: Manual helper disabled
-        run: echo "Use preview-build.yml for normal manual Beta builds."
+      - name: Checkout beta
+        uses: actions/checkout@v5
+        with:
+          ref: beta
+          fetch-depth: 1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Apply source fixes
+        run: python3 .github/source-fix-once.py apply
+
+      - name: Verify source and language regression
+        run: |
+          chmod +x gradlew
+          git diff --check
+          ./gradlew :app:testPreviewUnitTest --tests 'org.koitharu.kotatsu.settings.sources.catalog.InstalledExtensionLanguageFilterTest' --no-daemon --stacktrace
+
+      - name: Commit verified fixes
+        run: |
+          python3 .github/source-fix-once.py finalize
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Speed up favourites and restore extension languages'
+          git push origin HEAD:beta
