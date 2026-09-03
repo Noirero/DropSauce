@@ -15,10 +15,22 @@ class ExploreMenuProvider(
 
 	override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
 		menuInflater.inflate(R.menu.opt_explore, menu)
+		menu.findItem(R.id.action_show_nsfw_sources)?.isChecked = viewModel.isNsfwVisible.value
+	}
+
+	override fun onPrepareMenu(menu: Menu) {
+		menu.findItem(R.id.action_show_nsfw_sources)?.isChecked = viewModel.isNsfwVisible.value
 	}
 
 	override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
 		return when (menuItem.itemId) {
+			R.id.action_show_nsfw_sources -> {
+				val isVisible = !menuItem.isChecked
+				menuItem.isChecked = isVisible
+				viewModel.setNsfwVisible(isVisible)
+				true
+			}
+
 			R.id.action_content_classification_reset_all -> {
 				viewModel.resetContentClassifications()
 				true

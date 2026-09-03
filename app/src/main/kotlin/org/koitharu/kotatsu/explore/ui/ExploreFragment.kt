@@ -108,6 +108,7 @@ class ExploreFragment :
 			addItemDecoration(TypedListSpacingDecoration(context, false))
 		}
 		header.buttonManage.setOnClickListener { router.openSourcesCatalog(isExternalOnly = true) }
+		header.buttonContentFilterNsfw.isVisible = viewModel.isNsfwVisible.value
 		header.toggleContentFilter.addOnButtonCheckedListener { _, checkedId, isChecked ->
 			if (!isChecked) return@addOnButtonCheckedListener
 			val filter = when (checkedId) {
@@ -144,6 +145,12 @@ class ExploreFragment :
 			}
 			if (header.toggleContentFilter.checkedButtonId != checkedId) {
 				header.toggleContentFilter.check(checkedId)
+			}
+		}
+		viewModel.isNsfwVisible.observe(viewLifecycleOwner) { isVisible ->
+			header.buttonContentFilterNsfw.isVisible = isVisible
+			if (!isVisible && header.toggleContentFilter.checkedButtonId == R.id.button_content_filter_nsfw) {
+				header.toggleContentFilter.check(R.id.button_content_filter_all)
 			}
 		}
 		viewModel.hasExtensionUpdates.observe(viewLifecycleOwner) { hasUpdates ->

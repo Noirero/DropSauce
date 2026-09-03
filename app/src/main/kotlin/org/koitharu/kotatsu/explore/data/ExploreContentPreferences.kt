@@ -27,7 +27,7 @@ enum class ExploreContentClass {
 }
 
 /**
- * Stores the Explore SFW/NSFW filter and explicit user overrides.
+ * Stores the Explore SFW/NSFW filter, NSFW visibility and explicit user overrides.
  *
  * Mihon overrides are keyed by exact source id so a multi-source APK can contain independently
  * classified catalogues. Package-level keys from older Noirero builds are still read as a fallback
@@ -39,16 +39,41 @@ class ExploreContentPreferences @Inject constructor(
 ) {
 
 	private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-	private val _filter = MutableStateFlow(readFilter())
+	private val _isNsfwVisible = MutableStateFlow(prefs.getBoolean(KEY_NSFW_VISIBLE, true))
+	private val _filter = MutableStateFlow(
+		readFilter().takeUnless { !_isNsfwVisible.value && it == ExploreContentFilter.NSFW }
+			?: ExploreContentFilter.ALL,
+	)
 	private val _overrides = MutableStateFlow(readOverrides())
 
 	val filter: StateFlow<ExploreContentFilter> = _filter.asStateFlow()
+	val isNsfwVisible: StateFlow<Boolean> = _isNsfwVisible.asStateFlow()
 	val overrides: StateFlow<Map<String, ExploreContentClass>> = _overrides.asStateFlow()
 
 	fun setFilter(value: ExploreContentFilter) {
-		if (_filter.value == value) return
-		prefs.edit { putString(KEY_FILTER, value.name) }
-		_filter.value = value
+		val safeValue = if (!_isNsfwVisible.value && value == ExploreContentFilter.NSFW) {
+			ExploreContentFilter.ALL
+		} else {
+			value
+		}
+		if (_filter.value == safeValue) return
+		prefs.edit { putString(KEY_FILTER, safeValue.name) }
+		_filter.value = safeValue
+	}
+
+	fun setNsfwVisible(value: Boolean) {
+		if (_isNsfwVisible.value == value) return
+		val resetFilter = !value && _filter.value == ExploreContentFilter.NSFW
+		prefs.edit {
+			putBoolean(KEY_NSFW_VISIBLE, value)
+			if (resetFilter) {
+				putString(KEY_FILTER, ExploreContentFilter.ALL.name)
+			}
+		}
+		_isNsfwVisible.value = value
+		if (resetFilter) {
+			_filter.value = ExploreContentFilter.ALL
+		}
 	}
 
 	fun classify(
@@ -140,6 +165,7 @@ class ExploreContentPreferences @Inject constructor(
 
 	private companion object {
 		const val KEY_FILTER = "explore_content_filter"
+		const val KEY_NSFW_VISIBLE = "explore_nsfw_visible"
 		const val KEY_OVERRIDES = "explore_content_overrides"
 		const val SEPARATOR = "|"
 	}

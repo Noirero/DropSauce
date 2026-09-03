@@ -3,8 +3,13 @@
 	xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto">
 
-	<!-- All / SFW / NSFW is intentionally visible in the Explore header now. Keeping a second
-	     state selector in the overflow made the active filter easy to miss and duplicated controls. -->
+	<!-- This controls whether NSFW sources may appear at all; the visible header buttons below remain
+	     the actual All / SFW / NSFW content filter. -->
+	<item
+		android:id="@+id/action_show_nsfw_sources"
+		android:checkable="true"
+		android:title="@string/show_nsfw_sources" />
+
 	<item
 		android:id="@+id/action_content_classification_reset_all"
 		android:title="@string/explore_content_reset_all" />

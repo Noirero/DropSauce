@@ -11,11 +11,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
@@ -38,8 +38,8 @@ import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
 import org.koitharu.kotatsu.explore.data.MihonSourceFilterEntry
 import org.koitharu.kotatsu.explore.domain.ExploreRepository
 import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
-import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
 import org.koitharu.kotatsu.explore.ui.model.ExploreSources
+import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
 import org.koitharu.kotatsu.explore.ui.model.RecommendationsItem
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageDisplayName
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageFlag
@@ -78,6 +78,13 @@ class ExploreViewModel @Inject constructor(
 	)
 
 	val contentFilter: StateFlow<ExploreContentFilter> = contentPreferences.filter
+	val isNsfwVisible: StateFlow<Boolean> = contentPreferences.isNsfwVisible
+	private val contentFilterState = combine(
+		contentPreferences.filter,
+		contentPreferences.isNsfwVisible,
+	) { filter, isNsfwVisible ->
+		filter to isNsfwVisible
+	}
 
 	private val isSuggestionsEnabled = settings.observeAsFlow(
 		key = AppSettings.KEY_SUGGESTIONS,
@@ -175,6 +182,10 @@ class ExploreViewModel @Inject constructor(
 		contentPreferences.setFilter(filter)
 	}
 
+	fun setNsfwVisible(isVisible: Boolean) {
+		contentPreferences.setNsfwVisible(isVisible)
+	}
+
 	fun setMihonSourceEnabled(sourceId: Long, enabled: Boolean) {
 		sourcesRepository.setMihonSourcesEnabled(listOf(sourceId), enabled)
 	}
@@ -239,19 +250,21 @@ class ExploreViewModel @Inject constructor(
 		}
 	}
 
-	private fun createSourcesFlow() = kotlinx.coroutines.flow.combine(
+	private fun createSourcesFlow() = combine(
 		sourcesRepository.observeEnabledSources(),
 		sourcesRepository.observeMihonLoadingState(),
 		isGrid,
-		contentPreferences.filter,
+		contentFilterState,
 		contentPreferences.overrides,
-	) { allSources, isExtensionsLoading, isGrid, contentFilter, contentOverrides ->
+	) { allSources, isExtensionsLoading, isGrid, filterState, contentOverrides ->
+		val (contentFilter, isNsfwVisible) = filterState
 		ExploreSources(
 			manga = buildSourcesPage(
 				allSources,
 				isExtensionsLoading,
 				isGrid,
 				contentFilter,
+				isNsfwVisible,
 				contentOverrides,
 				false,
 			),
@@ -260,6 +273,7 @@ class ExploreViewModel @Inject constructor(
 				isExtensionsLoading,
 				isGrid,
 				contentFilter,
+				isNsfwVisible,
 				contentOverrides,
 				true,
 			),
@@ -271,6 +285,7 @@ class ExploreViewModel @Inject constructor(
 		isExtensionsLoading: Boolean,
 		isGrid: Boolean,
 		contentFilter: ExploreContentFilter,
+		isNsfwVisible: Boolean,
 		contentOverrides: Map<String, ExploreContentClass>,
 		isNovelShown: Boolean,
 	): List<ListModel> {
@@ -279,17 +294,20 @@ class ExploreViewModel @Inject constructor(
 		val sfw = shown.filter {
 			contentPreferences.classify(it, contentOverrides) == ExploreContentClass.SFW
 		}
-		val nsfw = shown.filter {
-			contentPreferences.classify(it, contentOverrides) == ExploreContentClass.NSFW
-		}
 		val filteredShown = when (contentFilter) {
-			ExploreContentFilter.ALL -> shown
+			ExploreContentFilter.ALL -> if (isNsfwVisible) shown else sfw
 			ExploreContentFilter.SFW -> sfw
-			ExploreContentFilter.NSFW -> nsfw
+			ExploreContentFilter.NSFW -> if (isNsfwVisible) {
+				shown.filter { contentPreferences.classify(it, contentOverrides) == ExploreContentClass.NSFW }
+			} else {
+				emptyList()
+			}
 		}
 
 		when {
 			filteredShown.isNotEmpty() -> {
+				// Visibility is applied before pinned ordering. Hiding NSFW never changes the stored pin flag,
+				// so previously pinned sources return to this section when NSFW visibility is enabled again.
 				val pinned = filteredShown.filter { it.isPinned }
 				if (pinned.isNotEmpty()) {
 					result += ListHeader(R.string.pinned_sources, payload = HEADER_LANGUAGE_GROUP)
