@@ -29,9 +29,9 @@ enum class ExploreContentClass {
 /**
  * Stores the Explore SFW/NSFW filter and explicit user overrides.
  *
- * Mihon overrides are keyed by APK package rather than display name/source language, so a manual
- * classification survives extension updates and applies to every source shipped by that extension.
- * LNReader plugins use their stable plugin id. Unknown source types fall back to the source name.
+ * Mihon overrides are keyed by exact source id so a multi-source APK can contain independently
+ * classified catalogues. Package-level keys from older Noirero builds are still read as a fallback
+ * so existing user choices are not discarded. LNReader plugins use their stable plugin id.
  */
 @Singleton
 class ExploreContentPreferences @Inject constructor(
@@ -56,10 +56,14 @@ class ExploreContentPreferences @Inject constructor(
 		overrides: Map<String, ExploreContentClass> = _overrides.value,
 	): ExploreContentClass {
 		return overrides[classificationKey(source)]
+			?: legacyClassificationKey(source)?.let(overrides::get)
 			?: if (source.isNsfw()) ExploreContentClass.NSFW else ExploreContentClass.SFW
 	}
 
-	fun hasOverride(source: MangaSource): Boolean = classificationKey(source) in _overrides.value
+	fun hasOverride(source: MangaSource): Boolean {
+		val values = _overrides.value
+		return classificationKey(source) in values || legacyClassificationKey(source)?.let { it in values } == true
+	}
 
 	fun setOverride(sources: Collection<MangaSource>, value: ExploreContentClass?) {
 		if (sources.isEmpty()) return
@@ -122,9 +126,16 @@ class ExploreContentPreferences @Inject constructor(
 
 	private fun classificationKey(source: MangaSource): String = when (source) {
 		is MangaSourceInfo -> classificationKey(source.mangaSource)
-		is MihonMangaSource -> "mihon:${source.pkgName}"
+		is MihonMangaSource -> "mihon:${source.sourceId}"
 		is LnMangaSource -> "ln:${source.pluginId}"
 		else -> "source:${source.name}"
+	}
+
+	/** Package-scoped key used by older builds before Mihon source ids became first-class. */
+	private fun legacyClassificationKey(source: MangaSource): String? = when (source) {
+		is MangaSourceInfo -> legacyClassificationKey(source.mangaSource)
+		is MihonMangaSource -> "mihon:${source.pkgName}"
+		else -> null
 	}
 
 	private companion object {
