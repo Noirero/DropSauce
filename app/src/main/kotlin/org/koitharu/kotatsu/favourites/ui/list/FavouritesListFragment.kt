@@ -12,6 +12,8 @@ import coil3.request.ImageRequest
 import coil3.size.Size
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -43,6 +45,7 @@ class FavouritesListFragment : MangaListFragment() {
 
 	private val coverPrefetchSemaphore = Semaphore(3)
 	private val prefetchedCovers = LinkedHashSet<String>()
+	private var coverPrefetchJob: Job? = null
 
 	val categoryId
 		get() = viewModel.categoryId
@@ -72,24 +75,44 @@ class FavouritesListFragment : MangaListFragment() {
 		val columns = viewModel.gridColumns.value ?: 2
 		val width = (resources.displayMetrics.widthPixels / columns.coerceAtLeast(1)).coerceAtLeast(120)
 		val size = Size(width, width * 18 / 13)
-		for (item in items.filterIsInstance<MangaListModel>().takeLast(COVER_PREFETCH_BATCH)) {
-			val coverUrl = item.coverUrl ?: continue
-			val key = "${item.id}:$coverUrl"
-			if (!prefetchedCovers.add(key)) continue
-			viewLifecycleScope.launch {
-				coverPrefetchSemaphore.withPermit {
-					val request = ImageRequest.Builder(requireContext())
-						.data(coverUrl)
-						.size(size)
-						.mangaExtra(item.manga)
-						.stableMangaCoverKey(item.manga, coverUrl)
-						.build()
-					runCatchingCancellable { coil.execute(request) }
+		val candidates = items.filterIsInstance<MangaListModel>()
+			.takeLast(COVER_PREFETCH_BATCH)
+			.mapNotNull { item ->
+				val coverUrl = item.coverUrl ?: return@mapNotNull null
+				CoverPrefetchCandidate(item, coverUrl, "${item.id}:$coverUrl")
+			}
+
+		// Only the newest page needs to stay queued. A semaphore alone limits active requests but leaves
+		// every older pagination batch suspended behind it, which can accumulate hundreds of stale jobs
+		// during a fast scroll through a large library.
+		coverPrefetchJob?.cancel()
+		coverPrefetchJob = viewLifecycleScope.launch {
+			coroutineScope {
+				for (candidate in candidates) {
+					launch {
+						coverPrefetchSemaphore.withPermit {
+							if (!prefetchedCovers.add(candidate.key)) return@withPermit
+							var completed = false
+							try {
+								val request = ImageRequest.Builder(requireContext())
+									.data(candidate.coverUrl)
+									.size(size)
+									.mangaExtra(candidate.item.manga)
+									.stableMangaCoverKey(candidate.item.manga, candidate.coverUrl)
+									.build()
+								runCatchingCancellable { coil.execute(request) }
+								completed = true
+							} finally {
+								// A cancelled active request should be eligible again in the newest batch.
+								if (!completed) prefetchedCovers.remove(candidate.key)
+							}
+							while (prefetchedCovers.size > MAX_REMEMBERED_COVERS) {
+								prefetchedCovers.remove(prefetchedCovers.first())
+							}
+						}
+					}
 				}
 			}
-		}
-		while (prefetchedCovers.size > MAX_REMEMBERED_COVERS) {
-			prefetchedCovers.remove(prefetchedCovers.first())
 		}
 	}
 
@@ -162,6 +185,12 @@ class FavouritesListFragment : MangaListFragment() {
 			else -> super.onActionItemClicked(controller, mode, item)
 		}
 	}
+
+	private data class CoverPrefetchCandidate(
+		val item: MangaListModel,
+		val coverUrl: String,
+		val key: String,
+	)
 
 	companion object {
 
