@@ -55,26 +55,24 @@ class KotatsuApp : BaseApp() {
 				if (uri == null) {
 					// Save closes the recovered-log dialog before the picker opens. If the picker is cancelled,
 					// make the still-pending report available again instead of hiding it for this whole process.
-					recoveredCrashDialogShown = false
-					showRecoveredCrashDialogIfPending(activity)
-					return@register
-				}
-				processLifecycleScope.launch(Dispatchers.IO) {
-					val saved = CrashLogStore.exportText(activity, uri)
-					if (saved) {
-						CrashLogStore.clearPending(activity)
-					}
-					activity.runOnUiThread {
-						if (!activity.isFinishing && !activity.isDestroyed) {
-							Toast.makeText(
-								activity,
-								if (saved) "Crash log saved as .txt" else "Failed to save crash log",
-								Toast.LENGTH_SHORT,
-							).show()
-							if (!saved) {
-								// Keep Copy/Save/Close reachable after a provider/write failure too.
-								recoveredCrashDialogShown = false
-								showRecoveredCrashDialogIfPending(activity)
+					retryRecoveredCrashDialog(activity)
+				} else {
+					processLifecycleScope.launch(Dispatchers.IO) {
+						val saved = CrashLogStore.exportText(activity, uri)
+						if (saved) {
+							CrashLogStore.clearPending(activity)
+						}
+						activity.runOnUiThread {
+							if (!activity.isFinishing && !activity.isDestroyed) {
+								Toast.makeText(
+									activity,
+									if (saved) "Crash log saved as .txt" else "Failed to save crash log",
+									Toast.LENGTH_SHORT,
+								).show()
+								if (!saved) {
+									// Keep Copy/Save/Close reachable after a provider/write failure too.
+									retryRecoveredCrashDialog(activity)
+								}
 							}
 						}
 					}
@@ -83,10 +81,19 @@ class KotatsuApp : BaseApp() {
 		}
 
 		override fun onActivityResumed(activity: Activity) {
-		if (activity is MainActivity) {
-			showRecoveredCrashDialogIfPending(activity)
+			if (activity is MainActivity) {
+				showRecoveredCrashDialogIfPending(activity)
+			}
 		}
-	}
+
+		private fun retryRecoveredCrashDialog(activity: MainActivity) {
+			recoveredCrashDialogShown = false
+			// A button callback dismisses the current AlertDialog after returning. Defer the retry by one
+			// UI turn so a new dialog never overlaps the old one while it is still being removed.
+			activity.window.decorView.post {
+				showRecoveredCrashDialogIfPending(activity)
+			}
+		}
 
 		private fun showRecoveredCrashDialogIfPending(activity: MainActivity) {
 			if (recoveredCrashDialogShown || activity.isFinishing || activity.isDestroyed) return
@@ -117,13 +124,13 @@ class KotatsuApp : BaseApp() {
 							val launcher = crashLogExportLauncher
 							if (launcher == null) {
 								Toast.makeText(activity, "Unable to open file picker", Toast.LENGTH_SHORT).show()
+								retryRecoveredCrashDialog(activity)
 							} else {
 								runCatching {
 									launcher.launch(CrashLogStore.suggestedTextFileName())
 								}.onFailure {
 									Toast.makeText(activity, "Unable to open file picker", Toast.LENGTH_SHORT).show()
-									recoveredCrashDialogShown = false
-									showRecoveredCrashDialogIfPending(activity)
+									retryRecoveredCrashDialog(activity)
 								}
 							}
 						}
