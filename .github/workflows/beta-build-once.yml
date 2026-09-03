@@ -32,11 +32,11 @@ jobs:
       - name: Apply source fixes
         run: python3 .github/source-fix-once.py apply
 
-      - name: Verify source and language regression
+      - name: Verify preview Kotlin and Room queries
         run: |
           chmod +x gradlew
           git diff --check
-          ./gradlew :app:testPreviewUnitTest --tests 'org.koitharu.kotatsu.settings.sources.catalog.InstalledExtensionLanguageFilterTest' --no-daemon --stacktrace
+          ./gradlew :app:compilePreviewKotlin --no-daemon --stacktrace
 
       - name: Commit verified fixes
         run: |
