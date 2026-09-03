@@ -22,6 +22,13 @@ class DownloadConcurrencyController @Inject constructor() {
 	private var activeDownloads = 0
 	private val revision = MutableStateFlow(0L)
 
+	/** Compatibility entry point for existing workers; [sourceKey] no longer serializes same-source jobs. */
+	suspend fun <T> withSourcePermit(
+		@Suppress("UNUSED_PARAMETER") sourceKey: String,
+		limit: Int,
+		block: suspend () -> T,
+	): T = withPermit(limit, block)
+
 	suspend fun <T> withPermit(
 		limit: Int,
 		block: suspend () -> T,
