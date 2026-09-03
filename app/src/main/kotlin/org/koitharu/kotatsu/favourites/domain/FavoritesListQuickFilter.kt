@@ -4,6 +4,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -16,6 +17,7 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	private val settings: AppSettings,
 	private val repository: FavouritesRepository,
 	private val filterStore: FavouriteQuickFilterStore,
+	networkState: NetworkState,
 	private val mihonExtensionManager: MihonExtensionManager,
 ) : MangaListQuickFilter(settings) {
 
@@ -23,6 +25,9 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 
 	init {
 		isStateFilterEnabled = false
+		if (!networkState.value) {
+			filterStore.set(ListFilterOption.Downloaded, true)
+		}
 	}
 
 	override val appliedOptions
@@ -76,8 +81,8 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 					isChecked = ListFilterOption.Downloaded in selectedOptions,
 					isCheckedIconVisible = false,
 					data = ListFilterOption.Downloaded,
-				),
-			)
+			),
+		)
 		}
 
 		val options = getSourceOptions()

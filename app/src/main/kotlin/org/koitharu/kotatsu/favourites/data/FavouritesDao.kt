@@ -361,6 +361,7 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 		ListFilterOption.Macro.NEW_CHAPTERS -> "(SELECT chapters_new FROM tracks WHERE tracks.manga_id = manga.manga_id) > 0"
 		ListFilterOption.Macro.FAVORITE -> "EXISTS(SELECT * FROM favourites WHERE favourites.manga_id = manga.manga_id AND favourites.deleted_at = 0)"
 		ListFilterOption.Macro.NSFW -> "manga.nsfw = 1"
+		is ListFilterOption.ReadingProgress -> getReadingProgressCondition(option, "manga.manga_id")
 		is ListFilterOption.Tag -> "EXISTS(SELECT * FROM manga_tags WHERE manga.manga_id = manga_tags.manga_id AND tag_id = ${option.tagId})"
 		ListFilterOption.Downloaded -> "1"
 		is ListFilterOption.Source -> "manga.source = ${sqlEscapeString(option.mangaSource.name)}"
@@ -372,10 +373,23 @@ abstract class FavouritesDao : MangaQueryBuilder.ConditionCallback {
 		ListFilterOption.Macro.COMPLETED -> "EXISTS(SELECT * FROM history WHERE history.manga_id = favourites.manga_id AND history.percent >= $PROGRESS_COMPLETED)"
 		ListFilterOption.Macro.NEW_CHAPTERS -> "(SELECT chapters_new FROM tracks WHERE tracks.manga_id = favourites.manga_id) > 0"
 		ListFilterOption.Macro.NSFW -> "manga.nsfw = 1"
+		is ListFilterOption.ReadingProgress -> getReadingProgressCondition(option, "favourites.manga_id")
 		is ListFilterOption.Tag -> "EXISTS(SELECT * FROM manga_tags WHERE favourites.manga_id = manga_tags.manga_id AND tag_id = ${option.tagId})"
 		ListFilterOption.Downloaded -> "EXISTS(SELECT * FROM local_index WHERE local_index.manga_id = favourites.manga_id)"
 		is ListFilterOption.Source -> "manga.source = ${sqlEscapeString(option.mangaSource.name)}"
 		is ListFilterOption.State -> option.state?.let { "manga.state = ${sqlEscapeString(it.name)}" }
 		else -> null
+	}
+
+	private fun getReadingProgressCondition(
+		option: ListFilterOption.ReadingProgress,
+		mangaId: String,
+	): String = when (option) {
+		ListFilterOption.ReadingProgress.UNREAD ->
+			"NOT EXISTS(SELECT 1 FROM history WHERE history.manga_id = $mangaId AND history.percent > 0)"
+		ListFilterOption.ReadingProgress.IN_PROGRESS ->
+			"EXISTS(SELECT 1 FROM history WHERE history.manga_id = $mangaId AND history.percent > 0 AND history.percent < $PROGRESS_COMPLETED)"
+		ListFilterOption.ReadingProgress.COMPLETED ->
+			"EXISTS(SELECT 1 FROM history WHERE history.manga_id = $mangaId AND history.percent >= $PROGRESS_COMPLETED)"
 	}
 }
