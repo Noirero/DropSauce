@@ -41,7 +41,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	private var initialCookieValue: String? = null
 	private var sourceHeaders: Map<String, String> = emptyMap()
 	private var mihonRepository: CachingMangaRepository? = null
-	private var bypassAdBlockForSource = false
+	private var bypassAdBlockForAuthentication = false
 
 	override fun onCreate2(savedInstanceState: Bundle?, source: MangaSource, repository: MangaRepository?) {
 		successCookieUrl = intent?.getStringExtra(AppRouter.KEY_SUCCESS_COOKIE_URL)
@@ -61,12 +61,12 @@ class BrowserActivity : BaseBrowserActivity() {
 		// generic WebView session may successfully log in but still be rejected by chapter requests.
 		val httpSource = (source as? MihonMangaSource)?.catalogueSource as? HttpSource
 		sourceHeaders = getSourceHeaders(httpSource)
-		// SchaleNetwork/Koharu creates the short-lived `clearance` token through JavaScript and stores
-		// it in WebView localStorage. Blocking even one token/script request can leave the page looking
-		// usable while the extension keeps receiving "Open webview to refresh token" forever.
-		// Keep authentication/token WebViews unfiltered for this source family; normal browser/source
-		// WebViews retain the user's ad-block setting.
-		bypassAdBlockForSource = httpSource?.requiresUnfilteredTokenWebView() == true
+		// Resolver/login WebViews must be allowed to run the complete site's authentication flow.
+		// Blocking a token, challenge, script, or XHR request can leave the page looking successful
+		// while the extension still has no usable session. Mark this by how the browser was opened,
+		// rather than by source/domain names, so every extension gets the same behaviour. Ordinary
+		// source browsing remains filtered according to the user's ad-block setting.
+		bypassAdBlockForAuthentication = intent?.getBooleanExtra(EXTRA_UNFILTERED_AUTH_WEBVIEW, false) == true
 		val explicitUserAgent = intent?.getStringExtra(AppRouter.KEY_USER_AGENT)?.nullIfEmpty()
 		val sourceUserAgent = sourceHeaders.entries
 			.firstOrNull { it.key.equals("user-agent", ignoreCase = true) }
@@ -91,7 +91,7 @@ class BrowserActivity : BaseBrowserActivity() {
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = true)
 		viewBinding.webView.webViewClient = BrowserClient(
 			callback = this,
-			adBlock = adBlock.takeUnless { bypassAdBlockForSource },
+			adBlock = adBlock.takeUnless { bypassAdBlockForAuthentication },
 			additionalHeaders = sourceHeaders,
 		)
 		lifecycleScope.launch {
@@ -169,7 +169,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	}
 
 	private suspend fun prepareAdBlock() {
-		if (!adBlock.isEnabled || bypassAdBlockForSource) return
+		if (!adBlock.isEnabled || bypassAdBlockForAuthentication) return
 		val updater = adBlockUpdaterProvider.get()
 		if (!adBlock.hasRuleList()) {
 			withContext(Dispatchers.IO) {
@@ -207,10 +207,6 @@ class BrowserActivity : BaseBrowserActivity() {
 		}.getOrDefault(emptyMap())
 	}
 
-	private fun HttpSource.requiresUnfilteredTokenWebView(): Boolean {
-		return requiresUnfilteredTokenWebView(name, javaClass.name)
-	}
-
 	private fun getCookieValue(url: String, cookieName: String): String? {
 		val cookies = CookieManager.getInstance().getCookie(url) ?: return null
 		return cookies.split(";")
@@ -229,6 +225,7 @@ class BrowserActivity : BaseBrowserActivity() {
 			source = input.source,
 			title = null,
 		).apply {
+			putExtra(EXTRA_UNFILTERED_AUTH_WEBVIEW, true)
 			putExtra(AppRouter.KEY_SUCCESS_COOKIE_URL, input.successCookieUrl)
 			putExtra(AppRouter.KEY_SUCCESS_COOKIE_NAME, input.successCookieName)
 			if (input.userAgent != null) {
@@ -244,12 +241,7 @@ class BrowserActivity : BaseBrowserActivity() {
 	companion object {
 
 		const val TAG = "BrowserActivity"
+		private const val EXTRA_UNFILTERED_AUTH_WEBVIEW =
+			"org.koitharu.kotatsu.browser.extra.UNFILTERED_AUTH_WEBVIEW"
 	}
-}
-
-internal fun requiresUnfilteredTokenWebView(sourceName: String, className: String): Boolean {
-	val identity = "$sourceName $className"
-		.lowercase()
-		.filter(Char::isLetterOrDigit)
-	return "schalenetwork" in identity || "koharu" in identity
 }
