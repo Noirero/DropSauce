@@ -3,29 +3,11 @@
 	xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto">
 
+	<!-- All / SFW / NSFW is intentionally visible in the Explore header now. Keeping a second
+	     state selector in the overflow made the active filter easy to miss and duplicated controls. -->
 	<item
-		android:id="@+id/action_content_filter"
-		android:title="@string/explore_content_filter">
-		<menu>
-			<group android:checkableBehavior="single">
-				<item
-					android:id="@+id/action_content_filter_all"
-					android:checkable="true"
-					android:title="@string/explore_content_filter_all" />
-				<item
-					android:id="@+id/action_content_filter_sfw"
-					android:checkable="true"
-					android:title="@string/explore_content_sfw" />
-				<item
-					android:id="@+id/action_content_filter_nsfw"
-					android:checkable="true"
-					android:title="@string/explore_content_nsfw" />
-			</group>
-			<item
-				android:id="@+id/action_content_classification_reset_all"
-				android:title="@string/explore_content_reset_all" />
-		</menu>
-	</item>
+		android:id="@+id/action_content_classification_reset_all"
+		android:title="@string/explore_content_reset_all" />
 
 	<item
 		android:id="@+id/action_source_filter"
