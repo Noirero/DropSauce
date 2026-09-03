@@ -1,16 +1,47 @@
-name: Beta Build Once
+name: Downloaded Category Fix Once
 
-# Temporary helper kept manual-only after the requested Beta build.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - beta
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  beta:
-    name: Build beta APK
+  verify:
+    name: Patch and verify downloaded category
     runs-on: ubuntu-latest
     steps:
-      - name: Manual helper disabled
-        run: echo "Use preview-build.yml for normal manual Beta builds."
+      - name: Checkout beta
+        uses: actions/checkout@v4
+        with:
+          ref: beta
+          fetch-depth: 2
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Apply downloaded category fix
+        run: python3 .github/downloaded-category-fix-once.py
+
+      - name: Verify preview Kotlin and Room queries
+        run: ./gradlew :app:compilePreviewKotlin --no-daemon
+
+      - name: Commit verified source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/downloaded-category-fix-once.py
+          git checkout HEAD^ -- .github/workflows/beta-build-once.yml
+          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/data/FavouritesDao.kt
+          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/domain/LocalFavoritesObserver.kt
+          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/domain/FavouritesRepository.kt
+          git add app/src/main/kotlin/org/koitharu/kotatsu/favourites/ui/list/FavouritesListViewModel.kt
+          git add .github/workflows/beta-build-once.yml
+          git commit -m "Show every downloaded title in Downloaded favourites"
+          git push origin HEAD:beta
