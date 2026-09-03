@@ -1,6 +1,7 @@
 package org.koitharu.kotatsu.mihon.model
 
 import eu.kanade.tachiyomi.source.CatalogueSource
+import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLangCode
 import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLanguageAutonym
 import org.koitharu.kotatsu.parsers.model.MangaSource
 
@@ -28,8 +29,9 @@ data class MihonMangaSource(
 	val languageDisplayName: String
 		get() = getExternalExtensionLanguageAutonym(language)
 
+	/** Canonical BCP-47 language key used by Explore and source filtering. */
 	val language: String
-		get() = catalogueSource.lang
+		get() = getExternalExtensionLangCode(catalogueSource.lang)
 
 	val sourceId: Long
 		get() = catalogueSource.id

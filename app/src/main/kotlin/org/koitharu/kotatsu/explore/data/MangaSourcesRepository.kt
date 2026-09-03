@@ -14,11 +14,13 @@ import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
+import org.koitharu.kotatsu.extensions.runtime.getExternalExtensionLangCode
 import org.koitharu.kotatsu.lnreader.LnPluginManager
 import org.koitharu.kotatsu.lnreader.model.LnMangaSource
 import org.koitharu.kotatsu.mihon.MihonExtensionManager
 import org.koitharu.kotatsu.mihon.model.MihonMangaSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -207,7 +209,7 @@ class MangaSourcesRepository @Inject constructor(
 			.filterNot { hideNsfw && it.isNsfw }
 			.filterNot { it.pkgName in hiddenPackages }
 			.filterNot { it.sourceId.toString() in disabledSourceIds }
-			.filterNot { disabledLanguageKey(it.language) in disabledSourceIds }
+			.filterNot { isLanguageDisabled(it.language, disabledSourceIds) }
 	}
 
 	/**
@@ -262,8 +264,14 @@ class MangaSourcesRepository @Inject constructor(
 			if (enabled) updated.remove(key) else updated.add(key)
 		}
 		for ((language, enabled) in languageStates) {
-			val key = disabledLanguageKey(language)
-			if (enabled) updated.remove(key) else updated.add(key)
+			val normalized = normalizedLanguage(language)
+			// Remove every legacy spelling first (pt_BR, PT-br, English, ...). This both preserves old
+			// disabled states on read and migrates the preference to one canonical key on the next write.
+			updated.removeAll { key ->
+				key.startsWith(DISABLED_LANGUAGE_PREFIX) &&
+					normalizedLanguage(key.removePrefix(DISABLED_LANGUAGE_PREFIX)) == normalized
+			}
+			if (!enabled) updated.add(DISABLED_LANGUAGE_PREFIX + normalized)
 		}
 		if (updated != before) {
 			settings.mihonDisabledSourceIds = updated
@@ -308,7 +316,7 @@ class MangaSourcesRepository @Inject constructor(
 		val manager = mihonExtensionManager ?: return false
 		return manager.getMihonMangaSources()
 			.groupBy { it.pkgName to it.catalogueSource.name }
-			.any { (_, group) -> group.mapTo(HashSet()) { it.language }.size > 1 }
+			.any { (_, group) -> group.mapTo(HashSet()) { normalizedLanguage(it.language) }.size > 1 }
 	}
 
 	private fun getAllMihonSources(): List<MihonMangaSource> {
@@ -344,7 +352,7 @@ class MangaSourcesRepository @Inject constructor(
 				MihonSourceFilterEntry(
 					source = source,
 					isSourceEnabled = source.sourceId.toString() !in disabled,
-					isLanguageEnabled = disabledLanguageKey(source.language) !in disabled,
+					isLanguageEnabled = !isLanguageDisabled(source.language, disabled),
 				)
 			}
 		}.distinctUntilChanged()
@@ -398,9 +406,13 @@ class MangaSourcesRepository @Inject constructor(
 			val matches = sources.filterIsInstance<MihonMangaSource>().filter {
 				legacy == "${it.pkgName}:${it.catalogueSource.name}"
 			}
-			val match = matches.firstOrNull { candidate ->
+			val activeLanguage = matches.firstNotNullOfOrNull { candidate ->
 				settings.getMihonActiveLang(candidate.pkgName, candidate.catalogueSource.name)
-					?.equals(candidate.language, ignoreCase = true) == true
+			}
+			val match = activeLanguage?.let { active ->
+				matches.firstOrNull { candidate ->
+					normalizedLanguage(active) == normalizedLanguage(candidate.language)
+				}
 			} ?: matches.firstOrNull()
 			changed = true
 			match?.let(::sourceKeyOf)
@@ -409,7 +421,16 @@ class MangaSourcesRepository @Inject constructor(
 		return normalized
 	}
 
-	private fun normalizedLanguage(language: String): String = language.ifBlank { "other" }.lowercase()
+	private fun normalizedLanguage(language: String): String =
+		getExternalExtensionLangCode(language).ifBlank { "other" }.lowercase(Locale.ROOT)
+
+	private fun isLanguageDisabled(language: String, disabled: Set<String>): Boolean {
+		val normalized = normalizedLanguage(language)
+		return disabled.any { key ->
+			key.startsWith(DISABLED_LANGUAGE_PREFIX) &&
+				normalizedLanguage(key.removePrefix(DISABLED_LANGUAGE_PREFIX)) == normalized
+		}
+	}
 
 	private fun disabledLanguageKey(language: String): String =
 		DISABLED_LANGUAGE_PREFIX + normalizedLanguage(language)

@@ -62,6 +62,19 @@ class ExternalExtensionRuntimeTest {
 	}
 
 	@Test
+	fun `language name alias does not create false siblings`() {
+		val result = process(listOf(
+			Success("extension.reader", listOf(
+				Source(25, "Reader", "English"),
+				Source(26, "Reader", "en"),
+			)),
+		))
+
+		assertFalse(result.wrappedSourceById.getValue(25).hasLanguageSiblings)
+		assertFalse(result.wrappedSourceById.getValue(26).hasLanguageSiblings)
+	}
+
+	@Test
 	fun `arbitrary language code remains source metadata`() {
 		val result = process(listOf(
 			Success("extension.future", listOf(Source(31, "Future Source", "x-future"))),
