@@ -144,7 +144,13 @@ class MihonFavouriteRestoreRepair @Inject constructor(
         categoryTypeUpdates: MutableMap<Long, FavouriteContentType>,
     ): Long {
         existingCategories.firstOrNull { category ->
-            category.title == title && contentTypeStore.isCategoryForType(category.categoryId.toLong(), type)
+            val id = category.categoryId.toLong()
+            val pendingType = categoryTypeUpdates[id]
+            category.title == title && if (pendingType != null) {
+                pendingType == type
+            } else {
+                contentTypeStore.isCategoryForType(id, type)
+            }
         }?.let { category ->
             val id = category.categoryId.toLong()
             categoryTypeUpdates[id] = type
