@@ -1,0 +1,358 @@
+package org.koitharu.kotatsu.details.ui
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
+import org.koitharu.kotatsu.details.ui.model.ChapterListItem
+import org.koitharu.kotatsu.details.ui.model.HistoryInfo
+import org.koitharu.kotatsu.details.data.MangaDetails
+import org.koitharu.kotatsu.parsers.model.ContentRating
+import org.koitharu.kotatsu.parsers.model.Manga
+
+@Composable
+internal fun ModernDetailsHero(
+	centered: Boolean,
+	manga: Manga,
+	details: MangaDetails?,
+	sourceTitle: String?,
+	accent: Color,
+	imageLoader: ImageLoader,
+	coverUrl: String?,
+	actions: DetailsExpressiveActions,
+) {
+	val nsfwLabel = when (manga.contentRating) {
+		ContentRating.SUGGESTIVE -> "16+"
+		ContentRating.ADULT -> "18+"
+		else -> null
+	}
+	if (centered) {
+		Column(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = SCREEN_PADDING),
+			horizontalAlignment = Alignment.CenterHorizontally,
+		) {
+			CoverCard(
+				manga = manga,
+				coverUrl = coverUrl,
+				imageLoader = imageLoader,
+				modifier = Modifier
+					.width(158.dp)
+					.height(236.dp),
+				corner = 24.dp,
+				nsfwLabel = null,
+				forceRefresh = details?.isLoaded == true,
+				actions = actions,
+			)
+			Spacer(Modifier.height(20.dp))
+			HeroTexts(centered = true, manga = manga, accent = accent, actions = actions)
+			Spacer(Modifier.height(16.dp))
+			StatPills(
+				centered = true,
+				showContentRating = true,
+				manga = manga,
+				sourceTitle = sourceTitle,
+				accent = accent,
+				imageLoader = imageLoader,
+				onSourceClick = { actions.onSourceClick(manga) },
+			)
+		}
+	} else {
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = SCREEN_PADDING),
+			horizontalArrangement = Arrangement.spacedBy(16.dp),
+			verticalAlignment = Alignment.Top,
+		) {
+			CoverCard(
+				manga = manga,
+				coverUrl = coverUrl,
+				imageLoader = imageLoader,
+				modifier = Modifier
+					.width(120.dp)
+					.height(178.dp),
+				corner = 20.dp,
+				nsfwLabel = nsfwLabel,
+				forceRefresh = details?.isLoaded == true,
+				actions = actions,
+			)
+			Column(modifier = Modifier.weight(1f)) {
+				HeroTexts(centered = false, manga = manga, accent = accent, actions = actions)
+				Spacer(Modifier.height(12.dp))
+				StatPills(
+					centered = false,
+					showContentRating = false,
+					manga = manga,
+					sourceTitle = sourceTitle,
+					accent = accent,
+					imageLoader = imageLoader,
+					onSourceClick = { actions.onSourceClick(manga) },
+				)
+			}
+		}
+	}
+}
+
+@Composable
+internal fun PrimaryDetailsActions(
+	favouriteLabel: String,
+	isFavourite: Boolean,
+	historyInfo: HistoryInfo,
+	isLoading: Boolean,
+	accent: Color,
+	onFavouriteClick: () -> Unit,
+	onReadClick: () -> Unit,
+) {
+	val isChaptersLoading = isLoading && (historyInfo.totalChapters <= 0 || historyInfo.isChapterMissing)
+	val readEnabled = !isChaptersLoading && historyInfo.isValid
+	val readLabel = when {
+		isChaptersLoading -> stringResource(R.string.loading_)
+		historyInfo.canContinue -> stringResource(R.string._continue)
+		else -> stringResource(R.string.read)
+	}
+	val readContainer = if (readEnabled) accent else accent.copy(alpha = 0.38f)
+	val readContent = if (accent.luminanceIsLight()) Color.Black else Color.White
+
+	Row(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(horizontal = SCREEN_PADDING),
+		horizontalArrangement = Arrangement.spacedBy(10.dp),
+		verticalAlignment = Alignment.CenterVertically,
+	) {
+		Surface(
+			onClick = onFavouriteClick,
+			shape = RoundedCornerShape(MiyorareVisualTokens.RADIUS_CONTROL_DP.dp),
+			color = if (isFavourite) accent.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+			modifier = Modifier
+				.weight(0.42f)
+				.height(56.dp),
+		) {
+			Row(
+				modifier = Modifier.padding(horizontal = 14.dp),
+				verticalAlignment = Alignment.CenterVertically,
+				horizontalArrangement = Arrangement.Center,
+			) {
+				Icon(
+					painter = painterResource(if (isFavourite) R.drawable.ic_heart else R.drawable.ic_heart_outline),
+					contentDescription = null,
+					tint = accent,
+					modifier = Modifier.size(20.dp),
+				)
+				Spacer(Modifier.width(8.dp))
+				Text(
+					text = favouriteLabel,
+					style = MaterialTheme.typography.labelLarge,
+					fontWeight = FontWeight.SemiBold,
+					color = MaterialTheme.colorScheme.onSurface,
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+				)
+			}
+		}
+
+		Surface(
+			onClick = onReadClick,
+			enabled = readEnabled,
+			shape = RoundedCornerShape(MiyorareVisualTokens.RADIUS_CONTROL_DP.dp),
+			color = readContainer,
+			shadowElevation = if (readEnabled) 3.dp else 0.dp,
+			modifier = Modifier
+				.weight(0.58f)
+				.height(56.dp),
+		) {
+			Row(
+				modifier = Modifier.padding(horizontal = 16.dp),
+				verticalAlignment = Alignment.CenterVertically,
+				horizontalArrangement = Arrangement.Center,
+			) {
+				Icon(
+					painter = painterResource(R.drawable.ic_play),
+					contentDescription = null,
+					tint = readContent.copy(alpha = if (readEnabled) 1f else 0.72f),
+					modifier = Modifier.size(22.dp),
+				)
+				Spacer(Modifier.width(8.dp))
+				Text(
+					text = readLabel,
+					style = MaterialTheme.typography.titleSmall,
+					fontWeight = FontWeight.Bold,
+					color = readContent.copy(alpha = if (readEnabled) 1f else 0.72f),
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+				)
+			}
+		}
+	}
+}
+
+@Composable
+internal fun InlineChapterHeader(count: Int, accent: Color, onManage: () -> Unit) {
+	SectionHeader(
+		title = pluralStringResource(R.plurals.chapters, count, count),
+		action = stringResource(R.string.manage),
+		accent = accent,
+		onAction = onManage,
+	)
+}
+
+@Composable
+internal fun InlineChapterCard(
+	item: ChapterListItem,
+	visualEffectLevel: VisualEffectLevel,
+	accent: Color,
+	onClick: () -> Unit,
+	onDownloadClick: () -> Unit,
+	onManageClick: () -> Unit,
+) {
+	val context = LocalContext.current
+	val container = when (visualEffectLevel) {
+		VisualEffectLevel.LIGHT -> MaterialTheme.colorScheme.surfaceContainerLow
+		VisualEffectLevel.BALANCED -> MaterialTheme.colorScheme.surfaceContainer
+		VisualEffectLevel.FULL -> MaterialTheme.colorScheme.surfaceContainerHigh
+	}
+	val rowColor = if (item.isCurrent) {
+		accent.copy(alpha = if (visualEffectLevel == VisualEffectLevel.LIGHT) 0.10f else 0.16f)
+	} else {
+		container
+	}
+	val mainColor = if (item.isUnread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+	val secondaryColor = if (item.isUnread) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
+	val border = if (visualEffectLevel == VisualEffectLevel.FULL) {
+		BorderStroke(1.dp, accent.copy(alpha = 0.14f))
+	} else {
+		null
+	}
+
+	Surface(
+		shape = RoundedCornerShape(MiyorareVisualTokens.RADIUS_CARD_DP.dp),
+		color = rowColor,
+		border = border,
+		tonalElevation = when (visualEffectLevel) {
+			VisualEffectLevel.LIGHT -> 0.dp
+			VisualEffectLevel.BALANCED -> 1.dp
+			VisualEffectLevel.FULL -> 2.dp
+		},
+		shadowElevation = if (visualEffectLevel == VisualEffectLevel.FULL) 1.dp else 0.dp,
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(horizontal = SCREEN_PADDING, vertical = 4.dp)
+			.clickable(onClick = onClick),
+	) {
+		Row(
+			modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 11.dp, bottom = 11.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			if (item.isCurrent) {
+				Box(
+					modifier = Modifier
+						.width(4.dp)
+						.height(36.dp)
+						.background(accent, RoundedCornerShape(50)),
+				)
+				Spacer(Modifier.width(10.dp))
+			}
+
+			Column(modifier = Modifier.weight(1f)) {
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					Text(
+						text = item.getTitle(context.resources),
+						style = MaterialTheme.typography.bodyLarge,
+						fontWeight = if (item.isCurrent) FontWeight.Bold else FontWeight.Medium,
+						color = mainColor,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+						modifier = Modifier.weight(1f, fill = false),
+					)
+					if (item.isNew) {
+						Spacer(Modifier.width(6.dp))
+						Icon(
+							painter = painterResource(R.drawable.ic_new),
+							contentDescription = null,
+							tint = accent,
+							modifier = Modifier.size(16.dp),
+						)
+					}
+				}
+				item.description?.takeIf { it.isNotBlank() }?.let { description ->
+					Spacer(Modifier.height(3.dp))
+					Text(
+						text = description,
+						style = MaterialTheme.typography.bodySmall,
+						color = secondaryColor,
+						maxLines = 1,
+						overflow = TextOverflow.Ellipsis,
+					)
+				}
+			}
+
+			if (item.isBookmarked) {
+				Icon(
+					painter = painterResource(R.drawable.ic_bookmark),
+					contentDescription = null,
+					tint = accent,
+					modifier = Modifier
+						.padding(horizontal = 4.dp)
+						.size(19.dp),
+				)
+			}
+
+			when {
+				item.isDownloaded -> IconButton(onClick = onManageClick) {
+					Icon(
+						painter = painterResource(R.drawable.ic_eye_check),
+						contentDescription = null,
+						tint = accent,
+					)
+				}
+				item.isDownloading -> Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+					CircularProgressIndicator(
+						modifier = Modifier.size(20.dp),
+						strokeWidth = 2.dp,
+						color = accent,
+					)
+				}
+				else -> IconButton(onClick = onDownloadClick) {
+					Icon(
+						painter = painterResource(R.drawable.ic_save),
+						contentDescription = null,
+						tint = MaterialTheme.colorScheme.onSurfaceVariant,
+					)
+				}
+			}
+		}
+	}
+}
