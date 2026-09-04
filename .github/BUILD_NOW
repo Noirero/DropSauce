@@ -1,4 +1,4 @@
-Trigger DropSauce Noirero beta build.
-Requested rebuild after fixing compile errors found by Beta Build #40.
-Includes Mihon browser-session fixes and crash/ANR logging hardening.
-Requested: 2026-09-02
+Trigger DropSauce Noirero main test build.
+Build source: promoted and audited stable main.
+Purpose: runtime stability and update-compatibility testing before Miyorare migration.
+Requested: 2026-09-04
