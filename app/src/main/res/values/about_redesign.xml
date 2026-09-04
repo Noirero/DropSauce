@@ -10,6 +10,10 @@
 	<string name="about_user_manual_summary">DropSauce upstream user guide</string>
 	<string name="about_source_code_summary">View the project on GitHub</string>
 	<string name="about_discord_summary">Community and support</string>
+	<string name="about_license_title">GPLv3 license</string>
+	<string name="about_license_summary">Open-source license for this fork</string>
+	<string name="about_credits_title">Upstream credits</string>
+	<string name="about_credits_summary">Kotatsu, LNReader, Mihon/Tachiyomi, and related communities</string>
 	<string name="about_verbose_logging_title">Verbose logging</string>
 	<string name="about_verbose_logging_enabled_summary">Recording — turn off to save log as .txt</string>
 	<string name="about_verbose_logging_disabled_summary">Off by default to preserve performance</string>

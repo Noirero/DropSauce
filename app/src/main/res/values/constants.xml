@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 	<string name="url_github" translatable="false">https://github.com/Noirero/DropSauce</string>
-	<string name="url_discord_web" translatable="false">https://discord.gg/PTd2bYgz9m</string>
+	<string name="url_discord_web" translatable="false">https://discord.gg/AKK3AQgvw</string>
+	<string name="url_project_license" translatable="false">https://github.com/Noirero/DropSauce/blob/beta/LICENSE</string>
+	<string name="url_project_credits" translatable="false">https://github.com/Noirero/DropSauce#credits</string>
 	<string name="url_dropsauce_website" translatable="false">https://drop-sauce.app/</string>
 	<string name="url_user_manual" translatable="false">https://drop-sauce.app/guide/</string>
 	<string name="github_updates_repo" translatable="false">Noirero/DropSauce</string>

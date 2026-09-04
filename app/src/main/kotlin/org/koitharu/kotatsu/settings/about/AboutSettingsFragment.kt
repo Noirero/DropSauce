@@ -30,20 +30,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.github.AppVersion
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
 import org.koitharu.kotatsu.settings.SettingsActivity
@@ -107,9 +113,17 @@ class AboutSettingsFragment : BaseComposeSettingsFragment(R.string.about) {
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
 		viewModel.onUpdateAvailable.observeEvent(viewLifecycleOwner, ::onUpdateAvailable)
-		viewModel.onExportLog.observeEvent(viewLifecycleOwner) { content ->
-			pendingLogContent = content
-			saveLogLauncher.launch("dropsauce_log_${System.currentTimeMillis()}.txt")
+		viewModel.onError.observeEvent(viewLifecycleOwner) { error ->
+			Snackbar.make(view, error.getDisplayMessage(resources), Snackbar.LENGTH_SHORT).show()
+		}
+		viewLifecycleOwner.lifecycleScope.launch {
+			viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+				viewModel.pendingLogExport.filterNotNull().collect { content ->
+					pendingLogContent = content
+					viewModel.consumePendingLogExport(content)
+					saveLogLauncher.launch("dropsauce_log_${System.currentTimeMillis()}.txt")
+				}
+			}
 		}
 	}
 
@@ -221,12 +235,32 @@ private fun AboutScreen(
 				}
 				item { pos ->
 					ActionSettingsItem(
+						title = stringResource(R.string.about_license_title),
+						subtitle = stringResource(R.string.about_license_summary),
+						icon = R.drawable.ic_info_outline,
+						iconColors = sourceColors,
+						shape = pos.shape,
+						onClick = { onOpenLink(R.string.url_project_license, R.string.about_license_title) },
+					)
+				}
+				item { pos ->
+					ActionSettingsItem(
+						title = stringResource(R.string.about_credits_title),
+						subtitle = stringResource(R.string.about_credits_summary),
+						icon = R.drawable.ic_github,
+						iconColors = sourceColors,
+						shape = pos.shape,
+						onClick = { onOpenLink(R.string.url_project_credits, R.string.about_credits_title) },
+					)
+				}
+				item { pos ->
+					ActionSettingsItem(
 						title = stringResource(R.string.discord),
 						subtitle = stringResource(R.string.about_discord_summary),
 						icon = R.drawable.ic_discord,
 						iconColors = discordColors,
 						shape = pos.shape,
-						onClick = { onOpenLink(R.string.url_miyorare_discord, R.string.discord) },
+						onClick = { onOpenLink(R.string.url_discord_web, R.string.discord) },
 					)
 				}
 			}
