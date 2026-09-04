@@ -115,12 +115,12 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 					isChecked = ListFilterOption.Downloaded in selectedOptions,
 					isCheckedIconVisible = false,
 					data = ListFilterOption.Downloaded,
-				),
+			),
 			)
 		}
 
-		val options = getSourceOptions()
 		val selectedSources = selectedOptions.filterIsInstance<ListFilterOption.Source>().toSet()
+		val options = (getSourceOptions() + selectedSources).distinctBy { it.mangaSource.name }
 		val publicationState = selectedOptions.filterIsInstance<ListFilterOption.State>().firstOrNull()
 		val advancedCount =
 			(if (selectedSources.isNotEmpty()) 1 else 0) +
