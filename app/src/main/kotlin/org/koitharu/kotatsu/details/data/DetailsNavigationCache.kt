@@ -42,6 +42,11 @@ class DetailsNavigationCache @Inject constructor() {
 		}
 	}
 
+	@Synchronized
+	fun clear() {
+		snapshots.clear()
+	}
+
 	private companion object {
 		const val MAX_ENTRIES = 24
 	}

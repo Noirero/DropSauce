@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.db.MangaDatabase
 import org.koitharu.kotatsu.core.model.MangaHistory
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -27,6 +28,7 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.calculateTimeAgo
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
+import org.koitharu.kotatsu.details.data.DetailsNavigationCache
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.history.domain.HistoryListQuickFilter
 import org.koitharu.kotatsu.history.domain.MarkAsReadUseCase
@@ -65,6 +67,8 @@ class HistoryListViewModel @Inject constructor(
 	private val mangaListMapper: MangaListMapper,
 	private val markAsReadUseCase: MarkAsReadUseCase,
 	private val quickFilter: HistoryListQuickFilter,
+	private val database: MangaDatabase,
+	private val detailsNavigationCache: DetailsNavigationCache,
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener by quickFilter {
@@ -106,6 +110,18 @@ class HistoryListViewModel @Inject constructor(
 		started = SharingStarted.Eagerly,
 		initialValue = LocalDate.now(),
 	)
+
+	/**
+	 * local_index is part of the SQL predicate for History's Downloaded filter. Observe the table
+	 * directly so adding/removing on-device files re-runs the query instead of only remapping old rows.
+	 * The same invalidation also drops process-local Details snapshots that may contain stale chapters.
+	 */
+	private val localIndexChanges = database.invalidationTracker.createFlow(
+		"local_index",
+		emitInitialState = true,
+	).onEach {
+		detailsNavigationCache.clear()
+	}
 
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val isPaginationReady = AtomicBoolean(false)
@@ -191,14 +207,12 @@ class HistoryListViewModel @Inject constructor(
 		quickFilter.appliedOptions.combineWithSettings(),
 		limit,
 		currentDate,
-	) { order, filters, limit, today ->
+		localIndexChanges,
+	) { order, filters, limit, _, _ ->
 		isPaginationReady.set(false)
-		val zone = ZoneId.systemDefault()
-		val minUpdatedAt = today.minusDays(HISTORY_MAX_DAYS.toLong())
-			.atStartOfDay(zone)
-			.toInstant()
-			.toEpochMilli()
-		repository.observeAllWithHistory(order, filters, limit, minUpdatedAt)
+		// HISTORY_MAX_DAYS limits only the human-readable date labels below. Never use it to prune
+		// the database query: pagination must remain able to reach the user's complete history.
+		repository.observeAllWithHistory(order, filters, limit)
 	}.flattenLatest()
 
 	private suspend fun mapList(
