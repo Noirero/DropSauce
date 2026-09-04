@@ -25,6 +25,7 @@ import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.domain.MangaListMapper
 import org.koitharu.kotatsu.list.domain.QuickFilterListener
 import org.koitharu.kotatsu.list.ui.model.EmptyState
+import org.koitharu.kotatsu.list.ui.model.ListHeader
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.MangaListModel
 import org.koitharu.kotatsu.list.ui.model.QuickFilter
@@ -36,6 +37,7 @@ import org.koitharu.kotatsu.local.domain.DeleteLocalMangaUseCase
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.remotelist.ui.RemoteListViewModel
+import java.io.File
 import javax.inject.Inject
 
 internal const val LOCAL_LIBRARY_TIP_KEY = "local_library"
@@ -88,6 +90,12 @@ class LocalListViewModel @Inject constructor(
 		if (showInlineFilter) {
 			createFilterHeader(maxCount = 16)?.let {
 				list.add(0, it)
+			}
+		}
+		if (list.any { it is MangaListModel }) {
+			val storageOverview = createStorageOverview()
+			if (storageOverview.isNotEmpty()) {
+				list.addAll(0, storageOverview)
 			}
 		}
 		list.add(
@@ -182,6 +190,41 @@ class LocalListViewModel @Inject constructor(
 			textSecondary = R.string.text_local_holder_secondary,
 			actionStringRes = R.string._import,
 		)
+	}
+
+	private suspend fun createStorageOverview(): List<ListHeader> {
+		val configuredRoots = localStorageManager.getConfiguredDirs().toList()
+		if (configuredRoots.isEmpty()) {
+			return emptyList()
+		}
+		val displayNames = LinkedHashMap<File, String>(configuredRoots.size)
+		for (root in configuredRoots) {
+			displayNames[root] = localStorageManager.getDirectoryDisplayName(root, isFullPath = false)
+		}
+		val duplicateNames = displayNames.values.groupingBy { it }.eachCount()
+		val rootsBySpecificity = configuredRoots.sortedByDescending { it.absolutePath.length }
+		val counts = HashMap<File, Int>()
+		for (localManga in localMangaIndex.getAll()) {
+			val file = localManga.manga.url.toUriOrNull()?.toFileOrNull() ?: continue
+			val root = rootsBySpecificity.firstOrNull { file.isInside(it) } ?: continue
+			counts[root] = counts.getOrDefault(root, 0) + 1
+		}
+		return configuredRoots.mapNotNull { root ->
+			val count = counts[root] ?: return@mapNotNull null
+			val shortName = displayNames.getValue(root)
+			val displayName = if (duplicateNames[shortName] == 1) {
+				shortName
+			} else {
+				localStorageManager.getDirectoryDisplayName(root, isFullPath = true)
+			}
+			ListHeader(text = "($count) $displayName")
+		}
+	}
+
+	private fun File.isInside(root: File): Boolean {
+		val rootPath = root.absolutePath.trimEnd(File.separatorChar)
+		val filePath = absolutePath
+		return filePath == rootPath || filePath.startsWith(rootPath + File.separator)
 	}
 
 	private suspend fun createFilterHeader(maxCount: Int): QuickFilter? {
