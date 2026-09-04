@@ -1,13 +1,36 @@
 package org.koitharu.kotatsu.favourites.ui.container
 
+import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.RippleDrawable
+import android.os.Build
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ImageSpan
+import android.view.Gravity
+import android.view.View
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.drawable.DrawableCompat
+import com.google.android.material.shape.MaterialShapeDrawable
+import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator.TabConfigurationStrategy
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.ui.util.PopupMenuMediator
+import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
+import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
+import java.util.WeakHashMap
 import kotlin.math.roundToInt
+import com.google.android.material.R as materialR
 
 class FavouritesTabConfigurationStrategy(
 	private val adapter: FavouritesContainerAdapter,
@@ -15,17 +38,128 @@ class FavouritesTabConfigurationStrategy(
 	private val router: AppRouter,
 ) : TabConfigurationStrategy {
 
+	private val baseBackgrounds = WeakHashMap<View, Drawable?>()
+
 	override fun onConfigureTab(tab: TabLayout.Tab, position: Int) {
 		val item = adapter.getItem(position)
-		tab.text = item.title ?: tab.view.context.getString(R.string.all_favourites)
+		val view = tab.view
+		if (!baseBackgrounds.containsKey(view)) baseBackgrounds[view] = view.background
+		val title = item.title ?: view.context.getString(R.string.all_favourites)
+		val style = systemStyle(item.id)
+		if (style == null) {
+			view.setBackgroundKeepingPadding(baseBackgrounds[view])
+			tab.text = title
+		} else {
+			val separator = isLastSystemTab(position)
+			view.setBackgroundKeepingPadding(createSystemBackground(view.context, style, separator))
+			tab.text = createSystemTitle(view.context, title, style)
+		}
 		tab.tag = item
 		updateFavouriteTabBadge(tab, item.count, item.count > 0)
 		if (item.id != LOCAL_FAVOURITES_CATEGORY_ID && item.id != DOWNLOADED_FAVOURITES_CATEGORY_ID) {
 			PopupMenuMediator(
-				FavouriteTabPopupMenuProvider(tab.view.context, router, viewModel, item.id),
-			).attach(tab.view)
+				FavouriteTabPopupMenuProvider(view.context, router, viewModel, item.id),
+			).attach(view)
 		}
 	}
+
+	private fun isLastSystemTab(position: Int): Boolean {
+		val current = adapter.getItem(position).id
+		val next = position + 1
+		return current.isSystemCategory() && next < adapter.itemCount && !adapter.getItem(next).id.isSystemCategory()
+	}
+
+	private fun createSystemBackground(context: Context, style: SystemStyle, separator: Boolean): Drawable {
+		val density = context.resources.displayMetrics.density
+		val surface = context.getThemeColor(materialR.attr.colorSurface, Color.TRANSPARENT)
+		val container = context.getThemeColor(style.containerAttr, surface)
+		val accent = context.getThemeColor(style.accentAttr, container)
+		val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
+		val shape = MaterialShapeDrawable(
+			ShapeAppearanceModel.builder().setAllCornerSizes(18f * density).build(),
+		).apply {
+			fillColor = ColorStateList(
+				states,
+				intArrayOf(
+					ColorUtils.blendARGB(surface, container, 0.82f),
+					ColorUtils.blendARGB(surface, container, 0.28f),
+				),
+			)
+			setStroke(
+				1f * density,
+				ColorStateList(
+					states,
+					intArrayOf(
+						ColorUtils.blendARGB(surface, accent, 0.78f),
+						ColorUtils.blendARGB(surface, accent, 0.34f),
+					),
+				),
+			)
+		}
+		val horizontal = (3f * density).roundToInt()
+		val vertical = (5f * density).roundToInt()
+		val pill = InsetDrawable(shape, horizontal, vertical, horizontal + if (separator) (10f * density).roundToInt() else 0, vertical)
+		val content = if (separator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			val divider = GradientDrawable().apply {
+				setColor(ColorUtils.blendARGB(surface, accent, 0.45f))
+			}
+			LayerDrawable(arrayOf(pill, divider)).apply {
+				setLayerSize(1, (1f * density).roundToInt().coerceAtLeast(1), (22f * density).roundToInt())
+				setLayerGravity(1, Gravity.END or Gravity.CENTER_VERTICAL)
+				setLayerInsetEnd(1, (2f * density).roundToInt())
+			}
+		} else {
+			pill
+		}
+		return RippleDrawable(
+			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, 36)),
+			content,
+			null,
+		)
+	}
+
+	private fun createSystemTitle(context: Context, title: CharSequence, style: SystemStyle): CharSequence {
+		val icon = ContextCompat.getDrawable(context, style.iconRes)?.let { drawable ->
+			DrawableCompat.wrap(drawable.mutate()).also {
+				DrawableCompat.setTint(it, context.getThemeColor(style.accentAttr, Color.GRAY))
+				val size = (16f * context.resources.displayMetrics.density).roundToInt()
+				it.setBounds(0, 0, size, size)
+			}
+		} ?: return title
+		return SpannableStringBuilder().apply {
+			append('\uFFFC')
+			setSpan(
+				ImageSpan(icon, if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ImageSpan.ALIGN_CENTER else ImageSpan.ALIGN_BOTTOM),
+				0,
+				1,
+				Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+			)
+			append(' ').append(title)
+		}
+	}
+
+	private fun systemStyle(categoryId: Long): SystemStyle? = when (categoryId) {
+		NO_ID -> SystemStyle(R.drawable.ic_heart_outline, materialR.attr.colorPrimaryContainer, materialR.attr.colorPrimary)
+		DOWNLOADED_FAVOURITES_CATEGORY_ID ->
+			SystemStyle(R.drawable.ic_storage, materialR.attr.colorSecondaryContainer, materialR.attr.colorSecondary)
+		LOCAL_FAVOURITES_CATEGORY_ID ->
+			SystemStyle(R.drawable.ic_folder, materialR.attr.colorTertiaryContainer, materialR.attr.colorTertiary)
+		else -> null
+	}
+
+	private fun Long.isSystemCategory() =
+		this == NO_ID || this == DOWNLOADED_FAVOURITES_CATEGORY_ID || this == LOCAL_FAVOURITES_CATEGORY_ID
+
+	private data class SystemStyle(val iconRes: Int, val containerAttr: Int, val accentAttr: Int)
+}
+
+private fun View.setBackgroundKeepingPadding(drawable: Drawable?) {
+	val start = paddingStart
+	val top = paddingTop
+	val end = paddingEnd
+	val bottom = paddingBottom
+	background = drawable
+	setPaddingRelative(start, top, end, bottom)
 }
 
 /**
