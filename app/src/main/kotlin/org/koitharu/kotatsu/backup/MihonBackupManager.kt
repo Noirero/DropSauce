@@ -62,6 +62,40 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun decodeMihonCategorySortOrder(flags: Long): ListSortOrder? {
+  val isAscending = flags and MIHON_CATEGORY_SORT_DIRECTION_MASK != 0L
+  return when (flags and MIHON_CATEGORY_SORT_TYPE_MASK) {
+    MIHON_SORT_ALPHABETICAL -> if (isAscending) ListSortOrder.ALPHABETIC else ListSortOrder.ALPHABETIC_REVERSE
+    MIHON_SORT_LAST_READ -> if (isAscending) ListSortOrder.LONG_AGO_READ else ListSortOrder.LAST_READ
+    MIHON_SORT_UNREAD_COUNT -> if (isAscending) ListSortOrder.UNREAD_COUNT_ASC else ListSortOrder.UNREAD_COUNT
+    MIHON_SORT_TOTAL_CHAPTERS -> if (isAscending) ListSortOrder.TOTAL_CHAPTERS_ASC else ListSortOrder.TOTAL_CHAPTERS
+    MIHON_SORT_LATEST_CHAPTER -> if (isAscending) ListSortOrder.LATEST_CHAPTER_ASC else ListSortOrder.LATEST_CHAPTER
+    MIHON_SORT_DATE_ADDED -> if (isAscending) ListSortOrder.OLDEST else ListSortOrder.NEWEST
+    // Current Mihon sorts with no exact DropSauce equivalent. Returning null is deliberate:
+    // existing categories keep their local sort, while newly-created categories use the explicit
+    // alphabetical fallback below instead of silently pretending these values mean NEWEST.
+    MIHON_SORT_LAST_UPDATE,
+    MIHON_SORT_CHAPTER_FETCH_DATE,
+    MIHON_SORT_TRACKER_MEAN,
+    MIHON_SORT_RANDOM,
+    -> null
+    else -> null
+  }
+}
+
+private const val MIHON_CATEGORY_SORT_TYPE_MASK = 0b00111100L
+private const val MIHON_CATEGORY_SORT_DIRECTION_MASK = 0b01000000L
+private const val MIHON_SORT_ALPHABETICAL = 0b00000000L
+private const val MIHON_SORT_LAST_READ = 0b00000100L
+private const val MIHON_SORT_LAST_UPDATE = 0b00001000L
+private const val MIHON_SORT_UNREAD_COUNT = 0b00001100L
+private const val MIHON_SORT_TOTAL_CHAPTERS = 0b00010000L
+private const val MIHON_SORT_LATEST_CHAPTER = 0b00010100L
+private const val MIHON_SORT_CHAPTER_FETCH_DATE = 0b00011000L
+private const val MIHON_SORT_DATE_ADDED = 0b00011100L
+private const val MIHON_SORT_TRACKER_MEAN = 0b00100000L
+private const val MIHON_SORT_RANDOM = 0b00111100L
+
 @Singleton
 class MihonBackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -164,7 +198,7 @@ class MihonBackupManager @Inject constructor(
       backupCategories.sortedBy { it.order }.forEach { category ->
         val title = category.name.trim()
         if (title.isEmpty()) return@forEach
-        val sortOrder = decodeCategorySortOrder(category.flags)
+        val sortOrder = decodeMihonCategorySortOrder(category.flags)
         typesByOrder[category.order].orEmpty().forEach { type ->
           idByOrderAndType[category.order to type] = categoryIdForTitle(title, type, sortOrder)
         }
@@ -203,7 +237,9 @@ class MihonBackupManager @Inject constructor(
           createdAt = System.currentTimeMillis(),
           sortKey = dao.getNextSortKey(),
           title = title,
-          order = (sortOrder ?: ListSortOrder.NEWEST).name,
+          // Unsupported Mihon sorts have no exact DropSauce equivalent. Use Mihon's default
+          // alphabetical order for a new category; existing categories keep their local order above.
+          order = (sortOrder ?: ListSortOrder.ALPHABETIC).name,
           track = true,
           downloadNewChapters = false,
           isVisibleInLibrary = true,
@@ -641,7 +677,7 @@ class MihonBackupManager @Inject constructor(
       }
     }
     pending.forEach { item ->
-      item.scrobblings.forEach {
+      item.scrobbblings.forEach {
         db.getScrobblingDao().upsert(it)
         accumulator.restoredTrackingCount += 1
       }
@@ -831,19 +867,6 @@ class MihonBackupManager @Inject constructor(
     else -> null
   }
 
-  private fun decodeCategorySortOrder(flags: Long): ListSortOrder {
-    val isAscending = flags and MIHON_CATEGORY_SORT_DIRECTION_MASK != 0L
-    return when (flags and MIHON_CATEGORY_SORT_TYPE_MASK) {
-      MIHON_SORT_ALPHABETICAL -> if (isAscending) ListSortOrder.ALPHABETIC else ListSortOrder.ALPHABETIC_REVERSE
-      MIHON_SORT_LAST_READ -> if (isAscending) ListSortOrder.LONG_AGO_READ else ListSortOrder.LAST_READ
-      MIHON_SORT_UNREAD_COUNT -> if (isAscending) ListSortOrder.UNREAD_COUNT_ASC else ListSortOrder.UNREAD_COUNT
-      MIHON_SORT_TOTAL_CHAPTERS -> if (isAscending) ListSortOrder.TOTAL_CHAPTERS_ASC else ListSortOrder.TOTAL_CHAPTERS
-      MIHON_SORT_LATEST_CHAPTER -> if (isAscending) ListSortOrder.LATEST_CHAPTER_ASC else ListSortOrder.LATEST_CHAPTER
-      MIHON_SORT_DATE_ADDED -> if (isAscending) ListSortOrder.OLDEST else ListSortOrder.NEWEST
-      else -> ListSortOrder.NEWEST
-    }
-  }
-
   private fun parseSourceIdFromPreferenceKey(key: String): Long? {
     return key.substringAfterLast('_').toLongOrNull()
       ?: key.removePrefix("source_").substringBefore(':').toLongOrNull()
@@ -935,14 +958,5 @@ class MihonBackupManager @Inject constructor(
   private companion object {
     const val DEFAULT_CATEGORY_TITLE = "Default"
     const val MANGA_NOTES_PREFERENCES = "manga_notes"
-
-    const val MIHON_CATEGORY_SORT_TYPE_MASK = 0b00111100L
-    const val MIHON_CATEGORY_SORT_DIRECTION_MASK = 0b01000000L
-    const val MIHON_SORT_ALPHABETICAL = 0b00000000L
-    const val MIHON_SORT_LAST_READ = 0b00000100L
-    const val MIHON_SORT_UNREAD_COUNT = 0b00001100L
-    const val MIHON_SORT_TOTAL_CHAPTERS = 0b00010000L
-    const val MIHON_SORT_LATEST_CHAPTER = 0b00010100L
-    const val MIHON_SORT_DATE_ADDED = 0b00011100L
   }
 }
