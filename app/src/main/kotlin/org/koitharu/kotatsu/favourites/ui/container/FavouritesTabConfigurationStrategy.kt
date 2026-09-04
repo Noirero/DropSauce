@@ -30,6 +30,7 @@ import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import java.util.WeakHashMap
 import kotlin.math.roundToInt
+import androidx.appcompat.R as appcompatR
 import com.google.android.material.R as materialR
 
 class FavouritesTabConfigurationStrategy(
@@ -139,11 +140,11 @@ class FavouritesTabConfigurationStrategy(
 	}
 
 	private fun systemStyle(categoryId: Long): SystemStyle? = when (categoryId) {
-		NO_ID -> SystemStyle(R.drawable.ic_heart_outline, materialR.attr.colorPrimaryContainer, materialR.attr.colorPrimary)
+		NO_ID -> SystemStyle(R.drawable.ic_heart_outline, materialR.attr.colorPrimaryContainer, appcompatR.attr.colorPrimary)
 		DOWNLOADED_FAVOURITES_CATEGORY_ID ->
 			SystemStyle(R.drawable.ic_storage, materialR.attr.colorSecondaryContainer, materialR.attr.colorSecondary)
 		LOCAL_FAVOURITES_CATEGORY_ID ->
-			SystemStyle(R.drawable.ic_folder, materialR.attr.colorTertiaryContainer, materialR.attr.colorTertiary)
+			SystemStyle(R.drawable.ic_folder_file, materialR.attr.colorTertiaryContainer, materialR.attr.colorTertiary)
 		else -> null
 	}
 
