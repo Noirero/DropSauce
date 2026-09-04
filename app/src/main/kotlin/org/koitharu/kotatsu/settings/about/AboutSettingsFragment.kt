@@ -226,7 +226,7 @@ private fun AboutScreen(
 						icon = R.drawable.ic_discord,
 						iconColors = discordColors,
 						shape = pos.shape,
-						onClick = { onOpenLink(R.string.url_discord_web, R.string.discord) },
+						onClick = { onOpenLink(R.string.url_miyorare_discord, R.string.discord) },
 					)
 				}
 			}
