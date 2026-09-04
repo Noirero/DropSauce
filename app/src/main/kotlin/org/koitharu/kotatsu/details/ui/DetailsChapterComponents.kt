@@ -1,11 +1,13 @@
 package org.koitharu.kotatsu.details.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -35,11 +38,13 @@ import coil3.ImageLoader
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
+import org.koitharu.kotatsu.core.ui.widgets.ChipsView
+import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.details.ui.model.ChapterListItem
 import org.koitharu.kotatsu.details.ui.model.HistoryInfo
-import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.model.MangaTag
 
 @Composable
 internal fun ModernDetailsHero(
@@ -47,6 +52,7 @@ internal fun ModernDetailsHero(
 	manga: Manga,
 	details: MangaDetails?,
 	sourceTitle: String?,
+	tags: List<ChipsView.ChipModel>,
 	accent: Color,
 	imageLoader: ImageLoader,
 	coverUrl: String?,
@@ -78,7 +84,11 @@ internal fun ModernDetailsHero(
 			)
 			Spacer(Modifier.height(20.dp))
 			HeroTexts(centered = true, manga = manga, accent = accent, actions = actions)
-			Spacer(Modifier.height(16.dp))
+			if (tags.isNotEmpty()) {
+				Spacer(Modifier.height(12.dp))
+				HeroTagPills(centered = true, tags = tags, accent = accent, onTagClick = actions.onTagClick)
+			}
+			Spacer(Modifier.height(12.dp))
 			StatPills(
 				centered = true,
 				showContentRating = true,
@@ -111,7 +121,11 @@ internal fun ModernDetailsHero(
 			)
 			Column(modifier = Modifier.weight(1f)) {
 				HeroTexts(centered = false, manga = manga, accent = accent, actions = actions)
-				Spacer(Modifier.height(12.dp))
+				if (tags.isNotEmpty()) {
+					Spacer(Modifier.height(10.dp))
+					HeroTagPills(centered = false, tags = tags, accent = accent, onTagClick = actions.onTagClick)
+				}
+				Spacer(Modifier.height(10.dp))
 				StatPills(
 					centered = false,
 					showContentRating = false,
@@ -120,6 +134,46 @@ internal fun ModernDetailsHero(
 					accent = accent,
 					imageLoader = imageLoader,
 					onSourceClick = { actions.onSourceClick(manga) },
+				)
+			}
+		}
+	}
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HeroTagPills(
+	centered: Boolean,
+	tags: List<ChipsView.ChipModel>,
+	accent: Color,
+	onTagClick: (MangaTag) -> Unit,
+) {
+	FlowRow(
+		modifier = Modifier.fillMaxWidth(),
+		horizontalArrangement = if (centered) {
+			Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+		} else {
+			Arrangement.spacedBy(8.dp)
+		},
+		verticalArrangement = Arrangement.spacedBy(8.dp),
+	) {
+		tags.forEach { tag ->
+			val mangaTag = tag.data as? MangaTag
+			val warningColor = if (tag.tint != 0) colorResource(tag.tint) else null
+			val tagColor = warningColor ?: accent
+			Surface(
+				shape = RoundedCornerShape(13.dp),
+				color = tagColor.copy(alpha = 0.16f),
+				onClick = { if (mangaTag != null) onTagClick(mangaTag) },
+			) {
+				Text(
+					text = tag.title?.toString().orEmpty(),
+					style = MaterialTheme.typography.labelMedium,
+					fontWeight = FontWeight.SemiBold,
+					color = tagColor,
+					maxLines = 1,
+					overflow = TextOverflow.Ellipsis,
+					modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
 				)
 			}
 		}

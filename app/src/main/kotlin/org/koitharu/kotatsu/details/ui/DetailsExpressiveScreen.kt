@@ -145,6 +145,7 @@ fun DetailsExpressiveScreen(
 							manga = manga,
 							details = details,
 							sourceTitle = sourceTitle,
+							tags = tags,
 							accent = accentColor,
 							imageLoader = imageLoader,
 							coverUrl = coverUrl,
@@ -193,10 +194,6 @@ fun DetailsExpressiveScreen(
 							details = details,
 							accent = accentColor,
 						)
-					}
-
-					item(contentType = "tags") {
-						TagsSection(tags = tags, accent = accentColor, onTagClick = actions.onTagClick)
 					}
 
 					if (historyInfo.totalChapters > 0 || chapters.isNotEmpty()) {

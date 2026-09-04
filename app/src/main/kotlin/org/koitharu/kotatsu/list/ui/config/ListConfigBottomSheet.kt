@@ -32,11 +32,12 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.ListMode
 import org.koitharu.kotatsu.core.ui.sheet.BaseAdaptiveSheet
+import org.koitharu.kotatsu.core.ui.sheet.SheetChip
+import org.koitharu.kotatsu.core.ui.sheet.SheetChips
 import org.koitharu.kotatsu.core.ui.sheet.SheetContentPadding
 import org.koitharu.kotatsu.core.ui.sheet.SheetSection
 import org.koitharu.kotatsu.core.ui.sheet.SheetSegment
 import org.koitharu.kotatsu.core.ui.sheet.SheetSegmentedSelector
-import org.koitharu.kotatsu.core.ui.sheet.SheetSelectorField
 import org.koitharu.kotatsu.core.ui.sheet.SheetSwitchRow
 import org.koitharu.kotatsu.core.util.ext.consume
 import org.koitharu.kotatsu.databinding.SheetListModeBinding
@@ -228,12 +229,14 @@ class ListConfigBottomSheet : BaseAdaptiveSheet<SheetListModeBinding>() {
 					}
 				}
 				SheetSection(title = stringResource(R.string.favourites_category_navigation)) {
-					SheetSelectorField(
-						current = categoryNavigationLabels[
-							categoryNavigationModes.indexOf(categoryNavigationMode).coerceAtLeast(0)
-						],
-						items = categoryNavigationLabels,
-						onSelect = { index ->
+					SheetChips(
+						chips = categoryNavigationModes.mapIndexed { index, navigationMode ->
+							SheetChip(
+								title = categoryNavigationLabels[index],
+								isChecked = navigationMode == categoryNavigationMode,
+							)
+						},
+						onClick = { index ->
 							val value = categoryNavigationModes[index]
 							categoryNavigationMode = value
 							viewModel.categoryNavigationMode = value
