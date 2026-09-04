@@ -7,13 +7,6 @@ name: Beta Build
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
   workflow_dispatch:
-  # One-shot marker trigger used only for this requested build. It is removed immediately
-  # after the run starts so regular beta commits remain manual-only.
-  push:
-    branches:
-      - beta
-    paths:
-      - '.github/BETA_BUILD_NOW'
 
 permissions:
   contents: read
