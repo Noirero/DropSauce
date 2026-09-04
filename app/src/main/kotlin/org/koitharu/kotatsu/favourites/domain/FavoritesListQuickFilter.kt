@@ -6,6 +6,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -16,20 +17,27 @@ import org.koitharu.kotatsu.list.ui.model.ExtensionFilter
 import org.koitharu.kotatsu.mihon.MihonExtensionManager
 
 @OptIn(ExperimentalForInheritanceCoroutinesApi::class)
-private class DownloadedShelfFilterState(
-	private val delegate: StateFlow<Set<ListFilterOption>>,
-) : StateFlow<Set<ListFilterOption>> by delegate {
+private class FavouriteShelfFilterState(
+	private val delegate: StateFlow<FavouriteQuickFilterStore.Snapshot>,
+	private val contentType: StateFlow<FavouriteContentType>,
+	private val hideDownloaded: Boolean,
+) : StateFlow<Set<ListFilterOption>> {
 
 	override val value: Set<ListFilterOption>
-		get() = delegate.value - ListFilterOption.Downloaded
+		get() = filter(delegate.value.filtersFor(contentType.value))
 
 	override val replayCache: List<Set<ListFilterOption>>
 		get() = listOf(value)
 
-	override suspend fun collect(collector: FlowCollector<Set<ListFilterOption>>): Nothing =
-		delegate.collect(
-			FlowCollector { filters -> collector.emit(filters - ListFilterOption.Downloaded) },
-		)
+	override suspend fun collect(collector: FlowCollector<Set<ListFilterOption>>): Nothing {
+		combine(delegate, contentType) { snapshot, type ->
+			filter(snapshot.filtersFor(type))
+		}.collect(collector)
+		error("Favourite filter state collection completed")
+	}
+
+	private fun filter(filters: Set<ListFilterOption>): Set<ListFilterOption> =
+		if (hideDownloaded) filters - ListFilterOption.Downloaded else filters
 }
 
 class FavoritesListQuickFilter @AssistedInject constructor(
@@ -37,22 +45,22 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	private val settings: AppSettings,
 	private val repository: FavouritesRepository,
 	private val filterStore: FavouriteQuickFilterStore,
+	private val contentTypeStore: FavouriteContentTypeStore,
 	networkState: NetworkState,
 	private val mihonExtensionManager: MihonExtensionManager,
 ) : MangaListQuickFilter(settings) {
 
 	private var didRefreshExtensions = false
-	private val categoryAppliedOptions: StateFlow<Set<ListFilterOption>> =
-		if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
-			DownloadedShelfFilterState(filterStore.state)
-		} else {
-			filterStore.state
-		}
+	private val categoryAppliedOptions: StateFlow<Set<ListFilterOption>> = FavouriteShelfFilterState(
+		delegate = filterStore.state,
+		contentType = contentTypeStore.selectedType,
+		hideDownloaded = categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID,
+	)
 
 	init {
 		isStateFilterEnabled = false
 		if (!networkState.value) {
-			filterStore.set(ListFilterOption.Downloaded, true)
+			filterStore.set(contentTypeStore.selectedType.value, ListFilterOption.Downloaded, true)
 		}
 	}
 
@@ -60,15 +68,15 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 		get() = categoryAppliedOptions
 
 	override fun setFilterOption(option: ListFilterOption, isApplied: Boolean) {
-		filterStore.set(option, isApplied)
+		filterStore.set(contentTypeStore.selectedType.value, option, isApplied)
 	}
 
 	override fun toggleFilterOption(option: ListFilterOption) {
-		filterStore.toggle(option)
+		filterStore.toggle(contentTypeStore.selectedType.value, option)
 	}
 
 	override fun clearFilter() {
-		filterStore.clear()
+		filterStore.clear(contentTypeStore.selectedType.value)
 	}
 
 	override suspend fun getAvailableFilterOptions(): List<ListFilterOption> = emptyList()

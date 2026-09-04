@@ -9,32 +9,68 @@ import org.koitharu.kotatsu.list.domain.ListFilterOption
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Session-wide non-source quick filters for Favourites category pages. */
+/** Session-wide quick filters for Favourites category pages. */
 @Singleton
 class FavouriteQuickFilterStore @Inject constructor(
 	networkState: NetworkState,
 ) {
 
-	private val mutableState = MutableStateFlow<Set<ListFilterOption>>(
-		if (networkState.value) emptySet() else setOf(ListFilterOption.Downloaded),
-	)
-	val state: StateFlow<Set<ListFilterOption>> = mutableState.asStateFlow()
+	data class Snapshot(
+		val shared: Set<ListFilterOption> = emptySet(),
+		val typed: Map<FavouriteContentType, Set<ListFilterOption>> = emptyMap(),
+	) {
+		fun filtersFor(type: FavouriteContentType): Set<ListFilterOption> =
+			shared + typed[type].orEmpty()
+	}
 
-	fun set(option: ListFilterOption, isSelected: Boolean) {
+	private val mutableState = MutableStateFlow(
+		Snapshot(
+			shared = if (networkState.value) emptySet() else setOf(ListFilterOption.Downloaded),
+		),
+	)
+	val state: StateFlow<Snapshot> = mutableState.asStateFlow()
+
+	fun set(
+		type: FavouriteContentType,
+		option: ListFilterOption,
+		isSelected: Boolean,
+	) {
 		mutableState.update { current ->
-			if (!isSelected) {
-				current - option
+			if (option.isTypeSpecific()) {
+				val selected = current.typed[type].orEmpty().updateSelection(option, isSelected)
+				val typed = if (selected.isEmpty()) current.typed - type else current.typed + (type to selected)
+				if (typed == current.typed) current else current.copy(typed = typed)
 			} else {
-				current.filterNot { it.groupKey == option.groupKey }.toSet() + option
+				val shared = current.shared.updateSelection(option, isSelected)
+				if (shared == current.shared) current else current.copy(shared = shared)
 			}
 		}
 	}
 
-	fun toggle(option: ListFilterOption) {
-		set(option, option !in mutableState.value)
+	fun toggle(type: FavouriteContentType, option: ListFilterOption) {
+		val isSelected = option in mutableState.value.filtersFor(type)
+		set(type, option, !isSelected)
 	}
 
-	fun clear() {
-		mutableState.value = emptySet()
+	fun clear(type: FavouriteContentType) {
+		mutableState.update { current ->
+			if (current.shared.isEmpty() && current.typed[type].isNullOrEmpty()) {
+				current
+			} else {
+				current.copy(shared = emptySet(), typed = current.typed - type)
+			}
+		}
 	}
+
+	private fun Set<ListFilterOption>.updateSelection(
+		option: ListFilterOption,
+		isSelected: Boolean,
+	): Set<ListFilterOption> = if (!isSelected) {
+		this - option
+	} else {
+		filterNot { it.groupKey == option.groupKey }.toSet() + option
+	}
+
+	private fun ListFilterOption.isTypeSpecific(): Boolean =
+		this is ListFilterOption.ReadingProgress || this is ListFilterOption.State
 }
