@@ -677,7 +677,7 @@ class MihonBackupManager @Inject constructor(
       }
     }
     pending.forEach { item ->
-      item.scrobbblings.forEach {
+      item.scrobblings.forEach {
         db.getScrobblingDao().upsert(it)
         accumulator.restoredTrackingCount += 1
       }
