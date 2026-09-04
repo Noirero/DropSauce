@@ -44,7 +44,21 @@ internal object ExtensionFilterPopup {
 		val selectedSourceNames = filter.selectedOptions.mapTo(HashSet()) { it.mangaSource.name }
 		val resetButton = createResetButton(context)
 		var popupWindow: PopupWindow? = null
-		val dismissPopup = { popupWindow?.dismiss(); Unit }
+		var selectedProgress: ListFilterOption? = filter.readingProgress
+		var selectedPublicationState: ListFilterOption? = filter.publicationState
+		var progressGroup: ChoiceGroup? = null
+		var publicationGroup: ChoiceGroup? = null
+		var allSourcesRow: MaterialRadioButton? = null
+
+		fun updateResetState() {
+			val isEnabled = if (filter.isAdvanced) {
+				selectedProgress != null || selectedPublicationState != null || selectedSourceNames.isNotEmpty()
+			} else {
+				selectedSourceNames.isNotEmpty()
+			}
+			updateResetButton(resetButton, isEnabled)
+		}
+
 		val content = LinearLayout(context).apply {
 			orientation = LinearLayout.VERTICAL
 			layoutParams = ViewGroup.LayoutParams(popupWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -56,27 +70,29 @@ internal object ExtensionFilterPopup {
 
 			if (filter.isAdvanced) {
 				addView(createSectionHeader(context, R.string.favorites_reading_progress))
-				addChoiceRows(
+				progressGroup = addChoiceRows(
 					context = context,
 					selected = filter.readingProgress,
 					options = ListFilterOption.ReadingProgress.entries.toList(),
 					onSelection = { option ->
 						listener.onFilterOptionsCleared(ListFilterOption.ReadingProgress.entries.toList())
 						if (option != null) listener.onFilterOptionChanged(option, true)
-						dismissPopup()
+						selectedProgress = option
+						updateResetState()
 					},
 				)
 
 				addView(createSectionHeader(context, R.string.favorites_publication_status))
 				val stateOptions = ListFilterOption.State.CYCLE.map { ListFilterOption.State(it) }
-				addChoiceRows(
+				publicationGroup = addChoiceRows(
 					context = context,
 					selected = filter.publicationState,
 					options = stateOptions,
 					onSelection = { option ->
 						listener.onFilterOptionsCleared(stateOptions)
 						if (option != null) listener.onFilterOptionChanged(option, true)
-						dismissPopup()
+						selectedPublicationState = option
+						updateResetState()
 					},
 				)
 			}
@@ -86,12 +102,14 @@ internal object ExtensionFilterPopup {
 			}
 			if (filter.options.isNotEmpty() || filter.selectedOptions.isNotEmpty()) {
 				if (filter.isAdvanced) {
-					addView(createAllSourcesRow(context, selectedSourceNames.isEmpty()) {
+					allSourcesRow = createAllSourcesRow(context, selectedSourceNames.isEmpty()) {
 						selectedSourceNames.clear()
 						rows.forEach { it.checkBox.isChecked = false }
 						listener.onFilterOptionsCleared(filter.options + filter.selectedOptions)
-						dismissPopup()
-					})
+						allSourcesRow?.isChecked = true
+						updateResetState()
+					}
+					addView(allSourcesRow)
 				}
 				for (option in filter.options) {
 					val row = createRow(
@@ -100,7 +118,8 @@ internal object ExtensionFilterPopup {
 						selectedSourceNames = selectedSourceNames,
 						listener = listener,
 						onSelectionChanged = {
-							updateResetButton(resetButton, filter.isAdvanced || selectedSourceNames.isNotEmpty())
+							allSourcesRow?.isChecked = selectedSourceNames.isEmpty()
+							updateResetState()
 						},
 					)
 					rows += row.binding
@@ -131,9 +150,20 @@ internal object ExtensionFilterPopup {
 				}
 			}
 			listener.onFilterOptionsCleared(allOptions)
-			popupWindow?.dismiss()
+			if (filter.isAdvanced) {
+				selectedProgress = null
+				selectedPublicationState = null
+				selectedSourceNames.clear()
+				progressGroup?.select(null)
+				publicationGroup?.select(null)
+				rows.forEach { it.checkBox.isChecked = false }
+				allSourcesRow?.isChecked = true
+				updateResetState()
+			} else {
+				popupWindow?.dismiss()
+			}
 		}
-		updateResetButton(resetButton, filter.isActive)
+		updateResetState()
 
 		val scrollView = MaxHeightScrollView(context).apply {
 			maxHeight = context.resources.resolveDp(520)
@@ -154,11 +184,21 @@ internal object ExtensionFilterPopup {
 		selected: ListFilterOption?,
 		options: List<ListFilterOption>,
 		onSelection: (ListFilterOption?) -> Unit,
-	) {
-		addView(createChoiceRow(context, R.string.favorites_all, selected == null) { onSelection(null) })
-		for (option in options) {
-			addView(createChoiceRow(context, option.titleResId, selected == option) { onSelection(option) })
+	): ChoiceGroup {
+		val group = ChoiceGroup()
+		fun addChoice(option: ListFilterOption?, @StringRes titleResId: Int) {
+			val row = createChoiceRow(context, titleResId, selected == option) {
+				group.select(option)
+				onSelection(option)
+			}
+			group.rows += option to row
+			addView(row)
 		}
+		addChoice(null, R.string.favorites_all)
+		for (option in options) {
+			addChoice(option, option.titleResId)
+		}
+		return group
 	}
 
 	private fun createChoiceRow(
@@ -166,7 +206,7 @@ internal object ExtensionFilterPopup {
 		@StringRes titleResId: Int,
 		isChecked: Boolean,
 		onClick: () -> Unit,
-	): View = MaterialRadioButton(context).apply {
+	): MaterialRadioButton = MaterialRadioButton(context).apply {
 		setText(titleResId)
 		this.isChecked = isChecked
 		minimumHeight = context.resources.getDimensionPixelSize(R.dimen.menu_popup_item_min_height)
@@ -179,8 +219,11 @@ internal object ExtensionFilterPopup {
 		setOnClickListener { onClick() }
 	}
 
-	private fun createAllSourcesRow(context: Context, isChecked: Boolean, onClick: () -> Unit): View =
-		createChoiceRow(context, R.string.favorites_all, isChecked, onClick)
+	private fun createAllSourcesRow(
+		context: Context,
+		isChecked: Boolean,
+		onClick: () -> Unit,
+	): MaterialRadioButton = createChoiceRow(context, R.string.favorites_all, isChecked, onClick)
 
 	private fun createUnavailableSourcesRow(context: Context): View = TextView(context).apply {
 		setText(R.string.favorites_no_sources)
@@ -333,6 +376,16 @@ internal object ExtensionFilterPopup {
 		override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
 			val resolvedHeight = if (maxHeight > 0) MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST) else heightMeasureSpec
 			super.onMeasure(widthMeasureSpec, resolvedHeight)
+		}
+	}
+
+	private class ChoiceGroup {
+		val rows = ArrayList<Pair<ListFilterOption?, MaterialRadioButton>>()
+
+		fun select(option: ListFilterOption?) {
+			for ((value, button) in rows) {
+				button.isChecked = value == option
+			}
 		}
 	}
 
