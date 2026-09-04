@@ -39,6 +39,8 @@ import org.koitharu.kotatsu.core.prefs.ColorScheme
 import org.koitharu.kotatsu.core.prefs.ListMode
 import org.koitharu.kotatsu.core.prefs.ScreenshotsPolicy
 import org.koitharu.kotatsu.core.prefs.SearchSuggestionType
+import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.util.ActivityRecreationHandle
 import org.koitharu.kotatsu.core.util.LocaleComparator
 import org.koitharu.kotatsu.core.util.ext.getLocalesConfig
@@ -222,6 +224,8 @@ private fun AppearanceScreen(
 	// Enum-backed array sources
 	val themeEntries = remember { ctx.resources.getStringArray(R.array.themes).toList() }
 	val themeValues = remember { ctx.resources.getStringArray(R.array.values_theme).toList() }
+	val visualEffectEntries = remember { VisualEffectLevel.entries.map { ctx.getString(it.titleResId) } }
+	val visualEffectValues = remember { VisualEffectLevel.entries.map { it.name } }
 
 	val listModeEntries = remember { ctx.resources.getStringArray(R.array.list_modes).toList() }
 	val listModeValues = remember { ListMode.entries.names().toList() }
@@ -257,6 +261,10 @@ private fun AppearanceScreen(
 	var colorScheme by rememberStringPref(AppSettings.KEY_COLOR_THEME, ColorScheme.default.name)
 	var theme by rememberStringPref(AppSettings.KEY_THEME, "-1")
 	var amoled by rememberBooleanPref(AppSettings.KEY_THEME_AMOLED, false)
+	var visualEffects by rememberStringPref(
+		VisualEffectPreferences.KEY_LEVEL,
+		VisualEffectLevel.BALANCED.name,
+	)
 	var uiScale by rememberIntPref(AppSettings.KEY_UI_SCALE, 100)
 	var hapticFeedback by rememberBooleanPref(AppSettings.KEY_HAPTIC_FEEDBACK, true)
 	var hideStatusBar by rememberBooleanPref(AppSettings.KEY_HIDE_STATUS_BAR, false)
@@ -338,6 +346,17 @@ private fun AppearanceScreen(
 						onCheckedChange = { amoled = it },
 						icon = R.drawable.ic_eye_off,
 						enabled = isDarkActive,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					ListSettingsItem(
+						title = stringResource(R.string.visual_effects),
+						entries = visualEffectEntries,
+						entryValues = visualEffectValues,
+						selectedValue = visualEffects,
+						onValueChange = { visualEffects = it },
+						icon = R.drawable.ic_appearance,
 						shape = pos.shape,
 					)
 				}

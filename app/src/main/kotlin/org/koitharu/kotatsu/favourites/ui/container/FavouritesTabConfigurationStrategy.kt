@@ -48,7 +48,7 @@ class FavouritesTabConfigurationStrategy(
 		val title = item.title ?: view.context.getString(R.string.all_favourites)
 		val style = systemStyle(item.id)
 		if (style == null) {
-			view.setBackgroundKeepingPadding(baseBackgrounds[view])
+			view.setBackgroundKeepingPadding(createCategoryBackground(view.context))
 			tab.text = title
 		} else {
 			val separator = isLastSystemTab(position)
@@ -69,6 +69,16 @@ class FavouritesTabConfigurationStrategy(
 		val next = position + 1
 		return current.isSystemCategory() && next < adapter.itemCount && !adapter.getItem(next).id.isSystemCategory()
 	}
+
+	private fun createCategoryBackground(context: Context): Drawable = createSystemBackground(
+		context = context,
+		style = SystemStyle(
+			iconRes = R.drawable.ic_tag,
+			containerAttr = materialR.attr.colorPrimaryContainer,
+			accentAttr = appcompatR.attr.colorPrimary,
+		),
+		separator = false,
+	)
 
 	private fun createSystemBackground(context: Context, style: SystemStyle, separator: Boolean): Drawable {
 		val density = context.resources.displayMetrics.density

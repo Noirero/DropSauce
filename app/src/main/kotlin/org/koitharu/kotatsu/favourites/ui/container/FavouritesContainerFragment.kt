@@ -1,6 +1,9 @@
 package org.koitharu.kotatsu.favourites.ui.container
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -14,6 +17,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -32,13 +36,17 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.BaseFragment
+import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 import org.koitharu.kotatsu.core.ui.util.ActionModeListener
 import org.koitharu.kotatsu.core.ui.util.RecyclerViewOwner
 import org.koitharu.kotatsu.core.ui.util.ReversibleActionObserver
 import org.koitharu.kotatsu.core.util.ext.addMenuProvider
 import org.koitharu.kotatsu.core.util.ext.centerContentOnDisplay
 import org.koitharu.kotatsu.core.util.ext.findCurrentPagerFragment
+import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.core.util.ext.recyclerView
@@ -54,6 +62,9 @@ import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment
 import org.koitharu.kotatsu.main.ui.owners.AppBarOwner
 import javax.inject.Inject
+import kotlin.math.roundToInt
+import androidx.appcompat.R as appcompatR
+import com.google.android.material.R as materialR
 
 @AndroidEntryPoint
 class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBinding>(),
@@ -64,6 +75,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 
 	@Inject lateinit var contentTypeStore: FavouriteContentTypeStore
 	@Inject lateinit var displayPreferences: FavouriteDisplayPreferences
+	@Inject lateinit var visualEffectPreferences: VisualEffectPreferences
 
 	private val viewModel: FavouritesContainerViewModel by viewModels()
 	private var inlineSearchEdit: AppCompatEditText? = null
@@ -148,6 +160,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		displayPreferences.categoryNavigationMode.observe(viewLifecycleOwner) {
 			applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
 		}
+		visualEffectPreferences.level.observe(viewLifecycleOwner, ::applyVisualFoundation)
 		addMenuProvider(
 			FavouritesContainerMenuProvider(
 				router = router,
@@ -353,6 +366,43 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		binding.buttonCategoryPicker.isEnabled = !isActionModeActive
 		binding.buttonCategoryPicker.isClickable = canTap
 		binding.buttonCategoryPicker.isFocusable = canTap
+	}
+
+	private fun applyVisualFoundation(level: VisualEffectLevel) {
+		val binding = viewBinding ?: return
+		val context = binding.root.context
+		val density = resources.displayMetrics.density
+		val surface = context.getThemeColor(materialR.attr.colorSurface, Color.TRANSPARENT)
+		val primary = context.getThemeColor(appcompatR.attr.colorPrimary, surface)
+		val headerColor = ColorUtils.blendARGB(surface, primary, level.surfaceTintFraction)
+		val outlineColor = ColorUtils.blendARGB(surface, primary, 0.55f)
+		val surfaceRadius = MiyorareVisualTokens.RADIUS_SURFACE_DP * density
+		val headerBackground = GradientDrawable().apply {
+			setColor(headerColor)
+			cornerRadii = floatArrayOf(
+				0f, 0f,
+				0f, 0f,
+				surfaceRadius, surfaceRadius,
+				surfaceRadius, surfaceRadius,
+			)
+			if (level.outlineAlpha > 0) {
+				setStroke(
+					(1f * density).roundToInt().coerceAtLeast(1),
+					ColorUtils.setAlphaComponent(outlineColor, level.outlineAlpha),
+				)
+			}
+		}
+		binding.layoutCategoryHeader.background = headerBackground
+		binding.layoutCategoryHeader.elevation = level.headerElevationDp * density
+		binding.tabs.setSelectedTabIndicatorColor(Color.TRANSPARENT)
+
+		val controlRadius = (MiyorareVisualTokens.RADIUS_CONTROL_DP * density).roundToInt()
+		binding.buttonCategoryPicker.cornerRadius = controlRadius
+		binding.buttonCategoryPicker.strokeWidth = (1f * density).roundToInt().coerceAtLeast(1)
+		binding.buttonCategoryPicker.strokeColor = ColorStateList.valueOf(
+			ColorUtils.setAlphaComponent(outlineColor, level.outlineAlpha.coerceAtLeast(48)),
+		)
+		binding.buttonCategoryPicker.iconTint = ColorStateList.valueOf(primary)
 	}
 
 	private fun updateCategoryPickerLabel(

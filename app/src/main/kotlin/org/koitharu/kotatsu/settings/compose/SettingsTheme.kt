@@ -1,7 +1,9 @@
 package org.koitharu.kotatsu.settings.compose
 
 import android.content.res.Configuration
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -14,11 +16,21 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 import org.koitharu.kotatsu.main.ui.nav.composeColorSchemeFromTheme
 
 private const val ROND_ROUNDED = 100f
+
+private val miyorareShapes = Shapes(
+	extraSmall = RoundedCornerShape(MiyorareVisualTokens.RADIUS_SMALL_DP.dp),
+	small = RoundedCornerShape(MiyorareVisualTokens.RADIUS_SMALL_DP.dp),
+	medium = RoundedCornerShape(MiyorareVisualTokens.RADIUS_CONTROL_DP.dp),
+	large = RoundedCornerShape(MiyorareVisualTokens.RADIUS_SURFACE_DP.dp),
+	extraLarge = RoundedCornerShape(MiyorareVisualTokens.RADIUS_DIALOG_DP.dp),
+)
 
 /**
  * Variable-font family that mirrors the project's `gflex_variable.ttf` with the rounded
@@ -138,5 +150,10 @@ fun DropSauceTheme(content: @Composable () -> Unit) {
 	val scheme = remember(ctx, isDark) { composeColorSchemeFromTheme(ctx, isDark) }
 	val family = GoogleSansRounded
 	val typography = bumpedTypography(family)
-	MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+	MaterialTheme(
+		colorScheme = scheme,
+		shapes = miyorareShapes,
+		typography = typography,
+		content = content,
+	)
 }

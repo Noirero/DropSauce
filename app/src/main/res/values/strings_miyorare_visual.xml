@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="visual_effects">Visual effects</string>
+	<string name="visual_effects_light">Light</string>
+	<string name="visual_effects_balanced">Balanced</string>
+	<string name="visual_effects_full">Full</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="visual_effects">Efek visual</string>
+	<string name="visual_effects_light">Ringan</string>
+	<string name="visual_effects_balanced">Seimbang</string>
+	<string name="visual_effects_full">Penuh</string>
+</resources>
