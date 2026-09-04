@@ -12,6 +12,7 @@ import org.koitharu.kotatsu.core.db.entity.toManga
 import org.koitharu.kotatsu.core.parser.MangaDataRepository
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
+import org.koitharu.kotatsu.local.data.LocalStorageManager
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
@@ -26,6 +27,7 @@ class LocalMangaIndex @Inject constructor(
 	private val db: MangaDatabase,
 	@ApplicationContext context: Context,
 	private val localMangaRepositoryProvider: Provider<LocalMangaRepository>,
+	private val localStorageManager: LocalStorageManager,
 ) : FlowCollector<LocalManga?> {
 
 	private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -58,12 +60,27 @@ class LocalMangaIndex @Inject constructor(
 	}
 
 	private suspend fun rebuildIndexLocked() {
+		val configuredRoots = localStorageManager.getConfiguredDirs()
+		val readableRoots = localStorageManager.getReadableDirs().toSet()
+		val unavailableRoots = configuredRoots - readableRoots
 		db.withTransaction {
 			val dao = db.getLocalMangaIndexDao()
+			// Keep titles that belong to a configured folder which is temporarily unavailable (for
+			// example an ejected SD card or revoked storage permission). A refresh must not make the
+			// user's local library disappear just because that storage cannot be scanned right now.
+			val preserved = if (unavailableRoots.isEmpty()) {
+				emptyList()
+			} else {
+				dao.findAllEntries().filter { entry ->
+					val file = File(entry.path)
+					unavailableRoots.any { root -> file.isInside(root) }
+				}
+			}
 			dao.clear()
 			localMangaRepositoryProvider.get()
 				.getRawListAsFlow()
 				.collect { upsert(it) }
+			preserved.forEach { dao.upsert(it) }
 		}
 		currentVersion = VERSION
 		cachedList = null
@@ -130,6 +147,12 @@ class LocalMangaIndex @Inject constructor(
 		mangaId = manga.id,
 		path = file.path,
 	)
+
+	private fun File.isInside(root: File): Boolean {
+		val rootPath = root.absolutePath.trimEnd(File.separatorChar)
+		val filePath = absolutePath
+		return filePath == rootPath || filePath.startsWith(rootPath + File.separator)
+	}
 
 	private fun isUpdateRequired() = currentVersion < VERSION
 
