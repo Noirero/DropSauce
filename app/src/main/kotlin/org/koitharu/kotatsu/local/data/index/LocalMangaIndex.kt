@@ -14,6 +14,7 @@ import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.local.data.LocalStorageManager
 import org.koitharu.kotatsu.local.data.input.LocalMangaParser
+import org.koitharu.kotatsu.local.data.input.LocalPdfCache
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import java.io.File
@@ -48,39 +49,73 @@ class LocalMangaIndex @Inject constructor(
 		rebuildIndexLocked()
 	}
 
-	suspend fun updateIfRequired() {
-		if (!isUpdateRequired()) return
-		mutex.withLock {
-			// Another caller may have completed the rebuild while this one was waiting. Re-check under
-			// the same lock so cold-start list/filter requests cannot trigger duplicate full storage scans.
-			if (isUpdateRequired()) {
+	/**
+	 * Rebuild a stale persisted index explicitly. Local UI calls this in background so an existing
+	 * v2 index can be shown immediately while v3 discovers standalone PDFs.
+	 *
+	 * @return true when a rebuild was actually performed.
+	 */
+	suspend fun rebuildIfRequired(): Boolean {
+		if (!isUpdateRequired()) return false
+		return mutex.withLock {
+			if (!isUpdateRequired()) {
+				false
+			} else {
 				rebuildIndexLocked()
+				true
 			}
 		}
+	}
+
+	suspend fun updateIfRequired() {
+		if (!isUpdateRequired()) return
+		// An older persisted index is still valid for the formats it already knows. Keep it readable
+		// instead of blocking the first Local list behind a full filesystem rebuild. The Local hub
+		// schedules [rebuildIfRequired] and reloads after the v3 swap completes.
+		if (db.getLocalMangaIndexDao().findAllEntries().isNotEmpty()) return
+		rebuildIfRequired()
 	}
 
 	private suspend fun rebuildIndexLocked() {
 		val configuredRoots = localStorageManager.getConfiguredDirs()
 		val readableRoots = localStorageManager.getReadableDirs().toSet()
 		val unavailableRoots = configuredRoots - readableRoots
-		db.withTransaction {
-			val dao = db.getLocalMangaIndexDao()
-			// Keep titles that belong to a configured folder which is temporarily unavailable (for
-			// example an ejected SD card or revoked storage permission). A refresh must not make the
-			// user's local library disappear just because that storage cannot be scanned right now.
-			val preserved = if (unavailableRoots.isEmpty()) {
-				emptyList()
-			} else {
-				dao.findAllEntries().filter { entry ->
-					val file = File(entry.path)
-					unavailableRoots.any { root -> file.isInside(root) }
-				}
+		val dao = db.getLocalMangaIndexDao()
+
+		// Read preserved entries before scanning. The old index remains intact while filesystem work is
+		// running, so a slow SD/PDF scan no longer holds a Room transaction or exposes a half-built index.
+		val preserved = if (unavailableRoots.isEmpty()) {
+			emptyList()
+		} else {
+			dao.findAllEntries().filter { entry ->
+				val file = File(entry.path)
+				unavailableRoots.any { root -> file.isInside(root) }
 			}
-			dao.clear()
+		}
+
+		val scanned = LinkedHashMap<Long, LocalManga>()
+		LocalPdfCache.withoutCoverRendering {
 			localMangaRepositoryProvider.get()
 				.getRawListAsFlow()
-				.collect { upsert(it) }
-			preserved.forEach { dao.upsert(it) }
+				.collect { manga ->
+					// When a configured root is nested inside another configured root, the ancestor
+					// scanner may surface the nested folder itself as a synthetic manga/container.
+					// The nested root is scanned independently, so discard that container here.
+					if (!manga.file.isConfiguredRootContainer(configuredRoots)) {
+						scanned[manga.manga.id] = manga
+					}
+				}
+		}
+		val scannedIds = scanned.keys
+
+		db.withTransaction {
+			dao.clear()
+			scanned.values.forEach { upsert(it) }
+			// A readable copy always wins over a preserved path from unavailable storage. This prevents
+			// an ejected SD-card entry from replacing a valid internal-storage copy with the same manga id.
+			preserved.asSequence()
+				.filterNot { it.mangaId in scannedIds }
+				.forEach { dao.upsert(it) }
 		}
 		currentVersion = VERSION
 		cachedList = null
@@ -103,6 +138,12 @@ class LocalMangaIndex @Inject constructor(
 	}
 
 	suspend fun getAll(): List<LocalManga> {
+		if (isUpdateRequired()) {
+			val stale = db.getLocalMangaIndexDao().findAll()
+			if (stale.isNotEmpty()) {
+				return stale.map { LocalManga(it.toManga()) }
+			}
+		}
 		updateIfRequired()
 		return mutex.withLock {
 			cachedList ?: db.getLocalMangaIndexDao()
@@ -147,6 +188,11 @@ class LocalMangaIndex @Inject constructor(
 		mangaId = manga.id,
 		path = file.path,
 	)
+
+	private fun File.isConfiguredRootContainer(configuredRoots: Set<File>): Boolean {
+		if (!isDirectory) return false
+		return configuredRoots.any { root -> root.isInside(this) }
+	}
 
 	private fun File.isInside(root: File): Boolean {
 		val rootPath = root.absolutePath.trimEnd(File.separatorChar)

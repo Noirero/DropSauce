@@ -82,6 +82,13 @@ class LocalListViewModel @Inject constructor(
 					loadList(filterCoordinator.snapshot(), append = false).join()
 				}
 		}
+		// Existing persisted entries are immediately usable after an index-version bump. Rebuild the
+		// newer scanner version in background and refresh this screen only after the atomic index swap.
+		launchJob(Dispatchers.Default) {
+			if (localMangaIndex.rebuildIfRequired()) {
+				loadList(filterCoordinator.snapshot(), append = false).join()
+			}
+		}
 		settings.subscribe(this)
 	}
 
@@ -92,11 +99,9 @@ class LocalListViewModel @Inject constructor(
 				list.add(0, it)
 			}
 		}
-		if (list.any { it is MangaListModel }) {
-			val storageOverview = createStorageOverview()
-			if (storageOverview.isNotEmpty()) {
-				list.addAll(0, storageOverview)
-			}
+		val storageOverview = createStorageOverview()
+		if (storageOverview.isNotEmpty()) {
+			list.addAll(0, storageOverview)
 		}
 		list.add(
 			0,
@@ -209,8 +214,8 @@ class LocalListViewModel @Inject constructor(
 			val root = rootsBySpecificity.firstOrNull { file.isInside(it) } ?: continue
 			counts[root] = counts.getOrDefault(root, 0) + 1
 		}
-		return configuredRoots.mapNotNull { root ->
-			val count = counts[root] ?: return@mapNotNull null
+		return configuredRoots.map { root ->
+			val count = counts.getOrDefault(root, 0)
 			val shortName = displayNames.getValue(root)
 			val displayName = if (duplicateNames[shortName] == 1) {
 				shortName

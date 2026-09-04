@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.withContext
 import okhttp3.internal.platform.PlatformRegistry
 import java.io.File
 import java.io.IOException
@@ -27,6 +29,14 @@ object LocalPdfCache {
 	// memory use and PNG compression work substantially.
 	private const val PDF_RENDER_SCALE = 2.5f
 	private const val MAX_RENDER_DIMENSION = 2560
+	private val coverRenderingSuppressed = ThreadLocal<Boolean>()
+
+	/**
+	 * Local index scans only need metadata. Keep an already rendered cover if one exists, but do not
+	 * open [PdfRenderer] or create a new bitmap while a broad filesystem scan is in progress.
+	 */
+	suspend fun <T> withoutCoverRendering(block: suspend () -> T): T =
+		withContext(coverRenderingSuppressed.asContextElement(true)) { block() }
 
 	@Synchronized
 	fun renderCover(pdf: File): File? = runCatching {
@@ -38,6 +48,9 @@ object LocalPdfCache {
 		// opening PdfRenderer again just to produce another cover for the same unchanged PDF.
 		File(outputDir, pageFileName(0)).takeIf { it.isUsableCacheFile() }?.let {
 			return@runCatching it
+		}
+		if (coverRenderingSuppressed.get() == true) {
+			return@runCatching null
 		}
 		openRenderer(pdf) { renderer ->
 			if (renderer.pageCount <= 0) {
