@@ -49,6 +49,7 @@ import org.koitharu.kotatsu.download.ui.worker.DownloadTask
 import org.koitharu.kotatsu.download.ui.worker.DownloadWorker
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.list.domain.ListFilterOption
+import org.koitharu.kotatsu.local.data.index.LocalMangaIndex
 import org.koitharu.kotatsu.local.domain.DeleteLocalMangaUseCase
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -225,6 +226,9 @@ abstract class ChaptersPagesViewModel(
 				.collect { onDownloadComplete(it) }
 		}
 		launchJob(Dispatchers.Default) {
+			LocalMangaIndex.rebuildEvents.collect { onLocalIndexRebuilt() }
+		}
+		launchJob(Dispatchers.Default) {
 			val id = mangaDetails.filterNotNull().first().id
 			isScanlatorsMerged.value = mangaDataRepository.isScanlatorsMerged(id)
 		}
@@ -356,6 +360,18 @@ abstract class ChaptersPagesViewModel(
 			return this
 		}
 		return filter { it.contains(query) }
+	}
+
+	private suspend fun onLocalIndexRebuilt() {
+		val current = mangaDetails.value ?: return
+		if (!current.isLocal) {
+			return
+		}
+		if (this is ReaderViewModel) {
+			getCurrentState()?.let(::saveCurrentState)
+			readingState.value = null
+		}
+		reload()
 	}
 
 	private suspend fun onDownloadComplete(downloadedManga: LocalManga?) {

@@ -5,6 +5,9 @@ import androidx.core.content.edit
 import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koitharu.kotatsu.core.db.MangaDatabase
@@ -119,6 +122,7 @@ class LocalMangaIndex @Inject constructor(
 		}
 		currentVersion = VERSION
 		cachedList = null
+		_rebuildEvents.tryEmit(Unit)
 	}
 
 	suspend fun get(mangaId: Long, withDetails: Boolean): LocalManga? {
@@ -203,6 +207,9 @@ class LocalMangaIndex @Inject constructor(
 	private fun isUpdateRequired() = currentVersion < VERSION
 
 	companion object {
+
+		private val _rebuildEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+		val rebuildEvents: SharedFlow<Unit> = _rebuildEvents.asSharedFlow()
 
 		private const val PREF_NAME = "_local_index"
 		private const val KEY_VERSION = "ver"

@@ -92,9 +92,6 @@ object LocalPdfCache {
 	/** Render one lazy PDF page target produced by [renderPages]. */
 	@Synchronized
 	fun materializePage(file: File): File {
-		if (file.isUsableCacheFile()) {
-			return file
-		}
 		if (!isPdfPage(file)) {
 			throw IOException("Not a local PDF cache page: $file")
 		}
@@ -104,6 +101,10 @@ object LocalPdfCache {
 			throw IOException("PDF cache source is missing: $file")
 		}
 		val pdf = File(sourceMarker.readText())
+		validateSourceIdentity(pdf, outputDir)
+		if (file.isUsableCacheFile()) {
+			return file
+		}
 		val pageIndex = file.name
 			.removePrefix("page_")
 			.removeSuffix(".png")
@@ -111,10 +112,13 @@ object LocalPdfCache {
 			?.minus(1)
 			?: throw IOException("Invalid PDF cache page name: ${file.name}")
 		return openRenderer(pdf) { renderer ->
+			validateSourceIdentity(pdf, outputDir)
 			if (pageIndex !in 0 until renderer.pageCount) {
 				throw IOException("PDF page is out of range: $pageIndex for $pdf")
 			}
-			renderPage(renderer, pageIndex, outputDir)
+			val result = renderPage(renderer, pageIndex, outputDir)
+			validateSourceIdentity(pdf, outputDir)
+			result
 		}
 	}
 
@@ -170,6 +174,15 @@ object LocalPdfCache {
 			tempFile.delete()
 		}
 		return outputFile
+	}
+
+	private fun validateSourceIdentity(pdf: File, outputDir: File) {
+		val expectedDir = cacheDirFor(pdf)
+		val expectedPath = runCatching { expectedDir.canonicalPath }.getOrDefault(expectedDir.absolutePath)
+		val actualPath = runCatching { outputDir.canonicalPath }.getOrDefault(outputDir.absolutePath)
+		if (actualPath != expectedPath) {
+			throw IOException("PDF source changed while page cache was active: $pdf")
+		}
 	}
 
 	private fun ensureOutputDir(outputDir: File) {
