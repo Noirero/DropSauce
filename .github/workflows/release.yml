@@ -7,6 +7,11 @@ on:
         description: 'Optional stable version (e.g. 1.2.3). Leave empty for an automatic fork version.'
         required: false
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/BUILD_NOW'
 
 concurrency:
   group: release-workflow
@@ -114,7 +119,7 @@ jobs:
         path = Path('app/build.gradle')
         text = path.read_text()
         text, count_name = re.subn(r"versionName = '[^']+'", f"versionName = '{os.environ['VERSION_NAME']}'", text, count=1)
-        text, count_code = re.subn(r'versionCode = \d+', f"versionCode = {os.environ['VERSION_CODE']}", text, count=1)
+        text, count_code = re.subn(r'versionCode = \d+', f'versionCode = {os.environ['VERSION_CODE']}', text, count=1)
         if count_name != 1 or count_code != 1:
             raise SystemExit('Could not update versionName/versionCode exactly once')
         path.write_text(text)
@@ -186,7 +191,17 @@ jobs:
           cp "$apk" "$target"
         done
 
+    - name: Upload main test APK
+      if: github.event_name == 'push'
+      uses: actions/upload-artifact@v4
+      with:
+        name: DropSauce-Noirero-Main-${{ github.sha }}
+        path: release/*.apk
+        if-no-files-found: error
+        retention-days: 30
+
     - name: Create GitHub Release
+      if: github.event_name == 'workflow_dispatch'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         VERSION_NAME: ${{ steps.version.outputs.name }}
