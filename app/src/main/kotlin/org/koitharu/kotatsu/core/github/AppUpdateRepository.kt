@@ -66,25 +66,31 @@ class AppUpdateRepository @Inject constructor(
 		}
 	}
 
-	suspend fun fetchUpdate(): AppVersion? = withContext(Dispatchers.Default) {
+	/**
+	 * Check for an update while preserving network/API failures for callers that need to report them.
+	 * A null result from this method therefore means only that no newer compatible release exists.
+	 */
+	suspend fun fetchUpdateOrThrow(): AppVersion? = withContext(Dispatchers.Default) {
 		if (!isUpdateSupported()) {
 			return@withContext null
 		}
-		runCatchingCancellable {
-			val currentVersion = VersionId(currentVersionName)
-			val available = getAvailableVersions().asArrayList()
-			available.sortBy { it.versionId }
-			if (currentVersion.isStable) {
-				available.retainAll { it.versionId.isStable }
-			}
-			available.maxByOrNull { it.versionId }
-				?.takeIf { it.versionId > currentVersion }
-		}.onFailure {
-			it.printStackTraceDebug()
-		}.onSuccess {
-			availableUpdate.value = it
-		}.getOrNull()
+		val currentVersion = VersionId(currentVersionName)
+		val available = getAvailableVersions().asArrayList()
+		available.sortBy { it.versionId }
+		if (currentVersion.isStable) {
+			available.retainAll { it.versionId.isStable }
+		}
+		available.maxByOrNull { it.versionId }
+			?.takeIf { it.versionId > currentVersion }
+			.also { availableUpdate.value = it }
 	}
+
+	/** Keep the previous best-effort behavior for background/non-UI callers. */
+	suspend fun fetchUpdate(): AppVersion? = runCatchingCancellable {
+		fetchUpdateOrThrow()
+	}.onFailure {
+		it.printStackTraceDebug()
+	}.getOrNull()
 
 	@Suppress("KotlinConstantConditions")
 	suspend fun isUpdateSupported(): Boolean {

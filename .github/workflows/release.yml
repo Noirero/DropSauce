@@ -7,11 +7,6 @@ on:
         description: 'Optional stable version (e.g. 1.2.3). Leave empty for an automatic fork version.'
         required: false
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/BUILD_NOW'
 
 concurrency:
   group: release-workflow
@@ -160,22 +155,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        PREVIOUS_SUCCESS_SHA="${{ steps.previous_success.outputs.sha }}"
-        CURRENT_SHA="${{ github.sha }}"
-
-        if [ -n "$PREVIOUS_SUCCESS_SHA" ]; then
-          git fetch origin "$PREVIOUS_SUCCESS_SHA" 2>/dev/null || true
-        fi
-
-        if [ -n "$PREVIOUS_SUCCESS_SHA" ] && git cat-file -e "$PREVIOUS_SUCCESS_SHA" 2>/dev/null; then
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREVIOUS_SUCCESS_SHA..$CURRENT_SHA" --no-merges || true)
-        else
-          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -n 20 || true)
-        fi
-
-        if [ -z "$CHANGELOG" ]; then
-          CHANGELOG="- No source changes since the previous successful release"
-        fi
+        CHANGELOG=$(cat .github/release-notes.md)
 
         {
           echo "changelog<<EOF"
@@ -224,9 +204,6 @@ jobs:
         {
           echo "## DropSauce Noirero v${VERSION_NAME}"
           echo
-          echo "Automatic build of the Noirero fork."
-          echo
-          echo "### Changelog"
           printf '%s\n' "$CHANGELOG"
         } > "$NOTES_FILE"
 

@@ -103,6 +103,10 @@
     <string name="app_update_available">A new version of the app is available</string>
     <string name="open_in_browser">Open WebView</string>
     <string name="back_to_top">Back to top</string>
+    <string name="go_to_top">Go to top</string>
+    <string name="go_to_bottom">Go to bottom</string>
+    <string name="favourites_total_placeholder">Total titles</string>
+    <string name="favourites_total_format">Total titles: %1$,d</string>
     <string name="notifications">Notifications</string>
     <string name="enabled_d_of_d" tools:ignore="PluralsCandidate">%1$d of %2$d on</string>
     <string name="new_chapters">New chapters</string>
@@ -273,6 +277,15 @@
     <string name="no_filters_available">This source has no filters</string>
     <string name="enter_name">Enter name</string>
     <string name="pinned_sources_only">Pinned sources only</string>
+    <string name="pinned_sources">Pinned</string>
+    <string name="source_filter">Source filter</string>
+    <string name="source_filter_languages">Languages</string>
+    <string name="source_filter_individual">Individual sources</string>
+    <string name="source_filter_summary">Choose which sources participate in Explore and global search.</string>
+    <string name="search_extensions">Search extensions</string>
+    <string name="no_matching_extensions">No matching extensions</string>
+    <string name="all_short">All</string>
+    <string name="extension_sources">Sources</string>
     <string name="local_library_only">Local library only</string>
     <string name="never">Never</string>
     <string name="only_using_wifi">Only on Wi-Fi</string>
