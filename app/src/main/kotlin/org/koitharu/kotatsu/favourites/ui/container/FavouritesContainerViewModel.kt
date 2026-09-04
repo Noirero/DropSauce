@@ -55,6 +55,12 @@ class FavouritesContainerViewModel @Inject constructor(
 	private val displayPreferences: FavouriteDisplayPreferences,
 	private val downloadedContentClassifier: DownloadedContentClassifier,
 ) : BaseViewModel() {
+	init {
+		// Populate the virtual Local shelf and its badge even when its page has not been created yet.
+		launchJob(Dispatchers.IO) {
+			localFavouritesRepository.refresh()
+		}
+	}
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
 
@@ -103,10 +109,14 @@ class FavouritesContainerViewModel @Inject constructor(
 		categoriesStateFlow.filterNotNull(),
 		observeAllFavouritesVisibility(),
 		contentTypeStore.selectedType,
-	) { list, showAll, type ->
+		contentTypeStore.novelCategoryIds,
+	) { list, showAll, type, novelCategoryIds ->
 		CategoryStructure(
 			type = type,
-			categories = list.filter { contentTypeStore.isCategoryForType(it.id, type) },
+			categories = list.filter { category ->
+				val isNovel = category.id in novelCategoryIds
+				if (type == FavouriteContentType.NOVEL) isNovel else !isNovel
+			},
 			showAll = showAll,
 			includeLocal = type != FavouriteContentType.NOVEL,
 		)

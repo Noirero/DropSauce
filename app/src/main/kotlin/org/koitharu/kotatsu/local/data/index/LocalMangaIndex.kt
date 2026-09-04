@@ -162,6 +162,9 @@ class LocalMangaIndex @Inject constructor(
 	}
 
 	suspend fun put(manga: LocalManga) = mutex.withLock {
+		if (db.getLocalMangaIndexDao().findPath(manga.manga.id) == manga.file.path) {
+			return@withLock
+		}
 		db.withTransaction {
 			upsert(manga)
 		}

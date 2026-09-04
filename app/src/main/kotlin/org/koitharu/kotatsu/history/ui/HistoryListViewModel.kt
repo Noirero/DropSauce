@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
@@ -28,7 +27,6 @@ import org.koitharu.kotatsu.core.ui.util.ReversibleAction
 import org.koitharu.kotatsu.core.util.ext.calculateTimeAgo
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.flattenLatest
-import org.koitharu.kotatsu.details.data.DetailsNavigationCache
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.history.domain.HistoryListQuickFilter
 import org.koitharu.kotatsu.history.domain.MarkAsReadUseCase
@@ -68,7 +66,6 @@ class HistoryListViewModel @Inject constructor(
 	private val markAsReadUseCase: MarkAsReadUseCase,
 	private val quickFilter: HistoryListQuickFilter,
 	private val database: MangaDatabase,
-	private val detailsNavigationCache: DetailsNavigationCache,
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
 ) : MangaListViewModel(settings, mangaDataRepository, localStorageChanges), QuickFilterListener by quickFilter {
@@ -114,14 +111,12 @@ class HistoryListViewModel @Inject constructor(
 	/**
 	 * local_index is part of the SQL predicate for History's Downloaded filter. Observe the table
 	 * directly so adding/removing on-device files re-runs the query instead of only remapping old rows.
-	 * The same invalidation also drops process-local Details snapshots that may contain stale chapters.
+	 * Details observes targeted storage events itself, so this must not clear unrelated snapshots.
 	 */
 	private val localIndexChanges = database.invalidationTracker.createFlow(
 		"local_index",
 		emitInitialState = true,
-	).onEach {
-		detailsNavigationCache.clear()
-	}
+	)
 
 	private val limit = MutableStateFlow(PAGE_SIZE)
 	private val isPaginationReady = AtomicBoolean(false)

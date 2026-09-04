@@ -182,6 +182,7 @@ class PageLoader @Inject constructor(
 					zip.getInputStream(entry).use {
 						BitmapDecoderCompat.decode(it, MimeTypes.getMimeTypeFromExtension(entry.name))
 					}
+				}
 			}.use { image ->
 				cache.set(uri.toString(), image).toUri()
 			}

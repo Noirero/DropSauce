@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -150,11 +151,16 @@ class LocalFavouritesListViewModel @Inject constructor(
 
 	init {
 		viewModelScope.launch {
-			localStorageChanges.collect {
+			localStorageChanges.filter { changed ->
+				changed == null || changed.file.isInsideLocalFolder()
+			}.collect {
 				localFavouritesRepository.refresh()
 			}
 		}
 	}
+
+	private fun java.io.File.isInsideLocalFolder(): Boolean = generateSequence(this) { it.parentFile }
+		.any { it.name.equals("local", ignoreCase = true) }
 
 	override fun onRefresh() {
 		launchLoadingJob(Dispatchers.IO) {

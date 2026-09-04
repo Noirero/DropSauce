@@ -11,7 +11,6 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.MangaSource
 import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.model.isNovelSource
-import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -49,11 +48,9 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	private val repository: FavouritesRepository,
 	private val filterStore: FavouriteQuickFilterStore,
 	private val contentTypeStore: FavouriteContentTypeStore,
-	networkState: NetworkState,
 	private val mihonExtensionManager: MihonExtensionManager,
 ) : MangaListQuickFilter(settings) {
 
-	private var didRefreshExtensions = false
 	private val categoryAppliedOptions: StateFlow<Set<ListFilterOption>> = FavouriteShelfFilterState(
 		delegate = filterStore.state,
 		contentType = contentTypeStore.selectedType,
@@ -62,9 +59,6 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 
 	init {
 		isStateFilterEnabled = false
-		if (!networkState.value) {
-			filterStore.set(contentTypeStore.selectedType.value, ListFilterOption.Downloaded, true)
-		}
 	}
 
 	override val appliedOptions
@@ -159,8 +153,7 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 		}
 		if (categorySources.isEmpty()) return emptyList()
 
-		mihonExtensionManager.ensureReady(forceRefresh = !didRefreshExtensions)
-		didRefreshExtensions = true
+		mihonExtensionManager.ensureReady()
 		val installedSources = mihonExtensionManager.getMihonMangaSources().associateBy { it.name }
 		val wantNovel = contentTypeStore.selectedType.value == FavouriteContentType.NOVEL
 		return categorySources

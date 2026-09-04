@@ -75,10 +75,7 @@ class LocalListViewModel @Inject constructor(
 	init {
 		launchJob(Dispatchers.Default) {
 			localStorageChanges
-				.collect { changed ->
-					if (changed != null) {
-						localMangaIndex.put(changed)
-					}
+				.collect {
 					loadList(filterCoordinator.snapshot(), append = false).join()
 				}
 		}

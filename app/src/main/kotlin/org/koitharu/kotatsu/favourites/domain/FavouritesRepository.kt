@@ -24,6 +24,7 @@ import org.koitharu.kotatsu.core.util.ext.mapItems
 import org.koitharu.kotatsu.favourites.data.FavouriteCategoryEntity
 import org.koitharu.kotatsu.favourites.data.FavouriteEntity
 import org.koitharu.kotatsu.favourites.data.FavouriteMembership
+import org.koitharu.kotatsu.favourites.data.FavouriteSourceCount
 import org.koitharu.kotatsu.favourites.data.toFavouriteCategory
 import org.koitharu.kotatsu.favourites.data.toMangaList
 import org.koitharu.kotatsu.favourites.domain.model.Cover
@@ -40,6 +41,7 @@ import javax.inject.Inject
 class FavouritesRepository @Inject constructor(
 	private val db: MangaDatabase,
 	private val localObserver: LocalFavoritesObserver,
+	private val downloadedContentClassifier: DownloadedContentClassifier,
 ) {
 	/** Count-only access used by the library header; keeps full favourite entities off the hot path. */
 	suspend fun getCategoryCounts(categoryIds: Collection<Long>): Map<Long, Int> =
@@ -61,9 +63,19 @@ class FavouritesRepository @Inject constructor(
 	suspend fun getMemberships(): List<FavouriteMembership> = db.getFavouritesDao().findMemberships()
 
 	/** Lightweight rows for the virtual Downloaded category; local_index is the source of truth. */
-	suspend fun getDownloadedEntries() = db.getFavouritesDao().findDownloadedSearchEntries()
+	suspend fun getDownloadedEntries(): List<org.koitharu.kotatsu.favourites.data.FavouriteSearchEntry> {
+		val localDownloadedIds = downloadedContentClassifier.getLocalDownloadedIds()
+		return db.getFavouritesDao().findDownloadedSearchEntries().filter { entry ->
+			entry.source != "LOCAL" || entry.mangaId in localDownloadedIds
+		}
+	}
 
-	suspend fun getDownloadedCountsBySource() = db.getFavouritesDao().findDownloadedCountsBySource()
+	suspend fun getDownloadedCountsBySource(): List<FavouriteSourceCount> {
+		val entries = getDownloadedEntries()
+		return entries.groupingBy { it.source }.eachCount().map { (source, count) ->
+			FavouriteSourceCount(source, count)
+		}
+	}
 
 	suspend fun getLastManga(limit: Int): List<Manga> {
 		val entities = db.getFavouritesDao().findLast(limit)
