@@ -34,6 +34,7 @@ import org.koitharu.kotatsu.local.data.hasMangaContent
 import org.koitharu.kotatsu.local.data.hasPdfExtension
 import org.koitharu.kotatsu.local.data.hasZipExtension
 import org.koitharu.kotatsu.local.data.isEpubFile
+import org.koitharu.kotatsu.local.data.isPdfFile
 import org.koitharu.kotatsu.local.data.isZipArchive
 import org.koitharu.kotatsu.local.data.output.LocalMangaOutput.Companion.ENTRY_NAME_INDEX
 import org.koitharu.kotatsu.local.domain.model.LocalManga
@@ -62,6 +63,9 @@ class LocalMangaParser(private val uri: Uri) {
 	private val rootFile: File = File(uri.schemeSpecificPart)
 
 	suspend fun getManga(withDetails: Boolean): LocalManga = runInterruptible(Dispatchers.IO) {
+		if (rootFile.isPdfFile) {
+			return@runInterruptible getPdfManga(rootFile, withDetails)
+		}
 		val epubFiles = when {
 			rootFile.isEpubFile -> listOf(rootFile)
 			rootFile.isDirectory -> rootFile.listFiles { f: File -> f.isEpubFile }
@@ -163,6 +167,48 @@ class LocalMangaParser(private val uri: Uri) {
 				)
 			}.let { LocalManga(it, rootFile) }
 		}
+	}
+
+	@Blocking
+	private fun getPdfManga(file: File, withDetails: Boolean): LocalManga {
+		val fileUri = file.toUri().toString()
+		val nameMetadata = file.localNameMetadata()
+		return LocalManga(
+			Manga(
+				id = file.absolutePath.longHashCode(),
+				title = nameMetadata?.title ?: file.name.fileNameToTitle(),
+				url = fileUri,
+				publicUrl = fileUri,
+				source = LocalMangaSource,
+				coverUrl = LocalPdfCache.renderCover(file)?.toUri()?.toString(),
+				chapters = if (withDetails) {
+					listOf(
+						MangaChapter(
+							id = fileUri.longHashCode(),
+							title = file.name.fileNameToTitle(),
+							number = 1f,
+							volume = 0,
+							url = fileUri,
+							scanlator = null,
+							uploadDate = 0L,
+							branch = null,
+							source = LocalMangaSource,
+						),
+					)
+				} else {
+					null
+				},
+				altTitles = emptySet(),
+				rating = -1f,
+				contentRating = null,
+				tags = emptySet(),
+				state = null,
+				authors = nameMetadata?.authors.orEmpty(),
+				largeCoverUrl = null,
+				description = null,
+			),
+			file,
+		)
 	}
 
 	/**
@@ -461,7 +507,7 @@ class LocalMangaParser(private val uri: Uri) {
 		@Blocking
 		fun getOrNull(file: File): LocalMangaParser? = if (
 			file.canRead() &&
-			(file.isZipArchive || file.isEpubFile || (file.isDirectory && file.hasMangaContent()))
+			(file.isZipArchive || file.isPdfFile || file.isEpubFile || (file.isDirectory && file.hasMangaContent()))
 		) {
 			LocalMangaParser(file)
 		} else {

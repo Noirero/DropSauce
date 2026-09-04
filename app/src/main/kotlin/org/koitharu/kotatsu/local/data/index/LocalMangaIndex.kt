@@ -160,8 +160,8 @@ class LocalMangaIndex @Inject constructor(
 
 		private const val PREF_NAME = "_local_index"
 		private const val KEY_VERSION = "ver"
-		// Scanner semantics changed to recognize legacy 00.Novel/<Title>/Chapter.epub layouts.
-		// Bump the persisted index version so existing installs rebuild once and pick those entries up.
-		private const val VERSION = 2
+		// Scanner semantics changed to recognize standalone PDF files as local manga.
+		// Bump the persisted index version so existing installs rebuild once and pick them up.
+		private const val VERSION = 3
 	}
 }
