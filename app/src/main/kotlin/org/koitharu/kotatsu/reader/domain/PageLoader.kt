@@ -67,6 +67,7 @@ import org.koitharu.kotatsu.core.util.progress.ProgressDeferred
 import org.koitharu.kotatsu.download.ui.worker.DownloadSlowdownDispatcher
 import org.koitharu.kotatsu.local.data.LocalStorageCache
 import org.koitharu.kotatsu.local.data.PageCache
+import org.koitharu.kotatsu.local.data.input.LocalPdfCache
 import org.koitharu.kotatsu.parsers.model.MangaPage
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
@@ -271,7 +272,17 @@ class PageLoader @Inject constructor(
 				uri.buildUpon().scheme(URI_SCHEME_ZIP).build()
 			}
 
-			uri.isFileUri() -> uri
+			uri.isFileUri() -> {
+				val file = uri.toFile()
+				if (LocalPdfCache.isPdfPage(file)) {
+					runInterruptible(Dispatchers.IO) {
+						LocalPdfCache.materializePage(file).toUri()
+					}
+				} else {
+					uri
+				}
+			}
+
 			else -> {
 				if (isPrefetch) {
 					downloadSlowdownDispatcher.delay(page.source)

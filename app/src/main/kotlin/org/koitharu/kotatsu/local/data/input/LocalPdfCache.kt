@@ -18,6 +18,9 @@ import kotlin.math.roundToInt
 object LocalPdfCache {
 
 	private const val CACHE_DIR_NAME = "local_pdf_pages"
+	private const val SOURCE_FILE_NAME = ".source"
+	private const val COVER_FILE_NAME = "cover.png"
+	private const val COVER_MAX_RENDER_DIMENSION = 768
 	// Rendering every page at 4x/4096px made long local PDFs spend tens of seconds in PNG deflate,
 	// increased GC pressure and could contribute to foreground ANRs while the library UI was active.
 	// 2560px is still comfortably above typical phone display resolution while cutting bitmap area,
@@ -27,14 +30,33 @@ object LocalPdfCache {
 
 	@Synchronized
 	fun renderCover(pdf: File): File? = runCatching {
+		val outputDir = cacheDirFor(pdf)
+		File(outputDir, COVER_FILE_NAME).takeIf { it.isUsableCacheFile() }?.let {
+			return@runCatching it
+		}
+		// Reuse a full-resolution first page left by older versions/reader sessions instead of
+		// opening PdfRenderer again just to produce another cover for the same unchanged PDF.
+		File(outputDir, pageFileName(0)).takeIf { it.isUsableCacheFile() }?.let {
+			return@runCatching it
+		}
 		openRenderer(pdf) { renderer ->
 			if (renderer.pageCount <= 0) {
 				return@openRenderer null
 			}
-			renderPage(renderer, pageIndex = 0, outputDir = cacheDirFor(pdf))
+			renderPage(
+				renderer = renderer,
+				pageIndex = 0,
+				outputDir = outputDir,
+				outputFileName = COVER_FILE_NAME,
+				maxRenderDimension = COVER_MAX_RENDER_DIMENSION,
+			)
 		}
 	}.getOrNull()
 
+	/**
+	 * Return stable cache targets for all pages without rendering them eagerly. The tiny source marker
+	 * lets [materializePage] render only the page requested by the reader.
+	 */
 	@Synchronized
 	fun renderPages(pdf: File): List<File> {
 		return openRenderer(pdf) { renderer ->
@@ -42,9 +64,44 @@ object LocalPdfCache {
 				throw IOException("PDF has no pages: $pdf")
 			}
 			val outputDir = cacheDirFor(pdf)
-			List(renderer.pageCount) { index ->
-				renderPage(renderer, index, outputDir)
+			ensureOutputDir(outputDir)
+			File(outputDir, SOURCE_FILE_NAME).writeText(pdf.absolutePath)
+			List(renderer.pageCount) { index -> File(outputDir, pageFileName(index)) }
+		}
+	}
+
+	fun isPdfPage(file: File): Boolean {
+		return file.name.startsWith("page_") &&
+			file.name.endsWith(".png") &&
+			file.parentFile?.parentFile?.name == CACHE_DIR_NAME
+	}
+
+	/** Render one lazy PDF page target produced by [renderPages]. */
+	@Synchronized
+	fun materializePage(file: File): File {
+		if (file.isUsableCacheFile()) {
+			return file
+		}
+		if (!isPdfPage(file)) {
+			throw IOException("Not a local PDF cache page: $file")
+		}
+		val outputDir = file.parentFile ?: throw IOException("PDF cache page has no parent: $file")
+		val sourceMarker = File(outputDir, SOURCE_FILE_NAME)
+		if (!sourceMarker.isFile) {
+			throw IOException("PDF cache source is missing: $file")
+		}
+		val pdf = File(sourceMarker.readText())
+		val pageIndex = file.name
+			.removePrefix("page_")
+			.removeSuffix(".png")
+			.toIntOrNull()
+			?.minus(1)
+			?: throw IOException("Invalid PDF cache page name: ${file.name}")
+		return openRenderer(pdf) { renderer ->
+			if (pageIndex !in 0 until renderer.pageCount) {
+				throw IOException("PDF page is out of range: $pageIndex for $pdf")
 			}
+			renderPage(renderer, pageIndex, outputDir)
 		}
 	}
 
@@ -57,19 +114,23 @@ object LocalPdfCache {
 		}
 	}
 
-	private fun renderPage(renderer: PdfRenderer, pageIndex: Int, outputDir: File): File {
-		val outputFile = File(outputDir, "page_${(pageIndex + 1).toString().padStart(5, '0')}.png")
-		if (outputFile.isFile && outputFile.length() > 0L) {
+	private fun renderPage(
+		renderer: PdfRenderer,
+		pageIndex: Int,
+		outputDir: File,
+		outputFileName: String = pageFileName(pageIndex),
+		maxRenderDimension: Int = MAX_RENDER_DIMENSION,
+	): File {
+		val outputFile = File(outputDir, outputFileName)
+		if (outputFile.isUsableCacheFile()) {
 			return outputFile
 		}
-		if (!outputDir.exists() && !outputDir.mkdirs()) {
-			throw IOException("Cannot create PDF cache directory: $outputDir")
-		}
+		ensureOutputDir(outputDir)
 
 		val tempFile = File(outputDir, outputFile.name + ".tmp")
 		renderer.openPage(pageIndex).use { page ->
 			val maxPageSize = maxOf(page.width, page.height).coerceAtLeast(1)
-			val scale = minOf(PDF_RENDER_SCALE, MAX_RENDER_DIMENSION / maxPageSize.toFloat())
+			val scale = minOf(PDF_RENDER_SCALE, maxRenderDimension / maxPageSize.toFloat())
 			val matrix = Matrix().apply { setScale(scale, scale) }
 			val width = (page.width * scale).roundToInt().coerceAtLeast(1)
 			val height = (page.height * scale).roundToInt().coerceAtLeast(1)
@@ -97,6 +158,17 @@ object LocalPdfCache {
 		}
 		return outputFile
 	}
+
+	private fun ensureOutputDir(outputDir: File) {
+		if (!outputDir.exists() && !outputDir.mkdirs()) {
+			throw IOException("Cannot create PDF cache directory: $outputDir")
+		}
+	}
+
+	private fun pageFileName(pageIndex: Int): String =
+		"page_${(pageIndex + 1).toString().padStart(5, '0')}.png"
+
+	private fun File.isUsableCacheFile(): Boolean = isFile && length() > 0L
 
 	private fun cacheDirFor(pdf: File): File {
 		val context = checkNotNull(PlatformRegistry.applicationContext) {
