@@ -79,12 +79,7 @@ class ExploreViewModel @Inject constructor(
 
 	val contentFilter: StateFlow<ExploreContentFilter> = contentPreferences.filter
 	val isNsfwVisible: StateFlow<Boolean> = contentPreferences.isNsfwVisible
-	private val contentFilterState = combine(
-		contentPreferences.filter,
-		contentPreferences.isNsfwVisible,
-	) { filter, isNsfwVisible ->
-		filter to isNsfwVisible
-	}
+	val contentState = contentPreferences.contentState
 
 	private val isSuggestionsEnabled = settings.observeAsFlow(
 		key = AppSettings.KEY_SUGGESTIONS,
@@ -254,10 +249,10 @@ class ExploreViewModel @Inject constructor(
 		sourcesRepository.observeEnabledSources(),
 		sourcesRepository.observeMihonLoadingState(),
 		isGrid,
-		contentFilterState,
+		contentState,
 		contentPreferences.overrides,
-	) { allSources, isExtensionsLoading, isGrid, filterState, contentOverrides ->
-		val (contentFilter, isNsfwVisible) = filterState
+	) { allSources, isExtensionsLoading, isGrid, contentState, contentOverrides ->
+		val (contentFilter, isNsfwVisible) = contentState
 		ExploreSources(
 			manga = buildSourcesPage(
 				allSources,

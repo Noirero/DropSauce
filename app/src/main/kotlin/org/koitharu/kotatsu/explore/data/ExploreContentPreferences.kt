@@ -26,6 +26,11 @@ enum class ExploreContentClass {
 	NSFW,
 }
 
+data class ExploreContentState(
+	val filter: ExploreContentFilter,
+	val isNsfwVisible: Boolean,
+)
+
 /**
  * Stores the Explore SFW/NSFW filter, NSFW visibility and explicit user overrides.
  *
@@ -39,41 +44,61 @@ class ExploreContentPreferences @Inject constructor(
 ) {
 
 	private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-	private val _isNsfwVisible = MutableStateFlow(prefs.getBoolean(KEY_NSFW_VISIBLE, true))
-	private val _filter = MutableStateFlow(
-		readFilter().takeUnless { !_isNsfwVisible.value && it == ExploreContentFilter.NSFW }
+	private val initialNsfwVisible = prefs.getBoolean(KEY_NSFW_VISIBLE, true)
+	private val savedFilter = readFilter()
+	private val initialContentState = ExploreContentState(
+		filter = savedFilter.takeUnless { !initialNsfwVisible && it == ExploreContentFilter.NSFW }
 			?: ExploreContentFilter.ALL,
+		isNsfwVisible = initialNsfwVisible,
 	)
+	private val _isNsfwVisible = MutableStateFlow(initialContentState.isNsfwVisible)
+	private val _filter = MutableStateFlow(initialContentState.filter)
+	private val _contentState = MutableStateFlow(initialContentState)
 	private val _overrides = MutableStateFlow(readOverrides())
 
 	val filter: StateFlow<ExploreContentFilter> = _filter.asStateFlow()
 	val isNsfwVisible: StateFlow<Boolean> = _isNsfwVisible.asStateFlow()
+	val contentState: StateFlow<ExploreContentState> = _contentState.asStateFlow()
 	val overrides: StateFlow<Map<String, ExploreContentClass>> = _overrides.asStateFlow()
 
+	init {
+		if (savedFilter != initialContentState.filter) {
+			prefs.edit { putString(KEY_FILTER, initialContentState.filter.name) }
+		}
+	}
+
 	fun setFilter(value: ExploreContentFilter) {
-		val safeValue = if (!_isNsfwVisible.value && value == ExploreContentFilter.NSFW) {
+		val current = _contentState.value
+		val safeValue = if (!current.isNsfwVisible && value == ExploreContentFilter.NSFW) {
 			ExploreContentFilter.ALL
 		} else {
 			value
 		}
-		if (_filter.value == safeValue) return
+		if (current.filter == safeValue) return
 		prefs.edit { putString(KEY_FILTER, safeValue.name) }
 		_filter.value = safeValue
+		_contentState.value = current.copy(filter = safeValue)
 	}
 
 	fun setNsfwVisible(value: Boolean) {
-		if (_isNsfwVisible.value == value) return
-		val resetFilter = !value && _filter.value == ExploreContentFilter.NSFW
+		val current = _contentState.value
+		if (current.isNsfwVisible == value) return
+		val nextFilter = if (!value && current.filter == ExploreContentFilter.NSFW) {
+			ExploreContentFilter.ALL
+		} else {
+			current.filter
+		}
 		prefs.edit {
 			putBoolean(KEY_NSFW_VISIBLE, value)
-			if (resetFilter) {
-				putString(KEY_FILTER, ExploreContentFilter.ALL.name)
+			if (nextFilter != current.filter) {
+				putString(KEY_FILTER, nextFilter.name)
 			}
 		}
-		_isNsfwVisible.value = value
-		if (resetFilter) {
-			_filter.value = ExploreContentFilter.ALL
+		if (_filter.value != nextFilter) {
+			_filter.value = nextFilter
 		}
+		_isNsfwVisible.value = value
+		_contentState.value = ExploreContentState(nextFilter, value)
 	}
 
 	fun classify(

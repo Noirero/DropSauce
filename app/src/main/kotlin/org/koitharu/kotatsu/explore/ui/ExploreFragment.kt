@@ -153,6 +153,9 @@ class ExploreFragment :
 				header.toggleContentFilter.check(R.id.button_content_filter_all)
 			}
 		}
+		viewModel.contentState.observe(viewLifecycleOwner) {
+			resetSourcePageScrollPositions()
+		}
 		viewModel.hasExtensionUpdates.observe(viewLifecycleOwner) { hasUpdates ->
 			manageBadge = header.buttonManage.bindBadge(manageBadge, if (hasUpdates) "" else null)
 		}
@@ -186,7 +189,12 @@ class ExploreFragment :
 		pages[pageIndex] = recyclerView
 		viewModel.sources.observe(viewLifecycleOwner) { content ->
 			adapter.emit(content[isNovel])
-			recyclerView.postOnAnimation {
+		}
+	}
+
+	private fun resetSourcePageScrollPositions() {
+		pages.forEach { recyclerView ->
+			recyclerView?.postOnAnimation {
 				recyclerView.resetPageScrollPosition()
 			}
 		}
@@ -275,7 +283,17 @@ class ExploreFragment :
 			.setView(scroll)
 			.setPositiveButton(android.R.string.ok) { _, _ ->
 				stateProvider?.invoke()?.let { state ->
-					viewModel.applyMihonSourceFilter(state.sourceStates, state.languageStates)
+					val sourceChanged = entries.any { entry ->
+						state.sourceStates[entry.source.sourceId] != entry.isSourceEnabled
+					}
+					val languageChanged = entries.any { entry ->
+						val language = entry.source.language.ifBlank { "other" }.lowercase()
+						state.languageStates[language] != entry.isLanguageEnabled
+					}
+					if (sourceChanged || languageChanged) {
+						viewModel.applyMihonSourceFilter(state.sourceStates, state.languageStates)
+						resetSourcePageScrollPositions()
+					}
 				}
 			}
 			.show()
