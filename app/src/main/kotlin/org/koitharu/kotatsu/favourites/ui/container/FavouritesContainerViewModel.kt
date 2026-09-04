@@ -18,6 +18,7 @@ import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.MangaSource
+import org.koitharu.kotatsu.core.model.isLocal
 import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
@@ -28,6 +29,7 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_TITLE
+import org.koitharu.kotatsu.favourites.domain.DownloadedContentClassifier
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -51,6 +53,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	private val contentTypeStore: FavouriteContentTypeStore,
 	private val localFavouritesRepository: LocalFavouritesRepository,
 	private val displayPreferences: FavouriteDisplayPreferences,
+	private val downloadedContentClassifier: DownloadedContentClassifier,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
@@ -252,14 +255,40 @@ class FavouritesContainerViewModel @Inject constructor(
 	private suspend fun calculateDownloadedCount(type: FavouriteContentType, query: String): Int {
 		val wantNovel = type == FavouriteContentType.NOVEL
 		if (query.isBlank()) {
-			return favouritesRepository.getDownloadedCountsBySource().sumOf { count ->
-				count.itemCount.takeIf {
-					MangaSource(count.source).isNovelSource == wantNovel
-				} ?: 0
+			val countsBySource = favouritesRepository.getDownloadedCountsBySource()
+			var total = 0
+			var localTotal = 0
+			for (count in countsBySource) {
+				val source = MangaSource(count.source)
+				if (source.isLocal) {
+					localTotal += count.itemCount
+				} else if (source.isNovelSource == wantNovel) {
+					total += count.itemCount
+				}
 			}
+			if (localTotal == 0) return total
+
+			val localNovelIds = downloadedContentClassifier.getLocalNovelIds()
+			val localNovelCount = favouritesRepository.getDownloadedEntries().count { entry ->
+				MangaSource(entry.source).isLocal && entry.mangaId in localNovelIds
+			}
+			total += if (wantNovel) {
+				localNovelCount
+			} else {
+				(localTotal - localNovelCount).coerceAtLeast(0)
+			}
+			return total
 		}
+
+		val localNovelIds = downloadedContentClassifier.getLocalNovelIds()
 		val entries = favouritesRepository.getDownloadedEntries().filter { entry ->
-			MangaSource(entry.source).isNovelSource == wantNovel
+			val source = MangaSource(entry.source)
+			val isNovel = if (source.isLocal) {
+				entry.mangaId in localNovelIds
+			} else {
+				source.isNovelSource
+			}
+			isNovel == wantNovel
 		}
 		return searchMatcher.matchingIds(entries, query).size
 	}

@@ -162,6 +162,15 @@ private fun View.setBackgroundKeepingPadding(drawable: Drawable?) {
 	setPaddingRelative(start, top, end, bottom)
 }
 
+private data class FavouriteTabBasePadding(
+	val start: Int,
+	val top: Int,
+	val end: Int,
+	val bottom: Int,
+)
+
+private val favouriteTabBasePaddings = WeakHashMap<View, FavouriteTabBasePadding>()
+
 /**
  * Material badges are overlays, so their width does not participate in the TabLayout measurement.
  * Reserve only the end space required by the current digit count and move the badge into that space,
@@ -169,16 +178,28 @@ private fun View.setBackgroundKeepingPadding(drawable: Drawable?) {
  */
 internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: Boolean) {
 	val safeCount = count.coerceAtLeast(0)
+	val shouldShowBadge = isVisible && safeCount > 0
 	val visibleDigits = safeCount.coerceAtMost(MAX_CATEGORY_BADGE_COUNT).toString().length
 	val view = tab.view
 	val density = view.resources.displayMetrics.density
-	val basePadding = view.paddingStart
-	val badgeSpace = ((BADGE_BASE_END_SPACE_DP + visibleDigits * BADGE_PER_DIGIT_SPACE_DP) * density).roundToInt()
+	val basePadding = favouriteTabBasePaddings.getOrPut(view) {
+		FavouriteTabBasePadding(
+			start = view.paddingStart,
+			top = view.paddingTop,
+			end = view.paddingEnd,
+			bottom = view.paddingBottom,
+		)
+	}
+	val badgeSpace = if (shouldShowBadge) {
+		((BADGE_BASE_END_SPACE_DP + visibleDigits * BADGE_PER_DIGIT_SPACE_DP) * density).roundToInt()
+	} else {
+		0
+	}
 	view.setPaddingRelative(
-		basePadding,
-		view.paddingTop,
-		basePadding + badgeSpace,
-		view.paddingBottom,
+		basePadding.start,
+		basePadding.top,
+		basePadding.end + badgeSpace,
+		basePadding.bottom,
 	)
 
 	tab.getOrCreateBadge().apply {
@@ -186,7 +207,7 @@ internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: 
 		number = safeCount
 		setHorizontalPadding((BADGE_HORIZONTAL_PADDING_DP * density).roundToInt())
 		setHorizontalOffsetWithText(-((BADGE_BASE_OUTWARD_OFFSET_DP + visibleDigits * BADGE_PER_DIGIT_OFFSET_DP) * density).roundToInt())
-		this.isVisible = isVisible && safeCount > 0
+		this.isVisible = shouldShowBadge
 	}
 }
 

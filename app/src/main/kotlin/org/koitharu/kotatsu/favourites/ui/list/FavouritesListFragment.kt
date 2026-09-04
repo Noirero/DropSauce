@@ -28,6 +28,7 @@ import org.koitharu.kotatsu.core.util.ext.stableMangaCoverKey
 import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
+import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.list.ui.MangaListFragment
 import org.koitharu.kotatsu.list.ui.adapter.MangaListAdapter
 import org.koitharu.kotatsu.list.ui.config.ListConfigSection
@@ -180,6 +181,10 @@ class FavouritesListFragment : MangaListFragment() {
 		val ids = selectedItemsIds
 		menu.findItem(R.id.action_pin)?.isVisible = ids.isNotEmpty() && ids.none { it in pinned }
 		menu.findItem(R.id.action_unpin)?.isVisible = ids.isNotEmpty() && ids.all { it in pinned }
+		// Downloaded is a virtual file-backed shelf and may contain titles that were never favourited.
+		// Category membership is managed through action_favourite; a generic remove action would be a
+		// misleading no-op for those downloaded-only items.
+		menu.findItem(R.id.action_remove)?.isVisible = categoryId != DOWNLOADED_FAVOURITES_CATEGORY_ID
 		return super.onPrepareActionMode(controller, mode, menu)
 	}
 
