@@ -20,21 +20,21 @@ enum class VisualEffectLevel(
 ) {
 	LIGHT(
 		R.string.visual_effects_light,
-		surfaceTintFraction = 0f,
+		surfaceTintFraction = 0.025f,
 		headerElevationDp = 0f,
-		outlineAlpha = 0,
+		outlineAlpha = 24,
 	),
 	BALANCED(
 		R.string.visual_effects_balanced,
-		surfaceTintFraction = 0.045f,
-		headerElevationDp = 2f,
-		outlineAlpha = 56,
+		surfaceTintFraction = 0.12f,
+		headerElevationDp = 3f,
+		outlineAlpha = 80,
 	),
 	FULL(
 		R.string.visual_effects_full,
-		surfaceTintFraction = 0.09f,
-		headerElevationDp = 4f,
-		outlineAlpha = 88,
+		surfaceTintFraction = 0.20f,
+		headerElevationDp = 6f,
+		outlineAlpha = 120,
 	),
 }
 

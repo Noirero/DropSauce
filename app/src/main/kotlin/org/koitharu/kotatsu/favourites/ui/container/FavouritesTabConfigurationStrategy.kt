@@ -87,13 +87,13 @@ class FavouritesTabConfigurationStrategy(
 		val accent = context.getThemeColor(style.accentAttr, container)
 		val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
 		val shape = MaterialShapeDrawable(
-			ShapeAppearanceModel.builder().setAllCornerSizes(18f * density).build(),
+			ShapeAppearanceModel.builder().setAllCornerSizes(20f * density).build(),
 		).apply {
 			fillColor = ColorStateList(
 				states,
 				intArrayOf(
-					ColorUtils.blendARGB(surface, container, 0.82f),
-					ColorUtils.blendARGB(surface, container, 0.28f),
+					ColorUtils.blendARGB(surface, container, 0.96f),
+					ColorUtils.blendARGB(surface, container, 0.13f),
 				),
 			)
 			setStroke(
@@ -101,18 +101,24 @@ class FavouritesTabConfigurationStrategy(
 				ColorStateList(
 					states,
 					intArrayOf(
-						ColorUtils.blendARGB(surface, accent, 0.78f),
-						ColorUtils.blendARGB(surface, accent, 0.34f),
+						ColorUtils.blendARGB(surface, accent, 0.95f),
+						ColorUtils.blendARGB(surface, accent, 0.18f),
 					),
 				),
 			)
 		}
-		val horizontal = (3f * density).roundToInt()
-		val vertical = (5f * density).roundToInt()
-		val pill = InsetDrawable(shape, horizontal, vertical, horizontal + if (separator) (10f * density).roundToInt() else 0, vertical)
+		val horizontal = (4f * density).roundToInt()
+		val vertical = (4f * density).roundToInt()
+		val pill = InsetDrawable(
+			shape,
+			horizontal,
+			vertical,
+			horizontal + if (separator) (10f * density).roundToInt() else 0,
+			vertical,
+		)
 		val content = if (separator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 			val divider = GradientDrawable().apply {
-				setColor(ColorUtils.blendARGB(surface, accent, 0.45f))
+				setColor(ColorUtils.blendARGB(surface, accent, 0.34f))
 			}
 			LayerDrawable(arrayOf(pill, divider)).apply {
 				setLayerSize(1, (1f * density).roundToInt().coerceAtLeast(1), (22f * density).roundToInt())
@@ -123,7 +129,7 @@ class FavouritesTabConfigurationStrategy(
 			pill
 		}
 		return RippleDrawable(
-			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, 36)),
+			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, 48)),
 			content,
 			null,
 		)
@@ -140,7 +146,10 @@ class FavouritesTabConfigurationStrategy(
 		return SpannableStringBuilder().apply {
 			append('\uFFFC')
 			setSpan(
-				ImageSpan(icon, if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ImageSpan.ALIGN_CENTER else ImageSpan.ALIGN_BOTTOM),
+				ImageSpan(
+					icon,
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ImageSpan.ALIGN_CENTER else ImageSpan.ALIGN_BOTTOM,
+				),
 				0,
 				1,
 				Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
