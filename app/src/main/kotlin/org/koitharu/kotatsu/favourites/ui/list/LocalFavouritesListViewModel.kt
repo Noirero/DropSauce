@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -153,6 +154,9 @@ class LocalFavouritesListViewModel @Inject constructor(
 		viewModelScope.launch {
 			localStorageChanges.filter { changed ->
 				changed == null || changed.file.isInsideLocalFolder()
+			}.distinctUntilChanged { old, new ->
+				old != null && new != null &&
+					old.manga.id == new.manga.id && old.file.path == new.file.path
 			}.collect {
 				localFavouritesRepository.refresh()
 			}

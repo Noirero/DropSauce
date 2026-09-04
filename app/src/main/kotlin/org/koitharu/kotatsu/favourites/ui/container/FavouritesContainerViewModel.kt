@@ -58,7 +58,7 @@ class FavouritesContainerViewModel @Inject constructor(
 	init {
 		// Populate the virtual Local shelf and its badge even when its page has not been created yet.
 		launchJob(Dispatchers.IO) {
-			localFavouritesRepository.refresh()
+			localFavouritesRepository.ensureInitialized()
 		}
 	}
 

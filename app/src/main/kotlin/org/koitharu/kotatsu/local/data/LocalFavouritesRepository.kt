@@ -38,17 +38,31 @@ class LocalFavouritesRepository @Inject constructor(
 
 	private val mutex = Mutex()
 	private val _items = MutableStateFlow<List<Manga>>(emptyList())
+	@Volatile
+	private var isInitialized = false
 
 	val items: StateFlow<List<Manga>> = _items.asStateFlow()
 
+	suspend fun ensureInitialized() {
+		if (isInitialized) return
+		mutex.withLock {
+			if (!isInitialized) refreshLocked()
+		}
+	}
+
 	suspend fun refresh() = mutex.withLock {
+		refreshLocked()
+	}
+
+	private suspend fun refreshLocked() {
 		val roots = storageManager.getReadableDirs()
 		val mangaFolders = runInterruptible(Dispatchers.IO) {
 			findMangaFolders(roots).sortedWith(compareBy(AlphanumComparator()) { it.name })
 		}
 		if (mangaFolders.isEmpty()) {
 			_items.value = emptyList()
-			return@withLock
+			isInitialized = true
+			return
 		}
 
 		val parsed = ArrayList<Manga>(mangaFolders.size)
@@ -78,6 +92,7 @@ class LocalFavouritesRepository @Inject constructor(
 			results.close()
 		}
 		publish(parsed)
+		isInitialized = true
 	}
 
 	private fun publish(items: List<Manga>) {

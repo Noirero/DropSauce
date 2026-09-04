@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.toChipModel
 import org.koitharu.kotatsu.core.nav.AppRouter
@@ -75,6 +76,10 @@ class LocalListViewModel @Inject constructor(
 	init {
 		launchJob(Dispatchers.Default) {
 			localStorageChanges
+				.distinctUntilChanged { old, new ->
+					old != null && new != null &&
+						old.manga.id == new.manga.id && old.file.path == new.file.path
+				}
 				.collect {
 					loadList(filterCoordinator.snapshot(), append = false).join()
 				}

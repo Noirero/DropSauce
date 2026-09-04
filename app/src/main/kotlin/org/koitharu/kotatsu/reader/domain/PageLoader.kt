@@ -122,7 +122,7 @@ class PageLoader @Inject constructor(
 			for (page in pages.asReversed()) {
 				val mangaPage = page.toMangaPage()
 				val key = taskKey(mangaPage)
-				if (tasks.containsKey(key)) {
+				if (synchronized(tasks) { tasks.containsKey(key) }) {
 					continue
 				}
 				prefetchQueue.offerFirst(mangaPage)

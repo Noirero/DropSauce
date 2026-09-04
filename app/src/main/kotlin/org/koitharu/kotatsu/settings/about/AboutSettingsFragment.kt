@@ -68,21 +68,20 @@ class AboutSettingsFragment : BaseComposeSettingsFragment(R.string.about) {
 
 	private val viewModel by viewModels<AboutSettingsViewModel>()
 
-	private var pendingLogContent: String? = null
-
 	private val saveLogLauncher = registerForActivityResult(
 		ActivityResultContracts.CreateDocument("text/plain"),
 	) { uri: Uri? ->
-		val content = pendingLogContent ?: return@registerForActivityResult
-		pendingLogContent = null
-		if (uri == null) return@registerForActivityResult
-		try {
-			requireContext().contentResolver.openOutputStream(uri)?.use { output ->
-				output.write(content.toByteArray(Charsets.UTF_8))
+		val content = viewModel.pendingLogExport.value ?: return@registerForActivityResult
+		if (uri != null) {
+			try {
+				requireContext().contentResolver.openOutputStream(uri)?.use { output ->
+					output.write(content.toByteArray(Charsets.UTF_8))
+				}
+			} catch (_: Exception) {
+				view?.let { Snackbar.make(it, R.string.error_occurred, Snackbar.LENGTH_SHORT).show() }
 			}
-		} catch (_: Exception) {
-			Snackbar.make(requireView(), R.string.error_occurred, Snackbar.LENGTH_SHORT).show()
 		}
+		viewModel.consumePendingLogExport(content)
 	}
 
 	override fun onCreateView(
@@ -119,9 +118,9 @@ class AboutSettingsFragment : BaseComposeSettingsFragment(R.string.about) {
 		viewLifecycleOwner.lifecycleScope.launch {
 			viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
 				viewModel.pendingLogExport.filterNotNull().collect { content ->
-					pendingLogContent = content
-					viewModel.consumePendingLogExport(content)
-					saveLogLauncher.launch("dropsauce_log_${System.currentTimeMillis()}.txt")
+					if (viewModel.requestLogExport(content)) {
+						saveLogLauncher.launch("dropsauce_log_${System.currentTimeMillis()}.txt")
+					}
 				}
 			}
 		}

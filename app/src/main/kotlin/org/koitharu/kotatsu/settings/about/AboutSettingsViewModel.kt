@@ -32,6 +32,7 @@ class AboutSettingsViewModel @Inject constructor(
 
 	private val _pendingLogExport = MutableStateFlow<String?>(null)
 	val pendingLogExport: StateFlow<String?> = _pendingLogExport
+	private var isLogExportPickerOpen = false
 
 	private val _isVerboseLogging = MutableStateFlow(settings.isVerboseLoggingEnabled)
 	val isVerboseLogging: StateFlow<Boolean> = _isVerboseLogging
@@ -66,9 +67,16 @@ class AboutSettingsViewModel @Inject constructor(
 		}
 	}
 
+	fun requestLogExport(content: String): Boolean {
+		if (_pendingLogExport.value != content || isLogExportPickerOpen) return false
+		isLogExportPickerOpen = true
+		return true
+	}
+
 	fun consumePendingLogExport(content: String) {
 		if (_pendingLogExport.value == content) {
 			_pendingLogExport.value = null
 		}
+		isLogExportPickerOpen = false
 	}
 }
