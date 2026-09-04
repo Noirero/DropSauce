@@ -7,11 +7,6 @@ on:
         description: 'Optional stable version (e.g. 1.2.3). Leave empty for an automatic fork version.'
         required: false
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/BUILD_NOW'
 
 concurrency:
   group: release-workflow
