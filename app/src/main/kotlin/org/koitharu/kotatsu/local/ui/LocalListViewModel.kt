@@ -38,6 +38,8 @@ import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.remotelist.ui.RemoteListViewModel
 import javax.inject.Inject
 
+internal const val LOCAL_LIBRARY_TIP_KEY = "local_library"
+
 @HiltViewModel
 class LocalListViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
@@ -88,6 +90,17 @@ class LocalListViewModel @Inject constructor(
 				list.add(0, it)
 			}
 		}
+		list.add(
+			0,
+			TipModel(
+				key = LOCAL_LIBRARY_TIP_KEY,
+				title = R.string.local_files,
+				text = R.string.local_files_summary,
+				icon = R.drawable.ic_folder_file,
+				primaryButtonText = R.string.manage_folders,
+				secondaryButtonText = R.string.rescan,
+			),
+		)
 		if (!localStorageManager.hasExternalStoragePermission(isReadOnly = true)) {
 			for (item in list) {
 				if (item !is MangaListModel) {
