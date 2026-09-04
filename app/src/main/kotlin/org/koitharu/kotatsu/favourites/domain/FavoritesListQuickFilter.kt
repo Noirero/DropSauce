@@ -3,6 +3,9 @@ package org.koitharu.kotatsu.favourites.domain
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.StateFlow
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -11,6 +14,23 @@ import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.list.domain.MangaListQuickFilter
 import org.koitharu.kotatsu.list.ui.model.ExtensionFilter
 import org.koitharu.kotatsu.mihon.MihonExtensionManager
+
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
+private class DownloadedShelfFilterState(
+	private val delegate: StateFlow<Set<ListFilterOption>>,
+) : StateFlow<Set<ListFilterOption>> by delegate {
+
+	override val value: Set<ListFilterOption>
+		get() = delegate.value - ListFilterOption.Downloaded
+
+	override val replayCache: List<Set<ListFilterOption>>
+		get() = listOf(value)
+
+	override suspend fun collect(collector: FlowCollector<Set<ListFilterOption>>): Nothing =
+		delegate.collect(
+			FlowCollector { filters -> collector.emit(filters - ListFilterOption.Downloaded) },
+		)
+}
 
 class FavoritesListQuickFilter @AssistedInject constructor(
 	@Assisted private val categoryId: Long,
@@ -22,6 +42,12 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 ) : MangaListQuickFilter(settings) {
 
 	private var didRefreshExtensions = false
+	private val categoryAppliedOptions: StateFlow<Set<ListFilterOption>> =
+		if (categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID) {
+			DownloadedShelfFilterState(filterStore.state)
+		} else {
+			filterStore.state
+		}
 
 	init {
 		isStateFilterEnabled = false
@@ -31,7 +57,7 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	}
 
 	override val appliedOptions
-		get() = filterStore.state
+		get() = categoryAppliedOptions
 
 	override fun setFilterOption(option: ListFilterOption, isApplied: Boolean) {
 		filterStore.set(option, isApplied)
@@ -81,8 +107,8 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 					isChecked = ListFilterOption.Downloaded in selectedOptions,
 					isCheckedIconVisible = false,
 					data = ListFilterOption.Downloaded,
-			),
-		)
+				),
+			)
 		}
 
 		val options = getSourceOptions()
