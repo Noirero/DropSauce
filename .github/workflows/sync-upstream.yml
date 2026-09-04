@@ -2,8 +2,6 @@ name: Sync Upstream
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 */6 * * *'
 
 concurrency:
   group: sync-upstream
