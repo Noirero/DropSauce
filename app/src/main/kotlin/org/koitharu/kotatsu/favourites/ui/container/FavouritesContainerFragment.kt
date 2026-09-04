@@ -46,6 +46,7 @@ import org.koitharu.kotatsu.core.util.ext.setTabsEnabled
 import org.koitharu.kotatsu.core.util.ext.setTextAndVisible
 import org.koitharu.kotatsu.databinding.FragmentFavouritesContainerBinding
 import org.koitharu.kotatsu.databinding.ItemEmptyStateBinding
+import org.koitharu.kotatsu.favourites.domain.FavouriteCategoryNavigationMode
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentType
 import org.koitharu.kotatsu.favourites.domain.FavouriteContentTypeStore
 import org.koitharu.kotatsu.favourites.domain.FavouriteDisplayPreferences
@@ -71,6 +72,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	private var pagerAdapter: FavouritesContainerAdapter? = null
 	private var categories: List<FavouriteTabModel> = emptyList()
 	private var isEmptyState = false
+	private var isActionModeActive = false
 	private var displayedContentType: FavouriteContentType? = null
 	private var pendingCategoryRestore: FavouriteContentType? = null
 
@@ -143,6 +145,9 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		displayPreferences.state.observe(viewLifecycleOwner) {
 			applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
 		}
+		displayPreferences.categoryNavigationMode.observe(viewLifecycleOwner) {
+			applyCategoryNavigation(displayPreferences.current(contentTypeStore.selectedType.value))
+		}
 		addMenuProvider(
 			FavouritesContainerMenuProvider(
 				router = router,
@@ -181,6 +186,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		searchBackCallback = null
 		pagerAdapter = null
 		categories = emptyList()
+		isActionModeActive = false
 		searchScopeActive.value = false
 		detachTabsFromAppBar()
 		actionModeDelegate.removeListener(this)
@@ -223,20 +229,18 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	override fun onActionModeStarted(mode: ActionMode) {
+		isActionModeActive = true
+		applyCategoryInteraction()
 		viewBinding?.run {
-			pager.isUserInputEnabled = false
-			tabs.setTabsEnabled(false)
-			buttonCategoryPicker.isEnabled = false
 			buttonContentManga.isEnabled = false
 			buttonContentNovel.isEnabled = false
 		}
 	}
 
 	override fun onActionModeFinished(mode: ActionMode) {
+		isActionModeActive = false
+		applyCategoryInteraction()
 		viewBinding?.run {
-			pager.isUserInputEnabled = true
-			tabs.setTabsEnabled(true)
-			buttonCategoryPicker.isEnabled = true
 			buttonContentManga.isEnabled = true
 			buttonContentNovel.isEnabled = true
 		}
@@ -328,7 +332,27 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			val badge = binding.tabs.getTabAt(index)?.badge ?: continue
 			badge.isVisible = options.showCategoryCounts && (item?.count ?: 0) > 0
 		}
+		applyCategoryInteraction()
 		updateCategoryPickerLabel(options)
+	}
+
+	private fun applyCategoryInteraction() {
+		val binding = viewBinding ?: return
+		val navigationMode = displayPreferences.categoryNavigationMode.value
+		val canTap = !isActionModeActive && navigationMode.allowsTap
+		val canSwipe = !isActionModeActive && navigationMode.allowsSwipe
+
+		binding.pager.isUserInputEnabled = canSwipe
+		binding.tabs.setTabsEnabled(!isActionModeActive)
+		for (index in 0 until binding.tabs.tabCount) {
+			binding.tabs.getTabAt(index)?.view?.apply {
+				isClickable = canTap
+				isFocusable = canTap
+			}
+		}
+		binding.buttonCategoryPicker.isEnabled = !isActionModeActive
+		binding.buttonCategoryPicker.isClickable = canTap
+		binding.buttonCategoryPicker.isFocusable = canTap
 	}
 
 	private fun updateCategoryPickerLabel(
@@ -349,6 +373,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	private fun showCategoryPicker() {
+		if (!displayPreferences.categoryNavigationMode.value.allowsTap) return
 		val binding = viewBinding ?: return
 		val options = displayPreferences.current(contentTypeStore.selectedType.value)
 		PopupMenu(requireContext(), binding.buttonCategoryPicker).apply {
