@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.MangaSource
+import org.koitharu.kotatsu.core.model.isLocal
+import org.koitharu.kotatsu.core.model.isNovelSource
 import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
@@ -146,19 +149,25 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 	}
 
 	private suspend fun getSourceOptions(): List<ListFilterOption.Source> {
-		val categorySources = repository.findSources(categoryId)
+		val isDownloadedShelf = categoryId == DOWNLOADED_FAVOURITES_CATEGORY_ID
+		val categorySources = if (isDownloadedShelf) {
+			repository.getDownloadedCountsBySource()
+				.sortedByDescending { it.itemCount }
+				.map { MangaSource(it.source) }
+		} else {
+			repository.findSources(categoryId)
+		}
 		if (categorySources.isEmpty()) return emptyList()
 
 		mihonExtensionManager.ensureReady(forceRefresh = !didRefreshExtensions)
 		didRefreshExtensions = true
-		val installedSources = mihonExtensionManager.getMihonMangaSources()
-		return categorySources.mapNotNull { source ->
-			installedSources.firstOrNull { it == source }
-		}.distinctBy {
-			it.name
-		}.map {
-			ListFilterOption.Source(it)
-		}
+		val installedSources = mihonExtensionManager.getMihonMangaSources().associateBy { it.name }
+		val wantNovel = contentTypeStore.selectedType.value == FavouriteContentType.NOVEL
+		return categorySources
+			.map { source -> installedSources[source.name] ?: source }
+			.filter { source -> !isDownloadedShelf || source.isLocal || source.isNovelSource == wantNovel }
+			.distinctBy { it.name }
+			.map { ListFilterOption.Source(it) }
 	}
 
 	@AssistedFactory
