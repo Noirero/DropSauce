@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.details.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -39,7 +42,6 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
-import org.koitharu.kotatsu.core.ui.miyorareAccentSurface
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.details.ui.model.ChapterListItem
@@ -173,7 +175,7 @@ private fun HeroTagPills(
 			Surface(
 				shape = shape,
 				color = if (palette.isModern) {
-					MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.88f)
+					MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.84f)
 				} else {
 					tagColor.copy(alpha = 0.16f)
 				},
@@ -181,9 +183,9 @@ private fun HeroTagPills(
 					BorderStroke(
 						1.dp,
 						if (warningColor != null) {
-							warningColor.copy(alpha = palette.borderHighlight.alpha.coerceAtLeast(0.14f) * 0.72f)
+							warningColor.copy(alpha = palette.borderHighlight.alpha.coerceAtLeast(0.14f) * 0.48f)
 						} else {
-							palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.72f)
+							palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.44f)
 						},
 					)
 				} else {
@@ -195,7 +197,15 @@ private fun HeroTagPills(
 					text = tag.title?.toString().orEmpty(),
 					style = MaterialTheme.typography.labelMedium,
 					fontWeight = FontWeight.SemiBold,
-					color = if (palette.isModern) tagColor.copy(alpha = 0.90f) else tagColor,
+					color = if (palette.isModern) {
+						if (warningColor != null) {
+							warningColor.copy(alpha = 0.82f)
+						} else {
+							lerp(MaterialTheme.colorScheme.onSurfaceVariant, palette.primary, 0.24f).copy(alpha = 0.88f)
+						}
+					} else {
+						tagColor
+					},
 					maxLines = 1,
 					overflow = TextOverflow.Ellipsis,
 					modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -237,8 +247,8 @@ internal fun PrimaryDetailsActions(
 	} else {
 		when (palette.effectLevel) {
 			VisualEffectLevel.LIGHT -> 0.88f
-			VisualEffectLevel.BALANCED -> 0.96f
-			VisualEffectLevel.FULL -> 1f
+			VisualEffectLevel.BALANCED -> 0.94f
+			VisualEffectLevel.FULL -> 0.98f
 		}
 	}
 
@@ -263,7 +273,7 @@ internal fun PrimaryDetailsActions(
 				BorderStroke(
 					1.dp,
 					palette.borderHighlight.copy(
-						alpha = palette.borderHighlight.alpha * if (isFavourite) 0.88f else 0.52f,
+						alpha = palette.borderHighlight.alpha * if (isFavourite) 0.82f else 0.34f,
 					),
 				)
 			} else {
@@ -303,11 +313,21 @@ internal fun PrimaryDetailsActions(
 			.height(56.dp)
 			.let { modifier ->
 				if (palette.isModern) {
-					modifier.miyorareAccentSurface(
-						palette = palette,
-						shape = controlShape,
-						alpha = readGradientAlpha,
-					)
+					modifier
+						.background(
+							brush = Brush.horizontalGradient(
+								0f to palette.primary.copy(alpha = readGradientAlpha),
+								0.68f to lerp(palette.primary, palette.secondary, 0.28f).copy(alpha = readGradientAlpha),
+								0.93f to lerp(palette.primary, palette.secondary, 0.48f).copy(alpha = readGradientAlpha),
+								1f to palette.secondary.copy(alpha = readGradientAlpha * 0.72f),
+							),
+							shape = controlShape,
+						)
+						.border(
+							1.dp,
+							palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.72f),
+							controlShape,
+						)
 				} else {
 					modifier
 				}
@@ -320,8 +340,8 @@ internal fun PrimaryDetailsActions(
 			shadowElevation = if (palette.isModern) {
 				if (!readEnabled) 0.dp else when (palette.effectLevel) {
 					VisualEffectLevel.LIGHT -> 0.dp
-					VisualEffectLevel.BALANCED -> 3.dp
-					VisualEffectLevel.FULL -> 5.dp
+					VisualEffectLevel.BALANCED -> 2.dp
+					VisualEffectLevel.FULL -> 4.dp
 				}
 			} else if (readEnabled) {
 				3.dp
@@ -437,11 +457,16 @@ internal fun InlineChapterCard(
 		shadowElevation = if (palette.isModern) 0.dp else if (visualEffectLevel == VisualEffectLevel.FULL) 1.dp else 0.dp,
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(horizontal = SCREEN_PADDING, vertical = 4.dp)
+			.padding(horizontal = SCREEN_PADDING, vertical = if (palette.isModern) 3.dp else 4.dp)
 			.clickable(onClick = onClick),
 	) {
 		Row(
-			modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 11.dp, bottom = 11.dp),
+			modifier = Modifier.padding(
+				start = 14.dp,
+				end = 6.dp,
+				top = if (palette.isModern) 10.dp else 11.dp,
+				bottom = if (palette.isModern) 10.dp else 11.dp,
+			),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
 			if (item.isCurrent) {

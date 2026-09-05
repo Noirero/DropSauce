@@ -318,18 +318,18 @@ private fun ExpressiveBackdrop(
 	}
 	val middleAlpha = if (palette.isModern) {
 		when (palette.effectLevel) {
-			VisualEffectLevel.LIGHT -> 0.60f
-			VisualEffectLevel.BALANCED -> 0.52f
-			VisualEffectLevel.FULL -> 0.46f
+			VisualEffectLevel.LIGHT -> 0.63f
+			VisualEffectLevel.BALANCED -> 0.57f
+			VisualEffectLevel.FULL -> 0.52f
 		}
 	} else {
 		0.78f
 	}
 	val lowerAlpha = if (palette.isModern) {
 		when (palette.effectLevel) {
-			VisualEffectLevel.LIGHT -> 0.92f
-			VisualEffectLevel.BALANCED -> 0.91f
-			VisualEffectLevel.FULL -> 0.90f
+			VisualEffectLevel.LIGHT -> 0.94f
+			VisualEffectLevel.BALANCED -> 0.93f
+			VisualEffectLevel.FULL -> 0.92f
 		}
 	} else {
 		0.94f

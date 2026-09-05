@@ -59,7 +59,7 @@ internal fun SectionCard(
 		border = if (palette.isModern) {
 			BorderStroke(
 				1.dp,
-				palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.55f),
+				palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.34f),
 			)
 		} else {
 			null
@@ -91,14 +91,14 @@ internal fun SectionHeader(title: String, action: String, accent: Color, onActio
 		Surface(
 			shape = RoundedCornerShape(50),
 			color = if (palette.isModern) {
-				MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f)
+				MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.86f)
 			} else {
 				accent.copy(alpha = 0.14f)
 			},
 			border = if (palette.isModern) {
 				BorderStroke(
 					1.dp,
-					palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.62f),
+					palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * 0.34f),
 				)
 			} else {
 				null
@@ -109,7 +109,7 @@ internal fun SectionHeader(title: String, action: String, accent: Color, onActio
 				text = action,
 				style = MaterialTheme.typography.labelMedium,
 				fontWeight = FontWeight.Medium,
-				color = if (palette.isModern) palette.primary else accent,
+				color = if (palette.isModern) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.90f) else accent,
 				modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
 			)
 		}
@@ -151,7 +151,7 @@ internal fun Pill(
 			BorderStroke(
 				1.dp,
 				palette.borderHighlight.copy(
-					alpha = palette.borderHighlight.alpha * if (highlighted) 0.74f else 0.48f,
+					alpha = palette.borderHighlight.alpha * if (highlighted) 0.74f else 0.30f,
 				),
 			)
 		} else {
