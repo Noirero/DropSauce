@@ -24,23 +24,24 @@ object MiyorareVisualTokens {
 	const val SPACING_XXL_DP = 24f
 	const val SPACING_XXXL_DP = 32f
 
-	// Readable aliases retained for existing and upcoming component call sites.
 	const val SPACING_COMPACT_DP = SPACING_S_DP
 	const val SPACING_STANDARD_DP = SPACING_L_DP
 	const val SPACING_SECTION_DP = SPACING_XXL_DP
 
-	// Semantic finite decoration strengths. These are cheap color blends, never continuous shaders.
-	const val GRADIENT_STRENGTH_LIGHT = 0.06f
-	const val GRADIENT_STRENGTH_BALANCED = 0.14f
-	const val GRADIENT_STRENGTH_FULL = 0.22f
-	const val BORDER_ALPHA_LIGHT = 0.18f
-	const val BORDER_ALPHA_BALANCED = 0.32f
-	const val BORDER_ALPHA_FULL = 0.46f
-	const val GLOW_ALPHA_LIGHT = 0.05f
-	const val GLOW_ALPHA_BALANCED = 0.18f
+	// Static decoration strengths. Balanced is intentionally expressive enough to read as the
+	// reference Miyorare look, while Light stays restrained and Full adds depth without blur loops.
+	const val GRADIENT_STRENGTH_LIGHT = 0.07f
+	const val GRADIENT_STRENGTH_BALANCED = 0.24f
+	const val GRADIENT_STRENGTH_FULL = 0.38f
+	const val BORDER_ALPHA_LIGHT = 0.16f
+	const val BORDER_ALPHA_BALANCED = 0.34f
+	const val BORDER_ALPHA_FULL = 0.52f
+	const val GLOW_ALPHA_LIGHT = 0.04f
+	const val GLOW_ALPHA_BALANCED = 0.16f
 	const val GLOW_ALPHA_FULL = 0.28f
-	const val ACTIVE_GRADIENT_MIX = 0.34f
-	const val SURFACE_GRADIENT_MIX = 0.12f
+	const val ACTIVE_GRADIENT_MIX = 0.42f
+	const val SURFACE_GRADIENT_MIX = 0.28f
+	const val ICON_GRADIENT_MIX = 0.34f
 
 	// Finite, inexpensive motion values mirror integers_miyorare_modern.xml.
 	const val MOTION_NONE_MS = 0

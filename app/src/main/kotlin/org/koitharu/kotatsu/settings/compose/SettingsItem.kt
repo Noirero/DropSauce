@@ -4,7 +4,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,16 +42,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.MiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.miyorareIconSurface
 import org.koitharu.kotatsu.core.ui.miyorareSurface
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
 import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
 
-/**
- * Generic row in a [SettingsGroup]. Classic keeps the existing category-colour icon treatment.
- * Modern deliberately collapses those many category hues into one Miyorare accent treatment so
- * hierarchy comes from spacing, surface depth and selection instead of a rainbow of competing cards.
- */
 @Composable
 fun SettingsItem(
 	title: String,
@@ -117,7 +112,7 @@ fun SettingsItem(
 	) {
 		Row(
 			modifier = Modifier
-				.heightIn(min = if (modern) 62.dp else 72.dp)
+				.heightIn(min = if (modern) 64.dp else 72.dp)
 				.let {
 					if (onClick != null && enabled) {
 						it.clickable {
@@ -130,7 +125,7 @@ fun SettingsItem(
 				}
 				.padding(
 					horizontal = if (modern) 14.dp else 12.dp,
-					vertical = if (modern) 9.dp else 10.dp,
+					vertical = if (modern) 10.dp else 10.dp,
 				),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
@@ -224,24 +219,20 @@ private fun SettingsIconModern(
 	tintIcon: Boolean,
 ) {
 	val alpha = if (enabled) 1f else 0.4f
-	val shape = RoundedCornerShape(12.dp)
+	val shape = RoundedCornerShape(13.dp)
 	Box(
 		modifier = Modifier
 			.size(40.dp)
-			.clip(shape)
-			.background(palette.selectedSurface.copy(alpha = 0.72f * alpha))
-			.border(
-				width = 1.dp,
-				color = palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * alpha),
-				shape = shape,
-			),
+			.miyorareIconSurface(palette = palette, shape = shape, alpha = alpha),
 		contentAlignment = Alignment.Center,
 	) {
 		androidx.compose.foundation.Image(
 			painter = rememberAnyDrawablePainter(iconRes),
 			contentDescription = null,
 			modifier = Modifier.size(21.dp),
-			colorFilter = if (tintIcon) ColorFilter.tint(palette.primary.copy(alpha = alpha)) else null,
+			colorFilter = if (tintIcon) {
+				ColorFilter.tint(lerp(palette.primary, palette.secondary, 0.18f).copy(alpha = alpha))
+			} else null,
 			alpha = alpha,
 		)
 	}

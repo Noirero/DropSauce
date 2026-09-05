@@ -30,20 +30,12 @@ import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.settings.SettingsActivity
 
-/**
- * Window-Y based scroll request used by settings-search highlighting. The scaffold provides an
- * implementation; a highlighted [SettingsItem] passes its own window Y so the scaffold scrolls it
- * comfortably into view. (We do NOT use bringIntoViewRequester — it proved unreliable here.)
- */
 val LocalSettingsHighlightScroll = compositionLocalOf<(Float) -> Unit> { {} }
 val LocalSettingsScrollToTop = compositionLocalOf<(Float) -> Unit> { {} }
 
 /**
- * Top-level container for every redesigned settings screen.
- *
- * Uses a plain scrolling [Column] (not a LazyColumn) so EVERY row is composed and laid out even
- * when off-screen — that is what lets settings-search reliably scroll to and highlight an option
- * anywhere on the page. Settings screens are short enough that non-lazy composition is fine.
+ * Top-level container for redesigned settings screens. Modern gets one static three-stop background
+ * wash, while Classic keeps its original host background and all search/scroll behaviour unchanged.
  */
 @Composable
 fun SettingsScaffold(
@@ -90,6 +82,7 @@ fun SettingsScaffold(
 						brush = Brush.verticalGradient(
 							listOf(
 								visualPalette.backgroundGradientStart,
+								visualPalette.backgroundGradientMiddle,
 								visualPalette.backgroundGradientEnd,
 							),
 						),
@@ -112,7 +105,7 @@ fun SettingsScaffold(
 				modifier = Modifier
 					.fillMaxSize()
 					.verticalScroll(scrollState)
-					.padding(top = 8.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
+					.padding(top = 10.dp, bottom = 28.dp, start = 16.dp, end = 16.dp),
 			) {
 				scope.items.forEach { item ->
 					Box(Modifier.fillMaxWidth()) { item() }
@@ -128,7 +121,6 @@ private tailrec fun Context.findSettingsActivity(): SettingsActivity? = when (th
 	else -> null
 }
 
-/** Minimal builder mirroring the old `LazyListScope.item { }` call sites used across screens. */
 class SettingsListScope {
 	internal val items = mutableListOf<@Composable () -> Unit>()
 	fun item(content: @Composable () -> Unit) {
