@@ -76,29 +76,29 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 	val controlRadius = 16f * density
 	val iconSize = 16f * density
 	val horizontalPadding = 8f * density
-	val textPadding = 4f * density
+	val textPadding = 3.5f * density
 
-	chipSpacingHorizontal = (6f * density).toInt()
+	chipSpacingHorizontal = (5f * density).toInt()
 	children.forEach { child ->
 		val chip = child as? Chip ?: return@forEach
 		val selected = chip.isChecked
 		val container = if (selected) {
-			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.38f)
+			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.34f)
 		} else {
-			ColorUtils.blendARGB(surface, primary, MiyorareVisualTokens.GLOW_ALPHA_LIGHT)
+			ColorUtils.blendARGB(surface, primary, MiyorareVisualTokens.GLOW_ALPHA_LIGHT * 0.75f)
 		}
 		val strokeBase = if (selected) primary else outline
 		val strokeAlpha = if (selected) {
-			MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.72f
+			MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.66f
 		} else {
-			MiyorareVisualTokens.BORDER_ALPHA_LIGHT
+			MiyorareVisualTokens.BORDER_ALPHA_LIGHT * 0.85f
 		}
 		val stroke = ColorUtils.setAlphaComponent(
 			strokeBase,
 			(strokeAlpha * 255f).toInt().coerceIn(0, 255),
 		)
 		val contentColor = if (selected) {
-			ColorUtils.blendARGB(onSurface, primary, 0.36f)
+			ColorUtils.blendARGB(onSurface, primary, 0.32f)
 		} else {
 			onSurfaceVariant
 		}
@@ -112,7 +112,7 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		chip.textStartPadding = textPadding
 		chip.textEndPadding = textPadding
 		chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-		chip.chipStrokeWidth = density * if (selected) 0.8f else 0.65f
+		chip.chipStrokeWidth = density * if (selected) 0.75f else 0.6f
 		chip.chipBackgroundColor = ColorStateList.valueOf(container)
 		chip.chipStrokeColor = ColorStateList.valueOf(stroke)
 		chip.setTextColor(contentColor)
@@ -120,7 +120,10 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		chip.chipIconTint = ColorStateList.valueOf(contentColor)
 		chip.closeIconTint = ColorStateList.valueOf(contentColor)
 		chip.rippleColor = ColorStateList.valueOf(
-			ColorUtils.setAlphaComponent(primary, (MiyorareVisualTokens.GLOW_ALPHA_BALANCED * 255f).toInt()),
+			ColorUtils.setAlphaComponent(
+				primary,
+				(MiyorareVisualTokens.GLOW_ALPHA_BALANCED * 0.80f * 255f).toInt(),
+			),
 		)
 		chip.elevation = 0f
 	}
