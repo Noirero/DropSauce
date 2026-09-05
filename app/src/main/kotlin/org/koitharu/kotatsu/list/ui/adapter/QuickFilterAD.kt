@@ -62,7 +62,7 @@ private fun ItemQuickFilterBinding.applyMiyorareFavouritesQuickFilterStyle(item:
 
 private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 	val density = resources.displayMetrics.density
-	val primary = context.getThemeColor(materialR.attr.colorPrimary, Color.WHITE)
+	val primary = context.getThemeColor(androidx.appcompat.R.attr.colorPrimary, Color.WHITE)
 	val surface = context.getThemeColor(materialR.attr.colorSurfaceContainer, Color.DKGRAY)
 	val surfaceHigh = context.getThemeColor(materialR.attr.colorSurfaceContainerHighest, surface)
 	val onSurface = context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
