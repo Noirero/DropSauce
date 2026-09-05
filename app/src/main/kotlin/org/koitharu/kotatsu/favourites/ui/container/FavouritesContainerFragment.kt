@@ -349,9 +349,13 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		binding.tabs.isVisible = !isEmptyState && hasMultipleCategories && options.showCategoryTabs
 		binding.buttonCategoryPicker.isVisible = !isEmptyState && hasCategories && !options.showCategoryTabs
 		for (index in 0 until binding.tabs.tabCount) {
-			val item = categories.getOrNull(index)
-			val badge = binding.tabs.getTabAt(index)?.badge ?: continue
-			badge.isVisible = options.showCategoryCounts && (item?.count ?: 0) > 0
+			val item = categories.getOrNull(index) ?: continue
+			val tab = binding.tabs.getTabAt(index) ?: continue
+			updateFavouriteTabBadge(
+				tab = tab,
+				count = item.count,
+				isVisible = options.showCategoryCounts && item.count > 0,
+			)
 		}
 		applyCategoryInteraction()
 		updateCategoryPickerLabel(options)
