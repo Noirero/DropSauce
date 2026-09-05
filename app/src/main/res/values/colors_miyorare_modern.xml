@@ -1,49 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Miyorare Modern light palette: soft pearl surfaces with violet-magenta accents. -->
+    <!-- Miyorare Modern light palette: pearl surfaces with restrained violet/cyan/pink depth. -->
     <color name="miyorare_modern_background">#F8F7FC</color>
     <color name="miyorare_modern_background_gradient_start">#FCFBFF</color>
-    <color name="miyorare_modern_background_gradient_end">#F3EDFF</color>
+    <color name="miyorare_modern_background_gradient_end">#F0F5FF</color>
 
     <color name="miyorare_modern_surface">#FFFFFFFF</color>
-    <color name="miyorare_modern_surface_gradient_start">#FFFFFFFF</color>
-    <color name="miyorare_modern_surface_gradient_end">#F8F3FF</color>
-    <color name="miyorare_modern_surface_container">#F2EFF9</color>
-    <color name="miyorare_modern_surface_container_high">#EBE7F5</color>
-    <color name="miyorare_modern_surface_variant">#E7E2F1</color>
+    <color name="miyorare_modern_surface_gradient_start">#FEFCFF</color>
+    <color name="miyorare_modern_surface_gradient_end">#F1F7FF</color>
+    <color name="miyorare_modern_surface_container">#F3F0F9</color>
+    <color name="miyorare_modern_surface_container_high">#ECE8F5</color>
+    <color name="miyorare_modern_surface_variant">#E8E5F0</color>
 
     <color name="miyorare_modern_on_background">#17131F</color>
     <color name="miyorare_modern_on_surface">#1B1724</color>
     <color name="miyorare_modern_on_surface_variant">#625B70</color>
 
-    <color name="miyorare_modern_primary">#765EE7</color>
+    <color name="miyorare_modern_primary">#7054E8</color>
     <color name="miyorare_modern_on_primary">#FFFFFFFF</color>
-    <color name="miyorare_modern_primary_container">#ECE5FF</color>
-    <color name="miyorare_modern_on_primary_container">#281650</color>
+    <color name="miyorare_modern_primary_container">#ECE8FF</color>
+    <color name="miyorare_modern_on_primary_container">#25134D</color>
 
-    <color name="miyorare_modern_secondary">#A54DD4</color>
+    <color name="miyorare_modern_secondary">#007F9D</color>
     <color name="miyorare_modern_on_secondary">#FFFFFFFF</color>
-    <color name="miyorare_modern_secondary_container">#F6E3FF</color>
-    <color name="miyorare_modern_on_secondary_container">#381047</color>
+    <color name="miyorare_modern_secondary_container">#D9F5FC</color>
+    <color name="miyorare_modern_on_secondary_container">#003642</color>
 
-    <color name="miyorare_modern_tertiary">#168FB9</color>
+    <color name="miyorare_modern_tertiary">#A83E82</color>
     <color name="miyorare_modern_on_tertiary">#FFFFFFFF</color>
 
     <color name="miyorare_modern_outline">#81798D</color>
     <color name="miyorare_modern_outline_variant">#D7D0E0</color>
-    <color name="miyorare_modern_divider">#E4DEE9</color>
-    <color name="miyorare_modern_selected_surface">#EEE7FF</color>
-    <color name="miyorare_modern_border_highlight">#52765EE7</color>
+    <color name="miyorare_modern_divider">#E2DDE8</color>
+    <color name="miyorare_modern_selected_surface">#EEE9FF</color>
+    <color name="miyorare_modern_border_highlight">#52705BE8</color>
 
-    <!-- Reusable semantic gradients. Screens consume these through centralized theme tokens. -->
-    <color name="miyorare_modern_gradient_start">#655BEE</color>
-    <color name="miyorare_modern_gradient_middle">#8D55E9</color>
-    <color name="miyorare_modern_gradient_end">#C64FAB</color>
-    <color name="miyorare_modern_active_gradient_start">#6E5DE9</color>
-    <color name="miyorare_modern_active_gradient_end">#B650BE</color>
+    <!-- Static semantic gradients shared by View/Compose bridges. -->
+    <color name="miyorare_modern_gradient_start">#7054E8</color>
+    <color name="miyorare_modern_gradient_middle">#6578D9</color>
+    <color name="miyorare_modern_gradient_end">#168CAB</color>
+    <color name="miyorare_modern_active_gradient_start">#725AE8</color>
+    <color name="miyorare_modern_active_gradient_end">#218EAC</color>
 
-    <color name="miyorare_modern_glow">#36765EE7</color>
-    <color name="miyorare_modern_glow_soft">#20A54DD4</color>
+    <color name="miyorare_modern_glow">#337054E8</color>
+    <color name="miyorare_modern_glow_soft">#1C007F9D</color>
     <color name="miyorare_modern_scrim">#8F000000</color>
     <color name="miyorare_modern_backdrop_scrim_top">#1717131F</color>
     <color name="miyorare_modern_backdrop_scrim_bottom">#D917131F</color>
