@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.list.ui.adapter
 
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.util.TypedValue
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.children
 import androidx.preference.PreferenceManager
@@ -68,20 +69,24 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 	val onSurface = context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
 	val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, onSurface)
 	val outline = context.getThemeColor(materialR.attr.colorOutlineVariant, primary)
-	val controlRadius = MiyorareVisualTokens.RADIUS_CONTROL_DP * density
+	val controlHeight = 34f * density
+	val controlRadius = 17f * density
+	val iconSize = 16f * density
+	val horizontalPadding = 8f * density
+	val textPadding = 4f * density
 
-	chipSpacingHorizontal = (MiyorareVisualTokens.SPACING_S_DP * density).toInt()
+	chipSpacingHorizontal = (6f * density).toInt()
 	children.forEach { child ->
 		val chip = child as? Chip ?: return@forEach
 		val selected = chip.isChecked
 		val container = if (selected) {
-			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.52f)
+			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.46f)
 		} else {
 			ColorUtils.blendARGB(surface, primary, MiyorareVisualTokens.GLOW_ALPHA_LIGHT)
 		}
 		val strokeBase = if (selected) primary else outline
 		val strokeAlpha = if (selected) {
-			MiyorareVisualTokens.BORDER_ALPHA_BALANCED
+			MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.86f
 		} else {
 			MiyorareVisualTokens.BORDER_ALPHA_LIGHT
 		}
@@ -91,10 +96,16 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		)
 		val contentColor = if (selected) onSurface else onSurfaceVariant
 
-		chip.chipMinHeight = controlRadius * 2f
+		chip.chipMinHeight = controlHeight
 		chip.chipCornerRadius = controlRadius
-		chip.chipIconSize = controlRadius
-		chip.chipStrokeWidth = density * if (selected) 1f else 0.75f
+		chip.chipIconSize = iconSize
+		chip.closeIconSize = iconSize
+		chip.chipStartPadding = horizontalPadding
+		chip.chipEndPadding = horizontalPadding
+		chip.textStartPadding = textPadding
+		chip.textEndPadding = textPadding
+		chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+		chip.chipStrokeWidth = density * if (selected) 0.9f else 0.7f
 		chip.chipBackgroundColor = ColorStateList.valueOf(container)
 		chip.chipStrokeColor = ColorStateList.valueOf(stroke)
 		chip.setTextColor(contentColor)

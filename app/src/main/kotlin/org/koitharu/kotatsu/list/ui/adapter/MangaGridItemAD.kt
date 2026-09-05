@@ -3,6 +3,7 @@ package org.koitharu.kotatsu.list.ui.adapter
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -66,12 +67,14 @@ fun mangaGridItemAD(
 	val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, onSurface)
 	val accent = ColorUtils.blendARGB(primary, tertiary, 0.30f)
 	val darkAccent = ColorUtils.blendARGB(primary, Color.BLACK, 0.78f)
-	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.76f)
-	val modernIndicator = ColorUtils.blendARGB(surfaceHigh, accent, 0.18f)
-	val modernBadge = ColorUtils.blendARGB(surfaceHigh, accent, 0.34f)
+	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.78f)
+	val modernIndicator = ColorUtils.blendARGB(surfaceHigh, accent, 0.16f)
+	val modernBadge = ColorUtils.blendARGB(surfaceHigh, accent, 0.30f)
 	val modernBorder = ColorUtils.setAlphaComponent(
 		accent,
-		(MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 255f).toInt().coerceIn(0, 255),
+		((MiyorareVisualTokens.BORDER_ALPHA_LIGHT + MiyorareVisualTokens.GLOW_ALPHA_LIGHT) * 255f)
+			.toInt()
+			.coerceIn(0, 255),
 	)
 	val modernCoverRadius = MiyorareVisualTokens.RADIUS_COVER_DP * density
 
@@ -79,6 +82,10 @@ fun mangaGridItemAD(
 	val defaultCoverStrokeColor = binding.imageViewCover.strokeColor
 	val defaultCoverStrokeWidth = binding.imageViewCover.strokeWidth
 	val defaultTitleColors = binding.textViewTitle.textColors
+	val defaultTitleTextSizePx = binding.textViewTitle.textSize
+	val defaultOverlayTextSizePx = binding.textViewTitleOverlay.textSize
+	val defaultTitleIncludeFontPadding = binding.textViewTitle.includeFontPadding
+	val defaultOverlayIncludeFontPadding = binding.textViewTitleOverlay.includeFontPadding
 	val defaultBadgeColors = binding.badge.textColors
 	val defaultLanguageColors = binding.textViewLanguage.textColors
 	val defaultBadgeBackgroundTint = ViewCompat.getBackgroundTintList(binding.badge)
@@ -103,9 +110,9 @@ fun mangaGridItemAD(
 	val modernScrim = GradientDrawable(
 		GradientDrawable.Orientation.BOTTOM_TOP,
 		intArrayOf(
-			ColorUtils.setAlphaComponent(modernScrimBase, 0xF4),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0xB8),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0x38),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0xE8),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0xA8),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0x24),
 			Color.TRANSPARENT,
 		),
 	).apply {
@@ -132,9 +139,13 @@ fun mangaGridItemAD(
 		if (isModern) {
 			binding.imageViewCover.shapeAppearanceModel = modernCoverShape
 			binding.imageViewCover.strokeColor = ColorStateList.valueOf(modernBorder)
-			binding.imageViewCover.strokeWidth = density
+			binding.imageViewCover.strokeWidth = 0.75f * density
 			binding.viewScrim.background = modernScrim
 			binding.textViewTitle.setTextColor(onSurface)
+			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+			binding.textViewTitle.includeFontPadding = false
+			binding.textViewTitleOverlay.includeFontPadding = false
 			binding.badge.setTextColor(onSurface)
 			binding.textViewLanguage.setTextColor(onSurfaceVariant)
 			ViewCompat.setBackgroundTintList(binding.badge, ColorStateList.valueOf(modernBadge))
@@ -150,6 +161,10 @@ fun mangaGridItemAD(
 			binding.imageViewCover.strokeWidth = defaultCoverStrokeWidth
 			binding.viewScrim.background = classicScrim
 			binding.textViewTitle.setTextColor(defaultTitleColors)
+			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX, defaultTitleTextSizePx)
+			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_PX, defaultOverlayTextSizePx)
+			binding.textViewTitle.includeFontPadding = defaultTitleIncludeFontPadding
+			binding.textViewTitleOverlay.includeFontPadding = defaultOverlayIncludeFontPadding
 			binding.badge.setTextColor(defaultBadgeColors)
 			binding.textViewLanguage.setTextColor(defaultLanguageColors)
 			ViewCompat.setBackgroundTintList(binding.badge, defaultBadgeBackgroundTint)
