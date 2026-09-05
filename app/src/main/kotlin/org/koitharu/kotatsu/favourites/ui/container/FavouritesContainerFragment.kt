@@ -437,17 +437,17 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		val tertiary = context.getThemeColor(materialR.attr.colorTertiary, primary)
 		val strength = when (level) {
 			VisualEffectLevel.LIGHT -> MiyorareVisualTokens.GRADIENT_STRENGTH_LIGHT
-			VisualEffectLevel.BALANCED -> MiyorareVisualTokens.GRADIENT_STRENGTH_BALANCED * 0.72f
-			VisualEffectLevel.FULL -> MiyorareVisualTokens.GRADIENT_STRENGTH_FULL * 0.72f
+			VisualEffectLevel.BALANCED -> MiyorareVisualTokens.GRADIENT_STRENGTH_BALANCED * 0.68f
+			VisualEffectLevel.FULL -> MiyorareVisualTokens.GRADIENT_STRENGTH_FULL * 0.68f
 		}
 		val surfaceRadius = MiyorareVisualTokens.RADIUS_SURFACE_DP * density
 		val outlineColor = ColorUtils.blendARGB(surface, primary, 0.52f)
 		val headerBackground = GradientDrawable(
 			GradientDrawable.Orientation.TL_BR,
 			intArrayOf(
-				ColorUtils.blendARGB(surface, primary, strength),
-				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.58f),
-				ColorUtils.blendARGB(surface, primary, strength * 0.34f),
+				ColorUtils.blendARGB(surface, primary, strength * 0.94f),
+				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.50f),
+				ColorUtils.blendARGB(surface, primary, strength * 0.16f),
 			),
 		).apply {
 			cornerRadii = floatArrayOf(
@@ -458,29 +458,30 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			)
 			setStroke(
 				dp(0.75f).coerceAtLeast(1),
-				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.58f).roundToInt()),
+				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.50f).roundToInt()),
 			)
 		}
 		binding.layoutCategoryHeader.background = headerBackground
 		binding.layoutCategoryHeader.elevation = when (level) {
 			VisualEffectLevel.LIGHT -> 0f
-			VisualEffectLevel.BALANCED -> 1.5f * density
-			VisualEffectLevel.FULL -> 2.5f * density
+			VisualEffectLevel.BALANCED -> 1f * density
+			VisualEffectLevel.FULL -> 1.5f * density
 		}
-		binding.layoutCategoryHeader.setPadding(0, dp(MiyorareVisualTokens.SPACING_S_DP), 0, dp(MiyorareVisualTokens.SPACING_S_DP))
+		binding.layoutCategoryHeader.setPadding(0, dp(2f), 0, dp(2f))
 		binding.tabs.setSelectedTabIndicatorColor(Color.TRANSPARENT)
 		binding.tabs.setTabTextColors(onSurfaceVariant, primary)
-		binding.tabs.setTabRippleColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(primary, 32)))
+		binding.tabs.setTabRippleColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(primary, 24)))
 
+		binding.toggleContentType.setPadding(dp(1f), dp(1f), dp(1f), dp(1f))
 		(binding.toggleContentType.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 			params.marginStart = dp(MiyorareVisualTokens.SPACING_L_DP)
 			params.marginEnd = dp(MiyorareVisualTokens.SPACING_L_DP)
-			params.topMargin = dp(MiyorareVisualTokens.SPACING_S_DP)
-			params.bottomMargin = dp(MiyorareVisualTokens.SPACING_XS_DP)
+			params.topMargin = dp(3f)
+			params.bottomMargin = dp(2f)
 			binding.toggleContentType.layoutParams = params
 		}
 		(binding.tabs.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
-			params.topMargin = dp(MiyorareVisualTokens.SPACING_XS_DP)
+			params.topMargin = dp(2f)
 			params.bottomMargin = 0
 			binding.tabs.layoutParams = params
 		}
@@ -489,14 +490,15 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		binding.toggleContentType.background = GradientDrawable(
 			GradientDrawable.Orientation.LEFT_RIGHT,
 			intArrayOf(
-				ColorUtils.blendARGB(surfaceContainer, primary, strength * 0.34f),
-				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.22f),
+				ColorUtils.blendARGB(surfaceContainer, primary, strength * 0.26f),
+				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.16f),
+				ColorUtils.blendARGB(surfaceContainer, primary, strength * 0.08f),
 			),
 		).apply {
 			cornerRadius = groupRadius
 			setStroke(
 				dp(0.75f).coerceAtLeast(1),
-				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.42f).roundToInt()),
+				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.36f).roundToInt()),
 			)
 		}
 
@@ -505,7 +507,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 			intArrayOf(-android.R.attr.state_enabled),
 			intArrayOf(),
 		)
-		val selectedFill = ColorUtils.blendARGB(surfaceContainer, primaryContainer, 0.84f)
+		val selectedFill = ColorUtils.blendARGB(surfaceContainer, primaryContainer, 0.68f)
 		val disabledFill = ColorUtils.blendARGB(surfaceContainer, onSurfaceVariant, 0.06f)
 		val buttonBackgrounds = ColorStateList(
 			buttonStates,
@@ -519,13 +521,26 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 				onSurfaceVariant,
 			),
 		)
+		val selectedStroke = ColorUtils.setAlphaComponent(
+			primary,
+			(MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.72f * 255f).roundToInt().coerceIn(0, 255),
+		)
+		val idleStroke = ColorUtils.setAlphaComponent(
+			outlineColor,
+			(MiyorareVisualTokens.BORDER_ALPHA_LIGHT * 0.45f * 255f).roundToInt().coerceIn(0, 255),
+		)
+		val buttonStrokeColors = ColorStateList(
+			buttonStates,
+			intArrayOf(selectedStroke, ColorUtils.setAlphaComponent(onSurfaceVariant, 32), idleStroke),
+		)
 		val controlRadius = dp(MiyorareVisualTokens.RADIUS_CONTROL_DP)
 		for (button in arrayOf(binding.buttonContentManga, binding.buttonContentNovel)) {
 			button.backgroundTintList = buttonBackgrounds
 			button.setTextColor(buttonTextColors)
 			button.cornerRadius = controlRadius
-			button.strokeWidth = 0
-			button.minimumHeight = dp(44f)
+			button.strokeColor = buttonStrokeColors
+			button.strokeWidth = dp(0.5f).coerceAtLeast(1)
+			button.minimumHeight = dp(32f)
 		}
 
 		binding.buttonCategoryPicker.cornerRadius = controlRadius
