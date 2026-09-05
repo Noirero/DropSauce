@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.MiyorareAppearance
 import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
 import org.koitharu.kotatsu.core.prefs.MiyorareThemePreset
@@ -168,6 +169,7 @@ fun DropSauceTheme(content: @Composable () -> Unit) {
 		MiyorareAppearance.KEY_CUSTOM_ACCENT,
 		MiyorareAppearance.DEFAULT_CUSTOM_ACCENT,
 	)
+	val amoled by rememberBooleanPref(AppSettings.KEY_THEME_AMOLED, false)
 	val effectLevelValue by rememberStringPref(
 		VisualEffectPreferences.KEY_LEVEL,
 		VisualEffectLevel.BALANCED.name,
@@ -181,11 +183,12 @@ fun DropSauceTheme(content: @Composable () -> Unit) {
 		?: VisualEffectLevel.BALANCED
 
 	val modernColors = if (designStyle == MiyorareDesignStyle.MODERN) {
-		remember(themePreset, customAccent, isDark, effectLevel) {
+		remember(themePreset, customAccent, isDark, amoled, effectLevel) {
 			miyorareThemeColors(
 				preset = themePreset,
 				customAccent = customAccent,
 				darkTheme = isDark,
+				amoled = amoled,
 				effectLevel = effectLevel,
 			)
 		}

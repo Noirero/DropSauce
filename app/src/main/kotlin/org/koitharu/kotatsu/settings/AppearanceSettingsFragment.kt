@@ -88,10 +88,12 @@ class AppearanceSettingsFragment : BaseComposeSettingsFragment(R.string.appearan
 	lateinit var appShortcutManager: AppShortcutManager
 
 	private var pendingProtectState: Boolean? = null
+	private var isResettingAppearance = false
 
 	// Mirror the legacy fragment behavior: theme / AMOLED toggles must trigger an activity
 	// recreation so the new color scheme takes effect immediately.
-	private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+	private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener listener@ { _, key ->
+		if (isResettingAppearance && key in APPEARANCE_RESET_KEYS) return@listener
 		when (key) {
 			AppSettings.KEY_THEME -> {
 				AppCompatDelegate.setDefaultNightMode(settings.theme)
@@ -137,7 +139,7 @@ class AppearanceSettingsFragment : BaseComposeSettingsFragment(R.string.appearan
 						)
 					},
 					onProtectToggle = ::onProtectToggle,
-					onResetAppearance = settings::resetMiyorareAppearance,
+					onResetAppearance = ::resetAppearance,
 				)
 			}
 		}
@@ -167,9 +169,34 @@ class AppearanceSettingsFragment : BaseComposeSettingsFragment(R.string.appearan
 		}
 	}
 
+	private fun resetAppearance() {
+		val previousTheme = settings.theme
+		isResettingAppearance = true
+		settings.resetMiyorareAppearance()
+		val resetTheme = settings.theme
+		if (previousTheme != resetTheme) {
+			AppCompatDelegate.setDefaultNightMode(resetTheme)
+		} else {
+			activityRecreationHandle.recreateAll()
+		}
+		view?.post { isResettingAppearance = false }
+	}
+
 	private fun isAuthenticationSupported(): Boolean {
 		val manager = context?.let { BiometricManager.from(it) } ?: return false
 		return manager.canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) == BIOMETRIC_SUCCESS
+	}
+
+	private companion object {
+		val APPEARANCE_RESET_KEYS = setOf(
+			AppSettings.KEY_THEME,
+			AppSettings.KEY_COLOR_THEME,
+			AppSettings.KEY_THEME_AMOLED,
+			MiyorareAppearance.KEY_DESIGN_STYLE,
+			MiyorareAppearance.KEY_THEME_PRESET,
+			MiyorareAppearance.KEY_CUSTOM_ACCENT,
+			VisualEffectPreferences.KEY_LEVEL,
+		)
 	}
 
 	/**

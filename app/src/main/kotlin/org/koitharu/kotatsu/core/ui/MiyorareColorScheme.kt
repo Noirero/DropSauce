@@ -51,6 +51,7 @@ fun miyorareThemeColors(
 	preset: MiyorareThemePreset,
 	customAccent: String,
 	darkTheme: Boolean,
+	amoled: Boolean,
 	effectLevel: VisualEffectLevel,
 ): MiyorareThemeColors {
 	val requestedArgb = if (preset == MiyorareThemePreset.CUSTOM) {
@@ -58,7 +59,12 @@ fun miyorareThemeColors(
 	} else {
 		preset.accentArgb
 	}
-	val baseSurface = if (darkTheme) Color(0xFF0D1120) else Color.White
+	val useAmoled = darkTheme && amoled
+	val baseSurface = when {
+		useAmoled -> Color.Black
+		darkTheme -> Color(0xFF0D1120)
+		else -> Color.White
+	}
 	val primary = ensureVisibleAgainst(Color(requestedArgb), baseSurface, darkTheme)
 	val secondary = ensureVisibleAgainst(lerp(primary, Color(0xFF8A6CFF), 0.36f), baseSurface, darkTheme)
 	val accent = ensureVisibleAgainst(lerp(primary, Color(0xFF35C5D7), 0.48f), baseSurface, darkTheme)
@@ -69,8 +75,8 @@ fun miyorareThemeColors(
 	val border: Color
 	val chip: Color
 	if (darkTheme) {
-		val background = lerp(Color(0xFF070A14), primary, tint * 0.18f)
-		val surface = lerp(baseSurface, primary, tint * 0.24f)
+		val background = if (useAmoled) Color.Black else lerp(Color(0xFF070A14), primary, tint * 0.18f)
+		val surface = if (useAmoled) Color.Black else lerp(baseSurface, primary, tint * 0.24f)
 		val surfaceVariant = lerp(Color(0xFF1F2740), primary, tint * 0.34f)
 		selectedSurface = lerp(Color(0xFF1A2340), primary, 0.34f + tint * 0.30f)
 		chip = lerp(Color(0xFF241D3B), secondary, 0.32f + tint * 0.24f)
