@@ -170,10 +170,10 @@ class FavouritesTabConfigurationStrategy(
 		val accent = context.getThemeColor(style.accentAttr, container)
 		val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
 		val radiusDp = if (modern) MiyorareVisualTokens.RADIUS_CONTROL_DP * 0.86f else 20f
-		val selectedFill = if (modern) 0.56f else 0.96f
-		val idleFill = if (modern) 0.035f else 0.13f
-		val selectedStroke = if (modern) 0.50f else 0.95f
-		val idleStroke = if (modern) 0.06f else 0.18f
+		val selectedFill = if (modern) 0.52f else 0.96f
+		val idleFill = if (modern) 0.025f else 0.13f
+		val selectedStroke = if (modern) 0.46f else 0.95f
+		val idleStroke = if (modern) 0.05f else 0.18f
 		val shape = MaterialShapeDrawable(
 			ShapeAppearanceModel.builder().setAllCornerSizes(radiusDp * density).build(),
 		).apply {
@@ -207,7 +207,7 @@ class FavouritesTabConfigurationStrategy(
 		)
 		val content = if (separator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 			val divider = GradientDrawable().apply {
-				setColor(ColorUtils.blendARGB(surface, accent, if (modern) 0.14f else 0.34f))
+				setColor(ColorUtils.blendARGB(surface, accent, if (modern) 0.12f else 0.34f))
 			}
 			LayerDrawable(arrayOf(pill, divider)).apply {
 				setLayerSize(1, (1f * density).roundToInt().coerceAtLeast(1), ((if (modern) 18f else 20f) * density).roundToInt())
@@ -218,7 +218,7 @@ class FavouritesTabConfigurationStrategy(
 			pill
 		}
 		return RippleDrawable(
-			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, if (modern) 20 else 48)),
+			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, if (modern) 16 else 48)),
 			content,
 			null,
 		)
@@ -281,6 +281,7 @@ private data class FavouriteTabBasePadding(
 private val favouriteTabBasePaddings = WeakHashMap<View, FavouriteTabBasePadding>()
 private val favouriteTabBaseTitles = WeakHashMap<View, CharSequence>()
 private val favouriteTabModernFlags = WeakHashMap<View, Boolean>()
+private val favouriteCountFormatter = NumberFormat.getIntegerInstance()
 
 /**
  * Modern renders the count as an inline mini-pill so it participates in tab measurement instead of
@@ -360,11 +361,11 @@ private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int,
 		setSpan(
 			FavouriteCountPillSpan(
 				textSizePx = textSizePx,
-				horizontalPaddingPx = 4f * density,
+				horizontalPaddingPx = 3.75f * density,
 				heightPx = 15f * density,
 				cornerRadiusPx = 7.5f * density,
-				backgroundColor = ColorUtils.blendARGB(surface, primary, 0.16f),
-				textColor = onSurface,
+				backgroundColor = ColorUtils.blendARGB(surface, primary, 0.13f),
+				textColor = ColorUtils.blendARGB(onSurface, primary, 0.12f),
 			),
 			start,
 			length,
@@ -374,11 +375,10 @@ private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int,
 }
 
 private fun formatFavouriteCount(count: Int): String {
-	val formatter = NumberFormat.getIntegerInstance()
 	return if (count > MAX_CATEGORY_BADGE_COUNT) {
-		"${formatter.format(MAX_CATEGORY_BADGE_COUNT)}+"
+		"${favouriteCountFormatter.format(MAX_CATEGORY_BADGE_COUNT)}+"
 	} else {
-		formatter.format(count)
+		favouriteCountFormatter.format(count)
 	}
 }
 
@@ -391,6 +391,10 @@ private class FavouriteCountPillSpan(
 	private val textColor: Int,
 ) : ReplacementSpan() {
 
+	private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+	private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundColor }
+	private val bounds = RectF()
+
 	override fun getSize(
 		paint: Paint,
 		text: CharSequence,
@@ -399,10 +403,9 @@ private class FavouriteCountPillSpan(
 		fm: Paint.FontMetricsInt?,
 	): Int {
 		val label = text.subSequence(start, end).toString()
-		val textPaint = Paint(paint).apply {
-			isAntiAlias = true
-			textSize = textSizePx
-		}
+		textPaint.set(paint)
+		textPaint.isAntiAlias = true
+		textPaint.textSize = textSizePx
 		return (textPaint.measureText(label) + horizontalPaddingPx * 2f).roundToInt()
 	}
 
@@ -418,16 +421,14 @@ private class FavouriteCountPillSpan(
 		paint: Paint,
 	) {
 		val label = text.subSequence(start, end).toString()
-		val textPaint = Paint(paint).apply {
-			isAntiAlias = true
-			color = textColor
-			textSize = textSizePx
-		}
+		textPaint.set(paint)
+		textPaint.isAntiAlias = true
+		textPaint.color = textColor
+		textPaint.textSize = textSizePx
 		val width = textPaint.measureText(label) + horizontalPaddingPx * 2f
 		val centerY = (top + bottom) / 2f
-		val rect = RectF(x, centerY - heightPx / 2f, x + width, centerY + heightPx / 2f)
-		val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundColor }
-		canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, backgroundPaint)
+		bounds.set(x, centerY - heightPx / 2f, x + width, centerY + heightPx / 2f)
+		canvas.drawRoundRect(bounds, cornerRadiusPx, cornerRadiusPx, backgroundPaint)
 		val metrics = textPaint.fontMetrics
 		val baseline = centerY - (metrics.ascent + metrics.descent) / 2f
 		canvas.drawText(label, x + horizontalPaddingPx, baseline, textPaint)
