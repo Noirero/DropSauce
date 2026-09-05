@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.withPermit
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
@@ -73,11 +74,13 @@ class FavouritesListFragment : MangaListFragment() {
 	override fun onViewBindingCreated(binding: FragmentListBinding, savedInstanceState: Bundle?) {
 		super.onViewBindingCreated(binding, savedInstanceState)
 		binding.recyclerView.isVP2BugWorkaroundEnabled = true
-		modernSurfaceDecoration = ModernLibrarySurfaceDecoration().also { decoration ->
-			binding.recyclerView.addItemDecoration(decoration, 0)
-		}
-		visualEffectPreferences.level.observe(viewLifecycleOwner) { level ->
-			applyModernLibraryVisuals(binding, level)
+		if (settings.miyorareDesignStyle == MiyorareDesignStyle.MODERN) {
+			modernSurfaceDecoration = ModernLibrarySurfaceDecoration().also { decoration ->
+				binding.recyclerView.addItemDecoration(decoration, 0)
+			}
+			visualEffectPreferences.level.observe(viewLifecycleOwner) { level ->
+				applyModernLibraryVisuals(binding, level)
+			}
 		}
 		viewModel.gridScale.observe(viewLifecycleOwner) {
 			val adapter = binding.recyclerView.adapter ?: return@observe
