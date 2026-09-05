@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
@@ -34,15 +35,15 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import org.koitharu.kotatsu.core.util.ext.HapticEffect
-import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
-import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Column
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.miyorareSurface
+import org.koitharu.kotatsu.core.util.ext.HapticEffect
+import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
+import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
 
 /**
  * Generic row in a [SettingsGroup]. Lays out a circular tinted icon, a 1- or 2-line text
@@ -102,10 +103,23 @@ fun SettingsItem(
 		MaterialTheme.colorScheme.onPrimaryContainer,
 		highlight.value,
 	)
+	val surfaceModifier = modifier
+		.onGloballyPositioned { rowWindowY.floatValue = it.positionInWindow().y }
+		.let {
+			if (modern) {
+				it.miyorareSurface(
+					palette = visualPalette,
+					shape = shape,
+					selectedFraction = highlight.value,
+				)
+			} else {
+				it
+			}
+		}
 	Surface(
-		modifier = modifier.onGloballyPositioned { rowWindowY.floatValue = it.positionInWindow().y },
+		modifier = surfaceModifier,
 		shape = shape,
-		color = containerColor,
+		color = if (modern) Color.Transparent else containerColor,
 		contentColor = contentColor,
 	) {
 		Row(

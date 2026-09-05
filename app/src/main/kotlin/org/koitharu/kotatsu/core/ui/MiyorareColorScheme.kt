@@ -20,10 +20,21 @@ data class MiyorareVisualPalette(
 	val accent: Color,
 	val selectedSurface: Color,
 	val border: Color,
+	val borderHighlight: Color,
 	val glow: Color,
 	val chip: Color,
 	val button: Color,
 	val onButton: Color,
+	val backgroundGradientStart: Color,
+	val backgroundGradientEnd: Color,
+	val surfaceGradientStart: Color,
+	val surfaceGradientEnd: Color,
+	val accentGradientStart: Color,
+	val accentGradientMiddle: Color,
+	val accentGradientEnd: Color,
+	val activeGradientStart: Color,
+	val activeGradientEnd: Color,
+	val gradientStrength: Float,
 )
 
 data class MiyorareThemeColors(
@@ -40,16 +51,28 @@ val LocalMiyorareVisualPalette = staticCompositionLocalOf {
 		accent = Color.Unspecified,
 		selectedSurface = Color.Unspecified,
 		border = Color.Unspecified,
+		borderHighlight = Color.Transparent,
 		glow = Color.Transparent,
 		chip = Color.Unspecified,
 		button = Color.Unspecified,
 		onButton = Color.Unspecified,
+		backgroundGradientStart = Color.Unspecified,
+		backgroundGradientEnd = Color.Unspecified,
+		surfaceGradientStart = Color.Unspecified,
+		surfaceGradientEnd = Color.Unspecified,
+		accentGradientStart = Color.Unspecified,
+		accentGradientMiddle = Color.Unspecified,
+		accentGradientEnd = Color.Unspecified,
+		activeGradientStart = Color.Unspecified,
+		activeGradientEnd = Color.Unspecified,
+		gradientStrength = 0f,
 	)
 }
 
 /**
- * Derives one stable Material palette and semantic token set from a single accent color.
- * This is finite CPU work remembered by the theme caller: no shader, animation or per-item work.
+ * Derives one stable Material palette and semantic gradient token set from the selected accent.
+ * Everything here is finite color math remembered by the theme caller: no continuous shader,
+ * per-list-item animation or data/runtime behavior is introduced.
  */
 fun miyorareThemeColors(
 	preset: MiyorareThemePreset,
@@ -66,25 +89,40 @@ fun miyorareThemeColors(
 	val useAmoled = darkTheme && amoled
 	val baseSurface = when {
 		useAmoled -> Color.Black
-		darkTheme -> Color(0xFF0D1120)
+		darkTheme -> Color(0xFF11131F)
 		else -> Color.White
 	}
 	val primary = ensureVisibleAgainst(Color(requestedArgb), baseSurface, darkTheme)
-	val secondary = ensureVisibleAgainst(lerp(primary, Color(0xFF8A6CFF), 0.36f), baseSurface, darkTheme)
-	val accent = ensureVisibleAgainst(lerp(primary, Color(0xFF35C5D7), 0.48f), baseSurface, darkTheme)
+	val secondary = ensureVisibleAgainst(lerp(primary, Color(0xFFB46CFF), 0.34f), baseSurface, darkTheme)
+	val accent = ensureVisibleAgainst(lerp(primary, Color(0xFF69CFF5), 0.44f), baseSurface, darkTheme)
 	val tint = effectLevel.surfaceTintFraction.coerceIn(0f, 0.24f)
+	val gradientStrength = when (effectLevel) {
+		VisualEffectLevel.LIGHT -> MiyorareVisualTokens.GRADIENT_STRENGTH_LIGHT
+		VisualEffectLevel.BALANCED -> MiyorareVisualTokens.GRADIENT_STRENGTH_BALANCED
+		VisualEffectLevel.FULL -> MiyorareVisualTokens.GRADIENT_STRENGTH_FULL
+	}
+	val borderAlpha = when (effectLevel) {
+		VisualEffectLevel.LIGHT -> MiyorareVisualTokens.BORDER_ALPHA_LIGHT
+		VisualEffectLevel.BALANCED -> MiyorareVisualTokens.BORDER_ALPHA_BALANCED
+		VisualEffectLevel.FULL -> MiyorareVisualTokens.BORDER_ALPHA_FULL
+	}
+	val glowAlpha = when (effectLevel) {
+		VisualEffectLevel.LIGHT -> MiyorareVisualTokens.GLOW_ALPHA_LIGHT
+		VisualEffectLevel.BALANCED -> MiyorareVisualTokens.GLOW_ALPHA_BALANCED
+		VisualEffectLevel.FULL -> MiyorareVisualTokens.GLOW_ALPHA_FULL
+	}
 
 	val colorScheme: ColorScheme
 	val selectedSurface: Color
 	val border: Color
 	val chip: Color
 	if (darkTheme) {
-		val background = if (useAmoled) Color.Black else lerp(Color(0xFF070A14), primary, tint * 0.18f)
-		val surface = if (useAmoled) Color.Black else lerp(baseSurface, primary, tint * 0.24f)
-		val surfaceVariant = lerp(Color(0xFF1F2740), primary, tint * 0.34f)
-		selectedSurface = lerp(Color(0xFF1A2340), primary, 0.34f + tint * 0.30f)
-		chip = lerp(Color(0xFF241D3B), secondary, 0.32f + tint * 0.24f)
-		border = lerp(Color(0xFF737A91), primary, tint * 0.45f)
+		val background = if (useAmoled) Color.Black else lerp(Color(0xFF090A12), primary, tint * 0.12f)
+		val surface = if (useAmoled) Color.Black else lerp(baseSurface, primary, tint * 0.18f)
+		val surfaceVariant = lerp(Color(0xFF272B44), primary, tint * 0.28f)
+		selectedSurface = lerp(Color(0xFF2A2147), primary, 0.24f + tint * 0.28f)
+		chip = lerp(Color(0xFF30213C), secondary, 0.22f + tint * 0.22f)
+		border = lerp(Color(0xFF938DA3), primary, tint * 0.32f)
 		colorScheme = darkColorScheme(
 			primary = primary,
 			onPrimary = bestContentColor(primary),
@@ -97,23 +135,23 @@ fun miyorareThemeColors(
 			tertiary = accent,
 			onTertiary = bestContentColor(accent),
 			background = background,
-			onBackground = Color(0xFFF4F6FF),
+			onBackground = Color(0xFFF7F5FF),
 			surface = surface,
-			onSurface = Color(0xFFF2F4FF),
+			onSurface = Color(0xFFF5F3FF),
 			surfaceVariant = surfaceVariant,
-			onSurfaceVariant = Color(0xFFB8BDD0),
+			onSurfaceVariant = Color(0xFFC5C0D3),
 			outline = border,
-			outlineVariant = lerp(Color(0xFF343B51), primary, tint * 0.22f),
-			surfaceContainer = lerp(Color(0xFF12182A), primary, tint * 0.20f),
-			surfaceContainerHigh = lerp(Color(0xFF192137), primary, tint * 0.26f),
+			outlineVariant = lerp(Color(0xFF3B3548), primary, tint * 0.18f),
+			surfaceContainer = lerp(Color(0xFF171A2B), primary, tint * 0.16f),
+			surfaceContainerHigh = lerp(Color(0xFF20243B), primary, tint * 0.22f),
 		)
 	} else {
-		val background = lerp(Color(0xFFF7F8FC), primary, tint * 0.10f)
-		val surface = lerp(baseSurface, primary, tint * 0.08f)
-		val surfaceVariant = lerp(Color(0xFFE4E8F5), primary, tint * 0.20f)
-		selectedSurface = lerp(Color(0xFFE8EBF8), primary, 0.14f + tint * 0.28f)
-		chip = lerp(Color(0xFFF0EAF8), secondary, 0.12f + tint * 0.24f)
-		border = lerp(Color(0xFF7A819A), primary, tint * 0.30f)
+		val background = lerp(Color(0xFFF8F7FC), primary, tint * 0.07f)
+		val surface = lerp(baseSurface, primary, tint * 0.05f)
+		val surfaceVariant = lerp(Color(0xFFE7E2F1), primary, tint * 0.15f)
+		selectedSurface = lerp(Color(0xFFEEE7FF), primary, 0.11f + tint * 0.22f)
+		chip = lerp(Color(0xFFF6E7FA), secondary, 0.09f + tint * 0.20f)
+		border = lerp(Color(0xFF81798D), primary, tint * 0.22f)
 		colorScheme = lightColorScheme(
 			primary = primary,
 			onPrimary = bestContentColor(primary),
@@ -126,23 +164,44 @@ fun miyorareThemeColors(
 			tertiary = accent,
 			onTertiary = bestContentColor(accent),
 			background = background,
-			onBackground = Color(0xFF111425),
+			onBackground = Color(0xFF17131F),
 			surface = surface,
-			onSurface = Color(0xFF15182A),
+			onSurface = Color(0xFF1B1724),
 			surfaceVariant = surfaceVariant,
-			onSurfaceVariant = Color(0xFF5D6278),
+			onSurfaceVariant = Color(0xFF625B70),
 			outline = border,
-			outlineVariant = lerp(Color(0xFFD4D8E7), primary, tint * 0.18f),
-			surfaceContainer = lerp(Color(0xFFF0F2FA), primary, tint * 0.14f),
-			surfaceContainerHigh = lerp(Color(0xFFE8EBF7), primary, tint * 0.20f),
+			outlineVariant = lerp(Color(0xFFD7D0E0), primary, tint * 0.14f),
+			surfaceContainer = lerp(Color(0xFFF2EFF9), primary, tint * 0.10f),
+			surfaceContainerHigh = lerp(Color(0xFFEBE7F5), primary, tint * 0.16f),
 		)
 	}
 
-	val glowAlpha = when (effectLevel) {
-		VisualEffectLevel.LIGHT -> 0f
-		VisualEffectLevel.BALANCED -> 0.22f
-		VisualEffectLevel.FULL -> 0.34f
+	val backgroundGradientStart: Color
+	val backgroundGradientEnd: Color
+	if (useAmoled) {
+		// Preserve true-black AMOLED semantics; depth remains available on cards and active controls.
+		backgroundGradientStart = Color.Black
+		backgroundGradientEnd = Color.Black
+	} else {
+		backgroundGradientStart = lerp(colorScheme.background, primary, gradientStrength * 0.12f)
+		backgroundGradientEnd = lerp(colorScheme.background, secondary, gradientStrength * 0.52f)
 	}
+	val surfaceGradientStart = lerp(
+		colorScheme.surfaceContainer,
+		primary,
+		gradientStrength * MiyorareVisualTokens.SURFACE_GRADIENT_MIX,
+	)
+	val surfaceGradientEnd = lerp(
+		colorScheme.surfaceContainerHigh,
+		secondary,
+		gradientStrength * 0.58f,
+	)
+	val accentGradientMiddle = lerp(primary, secondary, 0.52f + gradientStrength * 0.45f)
+	val accentGradientEnd = lerp(secondary, accent, 0.16f + gradientStrength * 0.72f)
+	val activeGradientStart = lerp(primary, secondary, gradientStrength * MiyorareVisualTokens.ACTIVE_GRADIENT_MIX)
+	val activeGradientEnd = lerp(primary, secondary, 0.18f + gradientStrength * 1.35f)
+	val borderHighlight = lerp(border, primary, 0.48f).copy(alpha = borderAlpha)
+
 	return MiyorareThemeColors(
 		colorScheme = colorScheme,
 		visualPalette = MiyorareVisualPalette(
@@ -153,10 +212,21 @@ fun miyorareThemeColors(
 			accent = accent,
 			selectedSurface = selectedSurface,
 			border = border,
+			borderHighlight = borderHighlight,
 			glow = primary.copy(alpha = glowAlpha),
 			chip = chip,
 			button = primary,
 			onButton = bestContentColor(primary),
+			backgroundGradientStart = backgroundGradientStart,
+			backgroundGradientEnd = backgroundGradientEnd,
+			surfaceGradientStart = surfaceGradientStart,
+			surfaceGradientEnd = surfaceGradientEnd,
+			accentGradientStart = primary,
+			accentGradientMiddle = accentGradientMiddle,
+			accentGradientEnd = accentGradientEnd,
+			activeGradientStart = activeGradientStart,
+			activeGradientEnd = activeGradientEnd,
+			gradientStrength = gradientStrength,
 		),
 	)
 }
@@ -172,10 +242,21 @@ fun classicMiyorareVisualPalette(
 	accent = colorScheme.tertiary,
 	selectedSurface = colorScheme.primaryContainer,
 	border = colorScheme.outline,
-	glow = colorScheme.primary.copy(alpha = if (effectLevel == VisualEffectLevel.FULL) 0.20f else 0f),
+	borderHighlight = Color.Transparent,
+	glow = Color.Transparent,
 	chip = colorScheme.secondaryContainer,
 	button = colorScheme.primary,
 	onButton = colorScheme.onPrimary,
+	backgroundGradientStart = colorScheme.background,
+	backgroundGradientEnd = colorScheme.background,
+	surfaceGradientStart = colorScheme.surfaceContainer,
+	surfaceGradientEnd = colorScheme.surfaceContainer,
+	accentGradientStart = colorScheme.primary,
+	accentGradientMiddle = colorScheme.primary,
+	accentGradientEnd = colorScheme.primary,
+	activeGradientStart = colorScheme.primary,
+	activeGradientEnd = colorScheme.primary,
+	gradientStrength = 0f,
 )
 
 private fun ensureVisibleAgainst(accent: Color, surface: Color, darkTheme: Boolean): Color {

@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
+import org.koitharu.kotatsu.core.ui.miyorareAccentSurface
+import org.koitharu.kotatsu.core.ui.miyorareSurface
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
 import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
@@ -61,31 +62,34 @@ fun SegmentedSettingsItem(
 	enabled: Boolean = true,
 ) {
 	val visualPalette = LocalMiyorareVisualPalette.current
-	val iconColor = if (visualPalette.isModern) {
+	val modern = visualPalette.isModern
+	val iconColor = if (modern) {
 		visualPalette.primary
 	} else {
 		MaterialTheme.colorScheme.onSurfaceVariant
 	}
+	val surfaceModifier = if (modern) {
+		modifier.miyorareSurface(visualPalette, shape)
+	} else {
+		modifier
+	}
 	Surface(
-		modifier = modifier,
+		modifier = surfaceModifier,
 		shape = shape,
-		color = MaterialTheme.colorScheme.surfaceContainer,
-		border = if (visualPalette.isModern) {
-			BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-		} else null,
+		color = if (modern) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
 		contentColor = MaterialTheme.colorScheme.onSurface,
 	) {
 		Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
 			Row(verticalAlignment = Alignment.CenterVertically) {
 				if (icon != null) {
 					Box(
-						modifier = Modifier.size(if (visualPalette.isModern) 40.dp else 44.dp),
+						modifier = Modifier.size(if (modern) 40.dp else 44.dp),
 						contentAlignment = Alignment.Center,
 					) {
 						androidx.compose.foundation.Image(
 							painter = rememberAnyDrawablePainter(icon),
 							contentDescription = null,
-							modifier = Modifier.size(if (visualPalette.isModern) 22.dp else 24.dp),
+							modifier = Modifier.size(if (modern) 22.dp else 24.dp),
 							colorFilter = ColorFilter.tint(
 								iconColor.copy(alpha = if (enabled) 1f else 0.4f),
 							),
@@ -136,6 +140,7 @@ private fun SegmentedRow(
 ) {
 	val haptic = rememberHapticEffect()
 	val visualPalette = LocalMiyorareVisualPalette.current
+	val modern = visualPalette.isModern
 	val colorAnimation = when (visualPalette.effectLevel) {
 		VisualEffectLevel.LIGHT -> snap<Color>()
 		VisualEffectLevel.BALANCED -> tween<Color>(MiyorareVisualTokens.MOTION_QUICK_MS)
@@ -166,7 +171,7 @@ private fun SegmentedRow(
 			} else {
 				MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
 			}
-			val background by if (visualPalette.isModern) {
+			val background by if (modern) {
 				animateColorAsState(
 					targetValue = targetBackground,
 					animationSpec = colorAnimation,
@@ -175,7 +180,7 @@ private fun SegmentedRow(
 			} else {
 				animateColorAsState(targetValue = targetBackground, label = "segment_bg_$index")
 			}
-			val foreground by if (visualPalette.isModern) {
+			val foreground by if (modern) {
 				animateColorAsState(
 					targetValue = targetForeground,
 					animationSpec = colorAnimation,
@@ -187,11 +192,11 @@ private fun SegmentedRow(
 			val scale by animateFloatAsState(
 				targetValue = when {
 					isSelected -> 1f
-					!visualPalette.isModern -> 0.94f
+					!modern -> 0.94f
 					visualPalette.effectLevel == VisualEffectLevel.LIGHT -> 1f
 					else -> 0.96f
 				},
-				animationSpec = if (!visualPalette.isModern) {
+				animationSpec = if (!modern) {
 					spring(
 						dampingRatio = Spring.DampingRatioMediumBouncy,
 						stiffness = Spring.StiffnessMediumLow,
@@ -208,18 +213,30 @@ private fun SegmentedRow(
 				},
 				label = "segment_scale_$index",
 			)
+			val segmentModifier = Modifier
+				.weight(1f)
+				.height(48.dp)
+				.scale(scale)
+				.let {
+					if (modern && isSelected) {
+						it.miyorareAccentSurface(
+							palette = visualPalette,
+							shape = segmentShape,
+							alpha = alpha,
+						)
+					} else {
+						it
+					}
+				}
 			Surface(
 				onClick = {
 					haptic(HapticEffect.TOGGLE_ON)
 					onSelected(index)
 				},
 				enabled = enabled,
-				modifier = Modifier
-					.weight(1f)
-					.height(48.dp)
-					.scale(scale),
+				modifier = segmentModifier,
 				shape = segmentShape,
-				color = background,
+				color = if (modern && isSelected) Color.Transparent else background,
 				contentColor = foreground,
 			) {
 				Box(contentAlignment = Alignment.Center) {
