@@ -33,15 +33,15 @@
     </style>
 
     <style name="ShapeAppearance.MiyorareModern.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
-        <item name="cornerSize">@dimen/miyorare_modern_radius_medium</item>
+        <item name="cornerSize">@dimen/miyorare_modern_radius_control</item>
     </style>
 
     <style name="ShapeAppearance.MiyorareModern.Large" parent="ShapeAppearance.Material3.Corner.Large">
-        <item name="cornerSize">@dimen/miyorare_modern_radius_large</item>
+        <item name="cornerSize">@dimen/miyorare_modern_radius_surface</item>
     </style>
 
     <style name="ShapeAppearance.MiyorareModern.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
-        <item name="cornerSize">@dimen/miyorare_modern_radius_extra_large</item>
+        <item name="cornerSize">@dimen/miyorare_modern_radius_dialog</item>
     </style>
 
     <style name="ShapeAppearance.MiyorareModern.Full" parent="ShapeAppearance.Material3.Corner.Full">

@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Shared spacing scale. -->
+    <!-- Canonical spacing scale. 2dp is reserved for micro adjustments. -->
     <dimen name="miyorare_modern_space_xxs">2dp</dimen>
     <dimen name="miyorare_modern_space_xs">4dp</dimen>
     <dimen name="miyorare_modern_space_s">8dp</dimen>
     <dimen name="miyorare_modern_space_m">12dp</dimen>
     <dimen name="miyorare_modern_space_l">16dp</dimen>
-    <dimen name="miyorare_modern_space_xl">24dp</dimen>
-    <dimen name="miyorare_modern_space_xxl">32dp</dimen>
+    <dimen name="miyorare_modern_space_xl">20dp</dimen>
+    <dimen name="miyorare_modern_space_xxl">24dp</dimen>
+    <dimen name="miyorare_modern_space_xxxl">32dp</dimen>
 
-    <!-- Shape scale used by Modern components only. -->
-    <dimen name="miyorare_modern_radius_small">10dp</dimen>
-    <dimen name="miyorare_modern_radius_medium">16dp</dimen>
-    <dimen name="miyorare_modern_radius_large">24dp</dimen>
-    <dimen name="miyorare_modern_radius_extra_large">32dp</dimen>
+    <!-- Semantic radius scale; kept in sync with MiyorareVisualTokens. -->
+    <dimen name="miyorare_modern_radius_small">12dp</dimen>
+    <dimen name="miyorare_modern_radius_control">18dp</dimen>
+    <dimen name="miyorare_modern_radius_card">20dp</dimen>
+    <dimen name="miyorare_modern_radius_surface">24dp</dimen>
+    <dimen name="miyorare_modern_radius_dialog">32dp</dimen>
     <dimen name="miyorare_modern_radius_cover">14dp</dimen>
 
     <dimen name="miyorare_modern_stroke">1dp</dimen>
