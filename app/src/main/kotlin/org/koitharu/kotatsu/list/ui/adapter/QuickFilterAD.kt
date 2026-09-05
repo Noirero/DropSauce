@@ -80,13 +80,13 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		val chip = child as? Chip ?: return@forEach
 		val selected = chip.isChecked
 		val container = if (selected) {
-			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.46f)
+			ColorUtils.blendARGB(surfaceHigh, primary, MiyorareVisualTokens.ACTIVE_GRADIENT_MIX * 0.38f)
 		} else {
 			ColorUtils.blendARGB(surface, primary, MiyorareVisualTokens.GLOW_ALPHA_LIGHT)
 		}
 		val strokeBase = if (selected) primary else outline
 		val strokeAlpha = if (selected) {
-			MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.86f
+			MiyorareVisualTokens.BORDER_ALPHA_BALANCED * 0.72f
 		} else {
 			MiyorareVisualTokens.BORDER_ALPHA_LIGHT
 		}
@@ -94,7 +94,11 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 			strokeBase,
 			(strokeAlpha * 255f).toInt().coerceIn(0, 255),
 		)
-		val contentColor = if (selected) onSurface else onSurfaceVariant
+		val contentColor = if (selected) {
+			ColorUtils.blendARGB(onSurface, primary, 0.36f)
+		} else {
+			onSurfaceVariant
+		}
 
 		chip.chipMinHeight = controlHeight
 		chip.chipCornerRadius = controlRadius
@@ -105,7 +109,7 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		chip.textStartPadding = textPadding
 		chip.textEndPadding = textPadding
 		chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-		chip.chipStrokeWidth = density * if (selected) 0.9f else 0.7f
+		chip.chipStrokeWidth = density * if (selected) 0.8f else 0.65f
 		chip.chipBackgroundColor = ColorStateList.valueOf(container)
 		chip.chipStrokeColor = ColorStateList.valueOf(stroke)
 		chip.setTextColor(contentColor)
