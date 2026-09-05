@@ -78,6 +78,13 @@ class FavouritesListFragment : MangaListFragment() {
 			modernSurfaceDecoration = ModernLibrarySurfaceDecoration().also { decoration ->
 				binding.recyclerView.addItemDecoration(decoration, 0)
 			}
+			binding.recyclerView.addOnChildAttachStateChangeListener(
+				object : RecyclerView.OnChildAttachStateChangeListener {
+					override fun onChildViewAttachedToWindow(view: View) = compactModernEmptyState(view)
+
+					override fun onChildViewDetachedFromWindow(view: View) = Unit
+				},
+			)
 			visualEffectPreferences.level.observe(viewLifecycleOwner) { level ->
 				applyModernLibraryVisuals(binding, level)
 			}
@@ -115,6 +122,17 @@ class FavouritesListFragment : MangaListFragment() {
 	override fun onResume() {
 		super.onResume()
 		prefetchCovers(viewModel.content.value)
+	}
+
+	private fun compactModernEmptyState(view: View) {
+		if (view.id != R.id.empty_view) return
+		val icon = view.findViewById<View>(R.id.icon) ?: return
+		val size = (MODERN_EMPTY_STATE_ICON_DP * view.resources.displayMetrics.density).toInt()
+		val params = icon.layoutParams ?: return
+		if (params.width == size && params.height == size) return
+		params.width = size
+		params.height = size
+		icon.layoutParams = params
 	}
 
 	private fun applyModernLibraryVisuals(binding: FragmentListBinding, level: VisualEffectLevel) {
@@ -312,7 +330,7 @@ class FavouritesListFragment : MangaListFragment() {
 			val minHeight = MIN_CARD_HEIGHT_DP * resources.displayMetrics.density
 			for (index in 0 until parent.childCount) {
 				val child = parent.getChildAt(index)
-				if (child.height < minHeight) continue
+				if (child.id == R.id.empty_view || child.height < minHeight) continue
 				bounds.set(
 					child.left + inset + child.translationX,
 					child.top + inset + child.translationY,
@@ -329,7 +347,7 @@ class FavouritesListFragment : MangaListFragment() {
 			val minHeight = MIN_CARD_HEIGHT_DP * resources.displayMetrics.density
 			for (index in 0 until parent.childCount) {
 				val child = parent.getChildAt(index)
-				if (child.height < minHeight) continue
+				if (child.id == R.id.empty_view || child.height < minHeight) continue
 				bounds.set(
 					child.left + inset + child.translationX,
 					child.top + inset + child.translationY,
@@ -355,6 +373,7 @@ class FavouritesListFragment : MangaListFragment() {
 		private const val COVER_PREFETCH_BATCH = 24
 		private const val MAX_REMEMBERED_COVERS = 256
 		private const val MIN_CARD_HEIGHT_DP = 56f
+		private const val MODERN_EMPTY_STATE_ICON_DP = 220f
 
 		fun newInstance(categoryId: Long) = FavouritesListFragment().withArgs(1) {
 			putLong(AppRouter.KEY_ID, categoryId)
