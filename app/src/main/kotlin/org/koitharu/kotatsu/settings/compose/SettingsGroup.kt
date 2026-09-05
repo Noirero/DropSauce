@@ -15,10 +15,17 @@ import androidx.compose.ui.unit.dp
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 
-/** Per-position corner radius with an unchanged Classic path and semantic Modern tokens. */
+/**
+ * Per-position corner radius. Classic keeps its connected-card geometry. Modern intentionally uses
+ * independent rounded cards, matching the Miyorare reference language and avoiding one oversized
+ * flat settings slab when a group contains many rows.
+ */
 fun groupItemShape(index: Int, total: Int, modern: Boolean = false): Shape {
-	val outer = if (modern) MiyorareVisualTokens.RADIUS_CARD_DP.dp else 24.dp
-	val inner = if (modern) MiyorareVisualTokens.SPACING_XS_DP.dp else 4.dp
+	if (modern) {
+		return RoundedCornerShape(MiyorareVisualTokens.RADIUS_CARD_DP.dp)
+	}
+	val outer = 24.dp
+	val inner = 4.dp
 	return when {
 		total <= 1 -> RoundedCornerShape(outer)
 		index == 0 -> RoundedCornerShape(topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner)
@@ -39,9 +46,9 @@ class SettingsGroupScope {
 }
 
 /**
- * Visual container for a stack of settings rows. Children render via [SettingsGroupScope.item]
- * and receive their position so they can pick the right shape. Modern uses a tighter 1dp seam;
- * Classic retains its existing 2dp gap.
+ * Visual container for a stack of settings rows. Modern separates cards with the shared compact
+ * spacing token so borders and gradients read as deliberate surfaces; Classic preserves its
+ * original connected 2dp seam.
  */
 @Composable
 fun SettingsGroup(
@@ -59,11 +66,14 @@ fun SettingsGroup(
 				text = if (modern) title else title.uppercase(),
 				style = MaterialTheme.typography.labelMedium,
 				fontWeight = FontWeight.SemiBold,
-				color = MaterialTheme.colorScheme.primary,
-				// Aligned with the title text of icon-less setting rows (12dp card padding)
+				color = if (modern) {
+					MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
+				} else {
+					MaterialTheme.colorScheme.primary
+				},
 				modifier = Modifier.padding(
 					start = 12.dp,
-					top = if (modern) MiyorareVisualTokens.SPACING_M_DP.dp else 12.dp,
+					top = if (modern) MiyorareVisualTokens.SPACING_L_DP.dp else 12.dp,
 					bottom = MiyorareVisualTokens.SPACING_S_DP.dp,
 				),
 			)
@@ -72,7 +82,11 @@ fun SettingsGroup(
 		scope.items.forEachIndexed { i, render ->
 			render(GroupItemPosition(index = i, total = total, modern = modern))
 			if (i < total - 1) {
-				Spacer(Modifier.height(if (modern) 1.dp else 2.dp))
+				Spacer(
+					Modifier.height(
+						if (modern) MiyorareVisualTokens.SPACING_S_DP.dp else 2.dp,
+					),
+				)
 			}
 		}
 	}

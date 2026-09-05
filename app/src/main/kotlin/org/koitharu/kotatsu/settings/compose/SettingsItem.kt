@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,18 +42,16 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.MiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.miyorareSurface
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
 import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
 
 /**
- * Generic row in a [SettingsGroup]. Lays out a circular tinted icon, a 1- or 2-line text
- * block, and an optional trailing slot (switch, value chip, chevron, etc.).
- *
- * Designed to be the building block for typed wrappers like [SwitchSettingsItem],
- * [ListSettingsItem], etc. — keep the bespoke logic in those wrappers and just delegate
- * the rendering here.
+ * Generic row in a [SettingsGroup]. Classic keeps the existing category-colour icon treatment.
+ * Modern deliberately collapses those many category hues into one Miyorare accent treatment so
+ * hierarchy comes from spacing, surface depth and selection instead of a rainbow of competing cards.
  */
 @Composable
 fun SettingsItem(
@@ -63,7 +63,6 @@ fun SettingsItem(
 	tintIcon: Boolean = true,
 	shape: Shape = MaterialTheme.shapes.medium,
 	enabled: Boolean = true,
-	// Overrides the title and plain-icon color, e.g. colorScheme.error for destructive actions.
 	accentColor: Color? = null,
 	onClick: (() -> Unit)? = null,
 	hapticEffect: HapticEffect? = null,
@@ -72,8 +71,6 @@ fun SettingsItem(
 	val visualPalette = LocalMiyorareVisualPalette.current
 	val modern = visualPalette.isModern
 	val haptic = rememberHapticEffect()
-	// One-shot search highlight: scroll this row comfortably into view and flash its background
-	// once when it is the navigation target (matched by title).
 	val pendingHighlight by SettingsSearchHighlight.pendingTitle.collectAsState()
 	val isHighlightTarget = pendingHighlight != null && pendingHighlight == title
 	val scrollToHighlight = LocalSettingsHighlightScroll.current
@@ -81,7 +78,6 @@ fun SettingsItem(
 	val highlight = remember { Animatable(0f) }
 	LaunchedEffect(isHighlightTarget) {
 		if (isHighlightTarget) {
-			// Wait until this row has a real laid-out position, then scroll to it.
 			val y = snapshotFlow { rowWindowY.floatValue }.first { !it.isNaN() }
 			scrollToHighlight(y)
 			highlight.snapTo(1f)
@@ -95,9 +91,6 @@ fun SettingsItem(
 		MaterialTheme.colorScheme.primaryContainer,
 		highlight.value,
 	)
-	// Pin the content color: an interpolated `color` makes contentColorFor() return Unspecified,
-	// which would render text as plain black (broken in dark mode). Keep text legible on both
-	// the resting surfaceContainer and the brief primaryContainer flash.
 	val contentColor = lerp(
 		MaterialTheme.colorScheme.onSurface,
 		MaterialTheme.colorScheme.onPrimaryContainer,
@@ -124,7 +117,7 @@ fun SettingsItem(
 	) {
 		Row(
 			modifier = Modifier
-				.heightIn(min = if (modern) 64.dp else 72.dp)
+				.heightIn(min = if (modern) 62.dp else 72.dp)
 				.let {
 					if (onClick != null && enabled) {
 						it.clickable {
@@ -135,27 +128,34 @@ fun SettingsItem(
 						it
 					}
 				}
-				.padding(horizontal = 12.dp, vertical = 10.dp),
+				.padding(
+					horizontal = if (modern) 14.dp else 12.dp,
+					vertical = if (modern) 9.dp else 10.dp,
+				),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
 			if (icon != null) {
-				if (iconColors != null) {
-					SettingsIconBubble(
+				when {
+					modern -> SettingsIconModern(
+						iconRes = icon,
+						palette = visualPalette,
+						enabled = enabled,
+						tintIcon = tintIcon,
+					)
+					iconColors != null -> SettingsIconBubble(
 						iconRes = icon,
 						colors = iconColors,
 						enabled = enabled,
 						tintIcon = tintIcon,
 					)
-				} else {
-					SettingsIconPlain(
+					else -> SettingsIconPlain(
 						iconRes = icon,
 						enabled = enabled,
-						tintOverride = accentColor ?: visualPalette.primary.takeIf { modern },
+						tintOverride = accentColor,
 						tintIcon = tintIcon,
-						modern = modern,
 					)
 				}
-				Spacer(Modifier.width(14.dp))
+				Spacer(Modifier.width(if (modern) 12.dp else 14.dp))
 			}
 			Column(modifier = Modifier.weight(1f)) {
 				Text(
@@ -181,7 +181,6 @@ fun SettingsItem(
 	}
 }
 
-/** Convenience for a SwitchPreference — bool state + listener. */
 @Composable
 fun SwitchSettingsItem(
 	title: String,
@@ -207,8 +206,6 @@ fun SwitchSettingsItem(
 		iconColors = iconColors,
 		shape = shape,
 		enabled = enabled,
-		// The toggle haptic is fired by [onCheckedChangeHaptic] so a row tap and a thumb tap
-		// feel identical — suppress the generic click effect to avoid a double buzz.
 		hapticEffect = null,
 		onClick = if (enabled) {
 			{ onCheckedChangeHaptic(!checked) }
@@ -220,6 +217,37 @@ fun SwitchSettingsItem(
 }
 
 @Composable
+private fun SettingsIconModern(
+	@DrawableRes iconRes: Int,
+	palette: MiyorareVisualPalette,
+	enabled: Boolean,
+	tintIcon: Boolean,
+) {
+	val alpha = if (enabled) 1f else 0.4f
+	val shape = RoundedCornerShape(12.dp)
+	Box(
+		modifier = Modifier
+			.size(40.dp)
+			.clip(shape)
+			.background(palette.selectedSurface.copy(alpha = 0.72f * alpha))
+			.border(
+				width = 1.dp,
+				color = palette.borderHighlight.copy(alpha = palette.borderHighlight.alpha * alpha),
+				shape = shape,
+			),
+		contentAlignment = Alignment.Center,
+	) {
+		androidx.compose.foundation.Image(
+			painter = rememberAnyDrawablePainter(iconRes),
+			contentDescription = null,
+			modifier = Modifier.size(21.dp),
+			colorFilter = if (tintIcon) ColorFilter.tint(palette.primary.copy(alpha = alpha)) else null,
+			alpha = alpha,
+		)
+	}
+}
+
+@Composable
 private fun SettingsIconBubble(
 	@DrawableRes iconRes: Int,
 	colors: CategoryIconColors,
@@ -228,7 +256,6 @@ private fun SettingsIconBubble(
 ) {
 	val containerAlpha = if (enabled) 1f else 0.4f
 	val contentAlpha = if (enabled) 1f else 0.5f
-	// A multicolor logo (e.g. the Google "G") must not be tinted; show it on a white bubble.
 	val containerColor = if (tintIcon) colors.container.copy(alpha = containerAlpha) else Color.White
 	Box(
 		modifier = Modifier
@@ -252,18 +279,16 @@ private fun SettingsIconPlain(
 	enabled: Boolean,
 	tintOverride: Color? = null,
 	tintIcon: Boolean = true,
-	modern: Boolean = false,
 ) {
 	val tint = (tintOverride ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = if (enabled) 1f else 0.4f)
 	Box(
-		modifier = Modifier.size(if (modern) 40.dp else 44.dp),
+		modifier = Modifier.size(44.dp),
 		contentAlignment = Alignment.Center,
 	) {
 		androidx.compose.foundation.Image(
 			painter = rememberAnyDrawablePainter(iconRes),
 			contentDescription = null,
-			modifier = Modifier.size(if (modern) 22.dp else 24.dp),
-			// a bitmap logo would collapse to a flat silhouette if tinted
+			modifier = Modifier.size(24.dp),
 			colorFilter = if (tintIcon) ColorFilter.tint(tint) else null,
 			alpha = if (enabled) 1f else 0.4f,
 		)
