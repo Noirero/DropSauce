@@ -2,6 +2,9 @@ package org.koitharu.kotatsu.list.ui.adapter
 
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.util.TypedValue
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.children
@@ -113,6 +116,7 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		chip.chipBackgroundColor = ColorStateList.valueOf(container)
 		chip.chipStrokeColor = ColorStateList.valueOf(stroke)
 		chip.setTextColor(contentColor)
+		chip.tintInlineCounters(contentColor)
 		chip.chipIconTint = ColorStateList.valueOf(contentColor)
 		chip.closeIconTint = ColorStateList.valueOf(contentColor)
 		chip.rippleColor = ColorStateList.valueOf(
@@ -120,4 +124,21 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 		)
 		chip.elevation = 0f
 	}
+}
+
+/** ChipsView renders counters with an explicit ForegroundColorSpan, which overrides setTextColor(). */
+private fun Chip.tintInlineCounters(color: Int) {
+	val current = text as? Spanned ?: return
+	val spans = current.getSpans(0, current.length, ForegroundColorSpan::class.java)
+	if (spans.isEmpty()) return
+	val styled = SpannableString(current)
+	for (span in spans) {
+		val start = current.getSpanStart(span)
+		val end = current.getSpanEnd(span)
+		if (start < 0 || end <= start) continue
+		val flags = current.getSpanFlags(span)
+		styled.removeSpan(span)
+		styled.setSpan(ForegroundColorSpan(color), start, end, flags)
+	}
+	text = styled
 }
