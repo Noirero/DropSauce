@@ -67,7 +67,7 @@ fun mangaGridItemAD(
 	val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, onSurface)
 	val accent = ColorUtils.blendARGB(primary, tertiary, 0.30f)
 	val darkAccent = ColorUtils.blendARGB(primary, Color.BLACK, 0.78f)
-	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.80f)
+	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.76f)
 	val modernIndicator = ColorUtils.blendARGB(surfaceHigh, accent, 0.16f)
 	val modernBadge = ColorUtils.blendARGB(surfaceHigh, accent, 0.30f)
 	val modernBorder = ColorUtils.setAlphaComponent(
@@ -142,8 +142,8 @@ fun mangaGridItemAD(
 			binding.imageViewCover.strokeWidth = 0.55f * density
 			binding.viewScrim.background = modernScrim
 			binding.textViewTitle.setTextColor(onSurface)
-			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
 			binding.textViewTitle.includeFontPadding = false
 			binding.textViewTitleOverlay.includeFontPadding = false
 			binding.textViewTitle.setLineSpacing(0f, 0.96f)
