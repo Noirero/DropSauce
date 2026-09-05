@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -37,6 +38,9 @@ import org.koitharu.kotatsu.core.prefs.AppProtectionTimeout
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.ColorScheme
 import org.koitharu.kotatsu.core.prefs.ListMode
+import org.koitharu.kotatsu.core.prefs.MiyorareAppearance
+import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
+import org.koitharu.kotatsu.core.prefs.MiyorareThemePreset
 import org.koitharu.kotatsu.core.prefs.ScreenshotsPolicy
 import org.koitharu.kotatsu.core.prefs.SearchSuggestionType
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
@@ -49,9 +53,12 @@ import org.koitharu.kotatsu.core.util.ext.toList
 import org.koitharu.kotatsu.parsers.util.names
 import org.koitharu.kotatsu.parsers.util.toTitleCase
 import org.koitharu.kotatsu.settings.appearance.PreviewSettingsFragment
+import org.koitharu.kotatsu.settings.compose.ActionSettingsItem
 import org.koitharu.kotatsu.settings.compose.BaseComposeSettingsFragment
 import org.koitharu.kotatsu.settings.compose.ColorSchemePickerRow
+import org.koitharu.kotatsu.settings.compose.ConfirmDialog
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
+import org.koitharu.kotatsu.settings.compose.EditTextSettingsItem
 import org.koitharu.kotatsu.settings.compose.ListSettingsItem
 import org.koitharu.kotatsu.settings.compose.MultiSelectSettingsItem
 import org.koitharu.kotatsu.settings.compose.NavigationSettingsItem
@@ -91,7 +98,11 @@ class AppearanceSettingsFragment : BaseComposeSettingsFragment(R.string.appearan
 			}
 			AppSettings.KEY_COLOR_THEME,
 			AppSettings.KEY_THEME_AMOLED,
-			AppSettings.KEY_UI_SCALE -> {
+			AppSettings.KEY_UI_SCALE,
+			MiyorareAppearance.KEY_DESIGN_STYLE,
+			MiyorareAppearance.KEY_THEME_PRESET,
+			MiyorareAppearance.KEY_CUSTOM_ACCENT,
+			VisualEffectPreferences.KEY_LEVEL -> {
 				activityRecreationHandle.recreateAll()
 			}
 			AppSettings.KEY_APP_LOCALE -> {
@@ -126,6 +137,7 @@ class AppearanceSettingsFragment : BaseComposeSettingsFragment(R.string.appearan
 						)
 					},
 					onProtectToggle = ::onProtectToggle,
+					onResetAppearance = settings::resetMiyorareAppearance,
 				)
 			}
 		}
@@ -218,6 +230,7 @@ private fun AppearanceScreen(
 	onOpenDetailsAppearance: () -> Unit,
 	onOpenNavConfig: () -> Unit,
 	onProtectToggle: (Boolean) -> Unit,
+	onResetAppearance: () -> Unit,
 ) {
 	val ctx = LocalContext.current
 
@@ -226,6 +239,10 @@ private fun AppearanceScreen(
 	val themeValues = remember { ctx.resources.getStringArray(R.array.values_theme).toList() }
 	val visualEffectEntries = remember { VisualEffectLevel.entries.map { ctx.getString(it.titleResId) } }
 	val visualEffectValues = remember { VisualEffectLevel.entries.map { it.name } }
+	val designStyleEntries = remember { MiyorareDesignStyle.entries.map { ctx.getString(it.titleResId) } }
+	val designStyleValues = remember { MiyorareDesignStyle.entries.map { it.name } }
+	val modernThemeEntries = remember { MiyorareThemePreset.entries.map { ctx.getString(it.titleResId) } }
+	val modernThemeValues = remember { MiyorareThemePreset.entries.map { it.name } }
 
 	val listModeEntries = remember { ctx.resources.getStringArray(R.array.list_modes).toList() }
 	val listModeValues = remember { ListMode.entries.names().toList() }
@@ -265,6 +282,19 @@ private fun AppearanceScreen(
 		VisualEffectPreferences.KEY_LEVEL,
 		VisualEffectLevel.BALANCED.name,
 	)
+	var designStyle by rememberStringPref(
+		MiyorareAppearance.KEY_DESIGN_STYLE,
+		MiyorareDesignStyle.CLASSIC.name,
+	)
+	var modernTheme by rememberStringPref(
+		MiyorareAppearance.KEY_THEME_PRESET,
+		MiyorareThemePreset.MIYORARE.name,
+	)
+	var customAccent by rememberStringPref(
+		MiyorareAppearance.KEY_CUSTOM_ACCENT,
+		MiyorareAppearance.DEFAULT_CUSTOM_ACCENT,
+	)
+	var showResetDialog by remember { mutableStateOf(false) }
 	var uiScale by rememberIntPref(AppSettings.KEY_UI_SCALE, 100)
 	var hapticFeedback by rememberBooleanPref(AppSettings.KEY_HAPTIC_FEEDBACK, true)
 	var hideStatusBar by rememberBooleanPref(AppSettings.KEY_HIDE_STATUS_BAR, false)
@@ -302,22 +332,22 @@ private fun AppearanceScreen(
 	val protectAppSummary = stringResource(R.string.require_unlock_summary)
 
 	SettingsScaffold {
-		// The color scheme picker is its own inline widget (horizontal cards), rendered
-		// directly here rather than via a SettingsGroup row.
 		item {
-			ColorSchemePickerRow(
-				title = stringResource(R.string.color_theme),
-				selectedValue = colorScheme,
-				onValueChange = { colorScheme = it },
-				shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-			)
-		}
-		item { Spacer(Modifier.height(8.dp).fillMaxWidth()) }
-		item {
-			SettingsGroup(title = "Theme") {
+			SettingsGroup(title = stringResource(R.string.miyorare_appearance_group)) {
 				item { pos ->
 					ListSettingsItem(
-						title = stringResource(R.string.theme),
+						title = stringResource(R.string.miyorare_design_style),
+						entries = designStyleEntries,
+						entryValues = designStyleValues,
+						selectedValue = designStyle,
+						onValueChange = { designStyle = it },
+						icon = R.drawable.ic_appearance,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					ListSettingsItem(
+						title = stringResource(R.string.miyorare_display_mode),
 						entries = themeEntries,
 						entryValues = themeValues,
 						selectedValue = theme,
@@ -331,6 +361,35 @@ private fun AppearanceScreen(
 						
 						shape = pos.shape,
 					)
+				}
+				if (designStyle == MiyorareDesignStyle.MODERN.name) {
+					item { pos ->
+						ListSettingsItem(
+							title = stringResource(R.string.miyorare_modern_theme),
+							entries = modernThemeEntries,
+							entryValues = modernThemeValues,
+							selectedValue = modernTheme,
+							onValueChange = { modernTheme = it },
+							icon = R.drawable.ic_appearance,
+							shape = pos.shape,
+						)
+					}
+					if (modernTheme == MiyorareThemePreset.CUSTOM.name) {
+						item { pos ->
+							EditTextSettingsItem(
+								title = stringResource(R.string.miyorare_custom_accent),
+								value = customAccent,
+								hint = MiyorareAppearance.DEFAULT_CUSTOM_ACCENT,
+								onValueChange = { value ->
+									MiyorareAppearance.normalizeAccent(value)?.let { customAccent = it }
+								},
+								isValueValid = { MiyorareAppearance.normalizeAccent(it) != null },
+								invalidMessage = stringResource(R.string.miyorare_custom_accent_invalid),
+								icon = R.drawable.ic_appearance,
+								shape = pos.shape,
+							)
+						}
+					}
 				}
 				item { pos ->
 					val isSystemDark = isSystemInDarkTheme()
@@ -357,6 +416,15 @@ private fun AppearanceScreen(
 						selectedValue = visualEffects,
 						onValueChange = { visualEffects = it },
 						icon = R.drawable.ic_appearance,
+						shape = pos.shape,
+					)
+				}
+				item { pos ->
+					ActionSettingsItem(
+						title = stringResource(R.string.miyorare_reset_appearance),
+						subtitle = stringResource(R.string.miyorare_reset_appearance_summary),
+						onClick = { showResetDialog = true },
+						icon = R.drawable.ic_refresh,
 						shape = pos.shape,
 					)
 				}
@@ -415,6 +483,17 @@ private fun AppearanceScreen(
 						shape = pos.shape,
 					)
 				}
+			}
+		}
+		if (designStyle == MiyorareDesignStyle.CLASSIC.name) {
+			item { Spacer(Modifier.height(8.dp).fillMaxWidth()) }
+			item {
+				ColorSchemePickerRow(
+					title = stringResource(R.string.color_theme),
+					selectedValue = colorScheme,
+					onValueChange = { colorScheme = it },
+					shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+				)
 			}
 		}
 		item { Spacer(Modifier.height(8.dp).fillMaxWidth()) }
@@ -671,5 +750,16 @@ private fun AppearanceScreen(
 			}
 		}
 		item { Spacer(Modifier.height(24.dp).fillMaxWidth()) }
+	}
+
+	if (showResetDialog) {
+		ConfirmDialog(
+			title = stringResource(R.string.miyorare_reset_appearance),
+			message = stringResource(R.string.miyorare_reset_appearance_confirm),
+			confirmLabel = stringResource(R.string.reset),
+			dismissLabel = stringResource(android.R.string.cancel),
+			onConfirm = onResetAppearance,
+			onDismiss = { showResetDialog = false },
+		)
 	}
 }

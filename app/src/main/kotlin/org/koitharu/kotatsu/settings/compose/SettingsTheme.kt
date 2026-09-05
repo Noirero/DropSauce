@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
@@ -20,12 +21,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.MiyorareAppearance
 import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
 import org.koitharu.kotatsu.core.prefs.MiyorareThemePreset
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
-import org.koitharu.kotatsu.core.ui.miyorareColorScheme
+import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.classicMiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.miyorareThemeColors
 import org.koitharu.kotatsu.main.ui.nav.composeColorSchemeFromTheme
 
 private const val ROND_ROUNDED = 100f
@@ -153,16 +157,16 @@ fun DropSauceTheme(content: @Composable () -> Unit) {
 		Configuration.UI_MODE_NIGHT_YES
 
 	val designStyleValue by rememberStringPref(
-		VisualEffectPreferences.KEY_DESIGN_STYLE,
+		MiyorareAppearance.KEY_DESIGN_STYLE,
 		MiyorareDesignStyle.CLASSIC.name,
 	)
 	val themePresetValue by rememberStringPref(
-		VisualEffectPreferences.KEY_THEME_PRESET,
+		MiyorareAppearance.KEY_THEME_PRESET,
 		MiyorareThemePreset.MIYORARE.name,
 	)
 	val customAccent by rememberStringPref(
-		VisualEffectPreferences.KEY_CUSTOM_ACCENT,
-		VisualEffectPreferences.DEFAULT_CUSTOM_ACCENT,
+		MiyorareAppearance.KEY_CUSTOM_ACCENT,
+		MiyorareAppearance.DEFAULT_CUSTOM_ACCENT,
 	)
 	val effectLevelValue by rememberStringPref(
 		VisualEffectPreferences.KEY_LEVEL,
@@ -176,24 +180,28 @@ fun DropSauceTheme(content: @Composable () -> Unit) {
 	val effectLevel = VisualEffectLevel.entries.firstOrNull { it.name == effectLevelValue }
 		?: VisualEffectLevel.BALANCED
 
-	val scheme = if (designStyle == MiyorareDesignStyle.MODERN) {
+	val modernColors = if (designStyle == MiyorareDesignStyle.MODERN) {
 		remember(themePreset, customAccent, isDark, effectLevel) {
-			miyorareColorScheme(
+			miyorareThemeColors(
 				preset = themePreset,
 				customAccent = customAccent,
 				darkTheme = isDark,
 				effectLevel = effectLevel,
 			)
 		}
-	} else {
-		remember(ctx, isDark) { composeColorSchemeFromTheme(ctx, isDark) }
+	} else null
+	val scheme = modernColors?.colorScheme ?: remember(ctx, isDark) { composeColorSchemeFromTheme(ctx, isDark) }
+	val visualPalette = modernColors?.visualPalette ?: remember(scheme, effectLevel) {
+		classicMiyorareVisualPalette(scheme, effectLevel)
 	}
 	val family = GoogleSansRounded
 	val typography = bumpedTypography(family)
-	MaterialTheme(
-		colorScheme = scheme,
-		shapes = miyorareShapes,
-		typography = typography,
-		content = content,
-	)
+	CompositionLocalProvider(LocalMiyorareVisualPalette provides visualPalette) {
+		MaterialTheme(
+			colorScheme = scheme,
+			shapes = miyorareShapes,
+			typography = typography,
+			content = content,
+		)
+	}
 }
