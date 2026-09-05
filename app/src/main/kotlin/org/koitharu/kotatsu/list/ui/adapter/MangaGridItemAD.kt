@@ -110,9 +110,9 @@ fun mangaGridItemAD(
 	val modernScrim = GradientDrawable(
 		GradientDrawable.Orientation.BOTTOM_TOP,
 		intArrayOf(
-			ColorUtils.setAlphaComponent(modernScrimBase, 0xD6),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0x88),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0x18),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0xC8),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0x78),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0x10),
 			Color.TRANSPARENT,
 		),
 	).apply {
@@ -142,8 +142,8 @@ fun mangaGridItemAD(
 			binding.imageViewCover.strokeWidth = 0.55f * density
 			binding.viewScrim.background = modernScrim
 			binding.textViewTitle.setTextColor(onSurface)
-			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
 			binding.textViewTitle.includeFontPadding = false
 			binding.textViewTitleOverlay.includeFontPadding = false
 			binding.textViewTitle.setLineSpacing(0f, 0.96f)

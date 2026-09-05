@@ -2,7 +2,10 @@ package org.koitharu.kotatsu.favourites.ui.container
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
@@ -12,6 +15,7 @@ import android.os.Build
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ImageSpan
+import android.text.style.ReplacementSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -38,6 +42,7 @@ import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
+import java.text.NumberFormat
 import java.util.WeakHashMap
 import kotlin.math.roundToInt
 import androidx.appcompat.R as appcompatR
@@ -74,6 +79,7 @@ class FavouritesTabConfigurationStrategy(
 			tab.text = createSystemTitle(view.context, title, style)
 		}
 		tab.tag = item
+		favouriteTabBaseTitles[view] = tab.text ?: ""
 		updateFavouriteTabBadge(tab, item.count, item.count > 0)
 		if (item.id != LOCAL_FAVOURITES_CATEGORY_ID && item.id != DOWNLOADED_FAVOURITES_CATEGORY_ID) {
 			PopupMenuMediator(
@@ -91,9 +97,9 @@ class FavouritesTabConfigurationStrategy(
 		val density = anchor.resources.displayMetrics.density
 		fun dp(value: Float) = (value * density).roundToInt()
 
-		root.findViewById<View>(R.id.layout_category_header)?.setPadding(0, dp(4f), 0, dp(4f))
+		root.findViewById<View>(R.id.layout_category_header)?.setPadding(0, dp(3f), 0, dp(3f))
 		root.findViewById<TextView>(R.id.text_favourites_title)?.apply {
-			setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, 21f)
 			includeFontPadding = false
 			(layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 				params.marginStart = dp(16f)
@@ -104,7 +110,7 @@ class FavouritesTabConfigurationStrategy(
 			}
 		}
 		root.findViewById<TextView>(R.id.text_favourites_subtitle)?.apply {
-			setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
 			includeFontPadding = false
 			(layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 				params.marginStart = dp(16f)
@@ -115,19 +121,20 @@ class FavouritesTabConfigurationStrategy(
 			}
 		}
 		root.findViewById<MaterialButtonToggleGroup>(R.id.toggle_content_type)?.apply {
-			setPadding(dp(2f), dp(2f), dp(2f), dp(2f))
+			setPadding(dp(1f), dp(1f), dp(1f), dp(1f))
 			(layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 				params.marginStart = dp(16f)
 				params.marginEnd = dp(16f)
-				params.topMargin = dp(6f)
+				params.topMargin = dp(4f)
 				params.bottomMargin = dp(2f)
 				layoutParams = params
 			}
 		}
 		for (buttonId in intArrayOf(R.id.button_content_manga, R.id.button_content_novel)) {
 			root.findViewById<MaterialButton>(buttonId)?.apply {
-				minimumHeight = dp(38f)
-				setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+				minimumHeight = dp(34f)
+				setPaddingRelative(paddingStart, 0, paddingEnd, 0)
+				setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
 			}
 		}
 		root.findViewById<TabLayout>(R.id.tabs)?.apply {
@@ -271,15 +278,15 @@ private data class FavouriteTabBasePadding(
 )
 
 private val favouriteTabBasePaddings = WeakHashMap<View, FavouriteTabBasePadding>()
+private val favouriteTabBaseTitles = WeakHashMap<View, CharSequence>()
 
 /**
- * Material badges are overlays, so their width does not participate in the TabLayout measurement.
- * Modern keeps the same full count but uses a quieter tonal badge and less reserved space.
+ * Modern renders the count as an inline mini-pill so it participates in tab measurement instead of
+ * floating over the chip. Classic keeps the existing Material badge behavior unchanged.
  */
 internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: Boolean) {
 	val safeCount = count.coerceAtLeast(0)
 	val shouldShowBadge = isVisible && safeCount > 0
-	val visibleDigits = safeCount.coerceAtMost(MAX_CATEGORY_BADGE_COUNT).toString().length
 	val view = tab.view
 	val density = view.resources.displayMetrics.density
 	val modern = PreferenceManager.getDefaultSharedPreferences(view.context).getEnumValue(
@@ -294,10 +301,23 @@ internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: 
 			bottom = view.paddingBottom,
 		)
 	}
-	val baseEndSpace = if (modern) 12f else BADGE_BASE_END_SPACE_DP.toFloat()
-	val perDigitSpace = if (modern) 3f else BADGE_PER_DIGIT_SPACE_DP.toFloat()
+	val baseTitle = favouriteTabBaseTitles.getOrPut(view) { tab.text ?: "" }
+
+	if (modern) {
+		tab.removeBadge()
+		view.setPaddingRelative(basePadding.start, basePadding.top, basePadding.end, basePadding.bottom)
+		tab.text = if (shouldShowBadge) {
+			createInlineFavouriteCountTitle(baseTitle, safeCount, view)
+		} else {
+			baseTitle
+		}
+		return
+	}
+
+	if (tab.text !== baseTitle) tab.text = baseTitle
+	val visibleDigits = safeCount.coerceAtMost(MAX_CATEGORY_BADGE_COUNT).toString().length
 	val badgeSpace = if (shouldShowBadge) {
-		((baseEndSpace + visibleDigits * perDigitSpace) * density).roundToInt()
+		((BADGE_BASE_END_SPACE_DP + visibleDigits * BADGE_PER_DIGIT_SPACE_DP) * density).roundToInt()
 	} else {
 		0
 	}
@@ -311,21 +331,102 @@ internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: 
 	tab.getOrCreateBadge().apply {
 		maxCharacterCount = 6
 		number = safeCount
-		if (modern) {
-			val surface = view.context.getThemeColor(materialR.attr.colorSurfaceContainerHighest, Color.DKGRAY)
-			val primary = view.context.getThemeColor(appcompatR.attr.colorPrimary, Color.WHITE)
-			val onSurface = view.context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
-			backgroundColor = ColorUtils.blendARGB(surface, primary, 0.22f)
-			badgeTextColor = onSurface
-			alpha = 232
-			setHorizontalPadding((2f * density).roundToInt())
-			setHorizontalOffsetWithText(-((5f + visibleDigits * 1.5f) * density).roundToInt())
-		} else {
-			alpha = 255
-			setHorizontalPadding((BADGE_HORIZONTAL_PADDING_DP * density).roundToInt())
-			setHorizontalOffsetWithText(-((BADGE_BASE_OUTWARD_OFFSET_DP + visibleDigits * BADGE_PER_DIGIT_OFFSET_DP) * density).roundToInt())
-		}
+		alpha = 255
+		setHorizontalPadding((BADGE_HORIZONTAL_PADDING_DP * density).roundToInt())
+		setHorizontalOffsetWithText(-((BADGE_BASE_OUTWARD_OFFSET_DP + visibleDigits * BADGE_PER_DIGIT_OFFSET_DP) * density).roundToInt())
 		this.isVisible = shouldShowBadge
+	}
+}
+
+private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int, view: View): CharSequence {
+	val density = view.resources.displayMetrics.density
+	val textSizePx = TypedValue.applyDimension(
+		TypedValue.COMPLEX_UNIT_SP,
+		9f,
+		view.resources.displayMetrics,
+	)
+	val surface = view.context.getThemeColor(materialR.attr.colorSurfaceContainerHighest, Color.DKGRAY)
+	val primary = view.context.getThemeColor(appcompatR.attr.colorPrimary, Color.WHITE)
+	val onSurface = view.context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
+	val countText = formatFavouriteCount(count)
+	return SpannableStringBuilder(baseTitle).apply {
+		append(' ')
+		val start = length
+		append(countText)
+		setSpan(
+			FavouriteCountPillSpan(
+				textSizePx = textSizePx,
+				horizontalPaddingPx = 4.5f * density,
+				heightPx = 16f * density,
+				cornerRadiusPx = 8f * density,
+				backgroundColor = ColorUtils.blendARGB(surface, primary, 0.16f),
+				textColor = onSurface,
+			),
+			start,
+			length,
+			Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+		)
+	}
+}
+
+private fun formatFavouriteCount(count: Int): String {
+	val formatter = NumberFormat.getIntegerInstance()
+	return if (count > MAX_CATEGORY_BADGE_COUNT) {
+		"${formatter.format(MAX_CATEGORY_BADGE_COUNT)}+"
+	} else {
+		formatter.format(count)
+	}
+}
+
+private class FavouriteCountPillSpan(
+	private val textSizePx: Float,
+	private val horizontalPaddingPx: Float,
+	private val heightPx: Float,
+	private val cornerRadiusPx: Float,
+	private val backgroundColor: Int,
+	private val textColor: Int,
+) : ReplacementSpan() {
+
+	override fun getSize(
+		paint: Paint,
+		text: CharSequence,
+		start: Int,
+		end: Int,
+		fm: Paint.FontMetricsInt?,
+	): Int {
+		val label = text.subSequence(start, end).toString()
+		val textPaint = Paint(paint).apply {
+			isAntiAlias = true
+			textSize = textSizePx
+		}
+		return (textPaint.measureText(label) + horizontalPaddingPx * 2f).roundToInt()
+	}
+
+	override fun draw(
+		canvas: Canvas,
+		text: CharSequence,
+		start: Int,
+		end: Int,
+		x: Float,
+		top: Int,
+		y: Int,
+		bottom: Int,
+		paint: Paint,
+	) {
+		val label = text.subSequence(start, end).toString()
+		val textPaint = Paint(paint).apply {
+			isAntiAlias = true
+			color = textColor
+			textSize = textSizePx
+		}
+		val width = textPaint.measureText(label) + horizontalPaddingPx * 2f
+		val centerY = (top + bottom) / 2f
+		val rect = RectF(x, centerY - heightPx / 2f, x + width, centerY + heightPx / 2f)
+		val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundColor }
+		canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, backgroundPaint)
+		val metrics = textPaint.fontMetrics
+		val baseline = centerY - (metrics.ascent + metrics.descent) / 2f
+		canvas.drawText(label, x + horizontalPaddingPx, baseline, textPaint)
 	}
 }
 
