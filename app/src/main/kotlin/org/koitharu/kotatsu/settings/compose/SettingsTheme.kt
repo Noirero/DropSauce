@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -19,7 +20,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
+import org.koitharu.kotatsu.core.prefs.MiyorareThemePreset
+import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
+import org.koitharu.kotatsu.core.ui.miyorareColorScheme
 import org.koitharu.kotatsu.main.ui.nav.composeColorSchemeFromTheme
 
 private const val ROND_ROUNDED = 100f
@@ -137,17 +143,51 @@ private fun bumpedTypography(family: FontFamily): Typography {
 }
 
 /**
- * MaterialTheme wrapper that pulls colors from the host Android theme and uses
- * the project's rounded variable-font typography. Use this at the top of any
- * Compose subtree we host inside an existing Fragment/Activity so it inherits
- * the user's chosen theme (Dynamic, Monet, AMOLED, etc).
+ * Shared Compose theme bridge. Classic keeps the exact host Android color scheme. Miyorare Modern
+ * swaps only presentation colors while retaining the same content, navigation and data behavior.
  */
 @Composable
 fun DropSauceTheme(content: @Composable () -> Unit) {
 	val ctx = LocalContext.current
 	val isDark = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
 		Configuration.UI_MODE_NIGHT_YES
-	val scheme = remember(ctx, isDark) { composeColorSchemeFromTheme(ctx, isDark) }
+
+	val designStyleValue by rememberStringPref(
+		VisualEffectPreferences.KEY_DESIGN_STYLE,
+		MiyorareDesignStyle.CLASSIC.name,
+	)
+	val themePresetValue by rememberStringPref(
+		VisualEffectPreferences.KEY_THEME_PRESET,
+		MiyorareThemePreset.MIYORARE.name,
+	)
+	val customAccent by rememberStringPref(
+		VisualEffectPreferences.KEY_CUSTOM_ACCENT,
+		VisualEffectPreferences.DEFAULT_CUSTOM_ACCENT,
+	)
+	val effectLevelValue by rememberStringPref(
+		VisualEffectPreferences.KEY_LEVEL,
+		VisualEffectLevel.BALANCED.name,
+	)
+
+	val designStyle = MiyorareDesignStyle.entries.firstOrNull { it.name == designStyleValue }
+		?: MiyorareDesignStyle.CLASSIC
+	val themePreset = MiyorareThemePreset.entries.firstOrNull { it.name == themePresetValue }
+		?: MiyorareThemePreset.MIYORARE
+	val effectLevel = VisualEffectLevel.entries.firstOrNull { it.name == effectLevelValue }
+		?: VisualEffectLevel.BALANCED
+
+	val scheme = if (designStyle == MiyorareDesignStyle.MODERN) {
+		remember(themePreset, customAccent, isDark, effectLevel) {
+			miyorareColorScheme(
+				preset = themePreset,
+				customAccent = customAccent,
+				darkTheme = isDark,
+				effectLevel = effectLevel,
+			)
+		}
+	} else {
+		remember(ctx, isDark) { composeColorSchemeFromTheme(ctx, isDark) }
+	}
 	val family = GoogleSansRounded
 	val typography = bumpedTypography(family)
 	MaterialTheme(
