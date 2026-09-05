@@ -37,6 +37,7 @@ import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 import org.koitharu.kotatsu.core.ui.miyorareAccentSurface
+import org.koitharu.kotatsu.core.ui.miyorareIconSurface
 import org.koitharu.kotatsu.core.ui.miyorareSurface
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
@@ -67,14 +68,25 @@ fun SegmentedSettingsItem(
 		Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
 			Row(verticalAlignment = Alignment.CenterVertically) {
 				if (icon != null) {
+					val iconShape = RoundedCornerShape(13.dp)
 					Box(
-						modifier = Modifier.size(if (modern) 40.dp else 44.dp),
+						modifier = Modifier
+							.size(if (modern) 40.dp else 44.dp)
+							.let {
+								if (modern) {
+									it.miyorareIconSurface(
+										palette = visualPalette,
+										shape = iconShape,
+										alpha = if (enabled) 1f else 0.4f,
+									)
+								} else it
+							},
 						contentAlignment = Alignment.Center,
 					) {
 						androidx.compose.foundation.Image(
 							painter = rememberAnyDrawablePainter(icon),
 							contentDescription = null,
-							modifier = Modifier.size(if (modern) 22.dp else 24.dp),
+							modifier = Modifier.size(if (modern) 21.dp else 24.dp),
 							colorFilter = ColorFilter.tint(iconColor.copy(alpha = if (enabled) 1f else 0.4f)),
 						)
 					}
