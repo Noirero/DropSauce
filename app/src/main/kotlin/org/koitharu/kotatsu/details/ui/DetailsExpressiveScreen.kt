@@ -36,6 +36,7 @@ import coil3.request.crossfade
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.prefs.DetailsUiMode
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.core.ui.util.StatusBarScrim
 import org.koitharu.kotatsu.core.ui.widgets.ChipsView
 import org.koitharu.kotatsu.core.util.ext.mangaSourceExtra
@@ -99,7 +100,9 @@ fun DetailsExpressiveScreen(
 
 	MaterialTheme(colorScheme = baseScheme, typography = typography) {
 		val scheme = MaterialTheme.colorScheme
+		val palette = LocalMiyorareVisualPalette.current
 		val accentColor = scheme.primary
+		val screenSurface = if (palette.isModern) scheme.background else scheme.surface
 		val listState = rememberLazyListState()
 		val centered = style != DetailsUiMode.COMPACT
 
@@ -112,14 +115,14 @@ fun DetailsExpressiveScreen(
 		Box(
 			modifier = Modifier
 				.fillMaxSize()
-				.background(scheme.surface),
+				.background(screenSurface),
 		) {
 			if (isBackdropEnabled && backdropUrl != null) {
 				ExpressiveBackdrop(
 					url = backdropUrl,
 					manga = manga,
 					imageLoader = imageLoader,
-					surface = scheme.surface,
+					surface = screenSurface,
 					blurAmount = backdropBlurAmount,
 				)
 			}
@@ -266,7 +269,7 @@ fun DetailsExpressiveScreen(
 						.background(
 							Brush.verticalGradient(
 								*stops.mapIndexed { i, a ->
-									i / stops.lastIndex.toFloat() to scheme.surface.copy(alpha = a / 255f)
+									i / stops.lastIndex.toFloat() to screenSurface.copy(alpha = a / 255f)
 								}.toTypedArray(),
 							),
 						),
@@ -296,12 +299,40 @@ private fun ExpressiveBackdrop(
 	blurAmount: Int,
 ) {
 	val context = LocalContext.current
+	val palette = LocalMiyorareVisualPalette.current
 	val request = remember(url, manga?.source) {
 		ImageRequest.Builder(context)
 			.data(url)
 			.crossfade(true)
 			.apply { if (manga != null) mangaSourceExtra(manga.source) }
 			.build()
+	}
+	val topAlpha = if (palette.isModern) {
+		when (palette.effectLevel) {
+			VisualEffectLevel.LIGHT -> 0.30f
+			VisualEffectLevel.BALANCED -> 0.22f
+			VisualEffectLevel.FULL -> 0.16f
+		}
+	} else {
+		0.50f
+	}
+	val middleAlpha = if (palette.isModern) {
+		when (palette.effectLevel) {
+			VisualEffectLevel.LIGHT -> 0.60f
+			VisualEffectLevel.BALANCED -> 0.52f
+			VisualEffectLevel.FULL -> 0.46f
+		}
+	} else {
+		0.78f
+	}
+	val lowerAlpha = if (palette.isModern) {
+		when (palette.effectLevel) {
+			VisualEffectLevel.LIGHT -> 0.92f
+			VisualEffectLevel.BALANCED -> 0.91f
+			VisualEffectLevel.FULL -> 0.90f
+		}
+	} else {
+		0.94f
 	}
 	Box(modifier = Modifier.fillMaxSize()) {
 		AsyncImage(
@@ -318,9 +349,9 @@ private fun ExpressiveBackdrop(
 				.fillMaxSize()
 				.background(
 					Brush.verticalGradient(
-						0f to surface.copy(alpha = 0.50f),
-						0.34f to surface.copy(alpha = 0.78f),
-						0.70f to surface.copy(alpha = 0.94f),
+						0f to surface.copy(alpha = topAlpha),
+						0.34f to surface.copy(alpha = middleAlpha),
+						0.70f to surface.copy(alpha = lowerAlpha),
 						1f to surface,
 					),
 				),
