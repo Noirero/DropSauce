@@ -69,8 +69,8 @@ private fun ChipsView.applyMiyorareFavouritesQuickFilterStyle() {
 	val onSurface = context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
 	val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, onSurface)
 	val outline = context.getThemeColor(materialR.attr.colorOutlineVariant, primary)
-	val controlHeight = 34f * density
-	val controlRadius = 17f * density
+	val controlHeight = 32f * density
+	val controlRadius = 16f * density
 	val iconSize = 16f * density
 	val horizontalPadding = 8f * density
 	val textPadding = 4f * density
