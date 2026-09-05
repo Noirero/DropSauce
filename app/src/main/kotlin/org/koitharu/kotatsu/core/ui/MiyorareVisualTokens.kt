@@ -1,8 +1,9 @@
 package org.koitharu.kotatsu.core.ui
 
 /**
- * Shared dimensions and motion timings for the Miyorare visual language. Keeping these values in
- * one lightweight object prevents individual screens from drifting into unrelated radii/spacing.
+ * Shared dimensions, motion timings and finite visual-strength constants for the Miyorare visual
+ * language. Keeping these values centralized prevents individual screens from drifting into
+ * unrelated radii, spacing, gradients or glow intensity.
  */
 object MiyorareVisualTokens {
 	// Radius values mirror dimens_miyorare_modern.xml.
@@ -27,6 +28,19 @@ object MiyorareVisualTokens {
 	const val SPACING_COMPACT_DP = SPACING_S_DP
 	const val SPACING_STANDARD_DP = SPACING_L_DP
 	const val SPACING_SECTION_DP = SPACING_XXL_DP
+
+	// Semantic finite decoration strengths. These are cheap color blends, never continuous shaders.
+	const val GRADIENT_STRENGTH_LIGHT = 0.06f
+	const val GRADIENT_STRENGTH_BALANCED = 0.14f
+	const val GRADIENT_STRENGTH_FULL = 0.22f
+	const val BORDER_ALPHA_LIGHT = 0.18f
+	const val BORDER_ALPHA_BALANCED = 0.32f
+	const val BORDER_ALPHA_FULL = 0.46f
+	const val GLOW_ALPHA_LIGHT = 0.05f
+	const val GLOW_ALPHA_BALANCED = 0.18f
+	const val GLOW_ALPHA_FULL = 0.28f
+	const val ACTIVE_GRADIENT_MIX = 0.34f
+	const val SURFACE_GRADIENT_MIX = 0.12f
 
 	// Finite, inexpensive motion values mirror integers_miyorare_modern.xml.
 	const val MOTION_NONE_MS = 0
