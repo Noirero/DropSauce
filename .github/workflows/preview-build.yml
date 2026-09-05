@@ -2,7 +2,7 @@ name: Beta Build
 
 # Builds a standalone beta APK from the beta branch only when manually requested.
 # Regular commits to beta accumulate fixes without producing an APK automatically.
-# The preview variant keeps a separate applicationId suffix, so Beta can stay installed
+# The preview variant keeps a separate applicationId, so Beta can stay installed
 # alongside DropSauce Noirero main. All Beta builds use the repository's permanent signing
 # key so a newer Beta APK can update the previous one without uninstalling it first.
 on:
@@ -144,9 +144,9 @@ jobs:
           {
             echo "**Beta build of \`${GITHUB_REF_NAME}\`**"
             echo ""
-            echo "This APK uses the preview applicationId suffix and can be installed alongside DropSauce Noirero main."
+            echo "This APK uses a separate preview applicationId and can be installed alongside DropSauce Noirero main."
             echo "All Beta builds from this workflow use the permanent repository signing key for in-place updates."
-            echo "App name: \`DropSauce Noirero Beta\`"
+            echo "App name: \`Miyorare Beta\`"
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
