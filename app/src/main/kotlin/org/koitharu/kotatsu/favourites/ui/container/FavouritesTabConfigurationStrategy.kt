@@ -64,8 +64,8 @@ class FavouritesTabConfigurationStrategy(
 		if (modern) {
 			applyModernHeaderDensity(view)
 			val density = view.resources.displayMetrics.density
-			val horizontal = (8f * density).roundToInt()
-			view.minimumHeight = (36f * density).roundToInt()
+			val horizontal = (7f * density).roundToInt()
+			view.minimumHeight = (34f * density).roundToInt()
 			view.setPaddingRelative(horizontal, 0, horizontal, 0)
 		}
 		val title = item.title ?: view.context.getString(R.string.all_favourites)
@@ -356,9 +356,9 @@ private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int,
 		setSpan(
 			FavouriteCountPillSpan(
 				textSizePx = textSizePx,
-				horizontalPaddingPx = 4.5f * density,
-				heightPx = 16f * density,
-				cornerRadiusPx = 8f * density,
+				horizontalPaddingPx = 4f * density,
+				heightPx = 15f * density,
+				cornerRadiusPx = 7.5f * density,
 				backgroundColor = ColorUtils.blendARGB(surface, primary, 0.16f),
 				textColor = onSurface,
 			),
