@@ -97,9 +97,9 @@ class FavouritesTabConfigurationStrategy(
 		val density = anchor.resources.displayMetrics.density
 		fun dp(value: Float) = (value * density).roundToInt()
 
-		root.findViewById<View>(R.id.layout_category_header)?.setPadding(0, dp(3f), 0, dp(3f))
+		root.findViewById<View>(R.id.layout_category_header)?.setPadding(0, dp(2f), 0, dp(2f))
 		root.findViewById<TextView>(R.id.text_favourites_title)?.apply {
-			setTextSize(TypedValue.COMPLEX_UNIT_SP, 21f)
+			setTextSize(TypedValue.COMPLEX_UNIT_SP, 20.5f)
 			includeFontPadding = false
 			(layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 				params.marginStart = dp(16f)
@@ -125,14 +125,14 @@ class FavouritesTabConfigurationStrategy(
 			(layoutParams as? LinearLayout.LayoutParams)?.let { params ->
 				params.marginStart = dp(16f)
 				params.marginEnd = dp(16f)
-				params.topMargin = dp(4f)
+				params.topMargin = dp(3f)
 				params.bottomMargin = dp(2f)
 				layoutParams = params
 			}
 		}
 		for (buttonId in intArrayOf(R.id.button_content_manga, R.id.button_content_novel)) {
 			root.findViewById<MaterialButton>(buttonId)?.apply {
-				minimumHeight = dp(34f)
+				minimumHeight = dp(32f)
 				setPaddingRelative(paddingStart, 0, paddingEnd, 0)
 				setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
 			}
