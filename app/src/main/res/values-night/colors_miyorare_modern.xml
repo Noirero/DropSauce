@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Miyorare Modern dark palette: navy/black base with blue-purple identity. -->
+    <color name="miyorare_modern_background">#070A14</color>
+    <color name="miyorare_modern_surface">#0D1120</color>
+    <color name="miyorare_modern_surface_container">#12182A</color>
+    <color name="miyorare_modern_surface_container_high">#192137</color>
+    <color name="miyorare_modern_surface_variant">#1F2740</color>
+
+    <color name="miyorare_modern_on_background">#F4F6FF</color>
+    <color name="miyorare_modern_on_surface">#F2F4FF</color>
+    <color name="miyorare_modern_on_surface_variant">#B8BDD0</color>
+
+    <color name="miyorare_modern_primary">#8EA2FF</color>
+    <color name="miyorare_modern_on_primary">#0B1A5E</color>
+    <color name="miyorare_modern_primary_container">#263B86</color>
+    <color name="miyorare_modern_on_primary_container">#DEE4FF</color>
+
+    <color name="miyorare_modern_secondary">#B59AFF</color>
+    <color name="miyorare_modern_on_secondary">#2C135B</color>
+    <color name="miyorare_modern_secondary_container">#472D78</color>
+    <color name="miyorare_modern_on_secondary_container">#EDDCFF</color>
+
+    <color name="miyorare_modern_tertiary">#59D5E6</color>
+    <color name="miyorare_modern_on_tertiary">#00363E</color>
+
+    <color name="miyorare_modern_outline">#8B91A8</color>
+    <color name="miyorare_modern_outline_variant">#343B51</color>
+    <color name="miyorare_modern_divider">#242B3D</color>
+    <color name="miyorare_modern_selected_surface">#202A51</color>
+
+    <color name="miyorare_modern_gradient_start">#617AFF</color>
+    <color name="miyorare_modern_gradient_middle">#8669FF</color>
+    <color name="miyorare_modern_gradient_end">#A05CFF</color>
+    <color name="miyorare_modern_glow">#668EA2FF</color>
+    <color name="miyorare_modern_scrim">#B3000000</color>
+    <color name="miyorare_modern_backdrop_scrim_top">#26070A14</color>
+    <color name="miyorare_modern_backdrop_scrim_bottom">#F2070A14</color>
+
+    <color name="miyorare_modern_success">#71D6A6</color>
+    <color name="miyorare_modern_warning">#FFBF69</color>
+    <color name="miyorare_modern_error">#FFB4AB</color>
+</resources>

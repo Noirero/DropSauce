@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Miyorare Modern light palette. Kept separate from Theme.Kotatsu until the
+         appearance selector is wired in Stage 2. -->
+    <color name="miyorare_modern_background">#F7F8FC</color>
+    <color name="miyorare_modern_surface">#FFFFFFFF</color>
+    <color name="miyorare_modern_surface_container">#F0F2FA</color>
+    <color name="miyorare_modern_surface_container_high">#E8EBF7</color>
+    <color name="miyorare_modern_surface_variant">#E4E8F5</color>
+
+    <color name="miyorare_modern_on_background">#111425</color>
+    <color name="miyorare_modern_on_surface">#15182A</color>
+    <color name="miyorare_modern_on_surface_variant">#5D6278</color>
+
+    <color name="miyorare_modern_primary">#5B6CFF</color>
+    <color name="miyorare_modern_on_primary">#FFFFFFFF</color>
+    <color name="miyorare_modern_primary_container">#E2E6FF</color>
+    <color name="miyorare_modern_on_primary_container">#17256F</color>
+
+    <color name="miyorare_modern_secondary">#7C5CFF</color>
+    <color name="miyorare_modern_on_secondary">#FFFFFFFF</color>
+    <color name="miyorare_modern_secondary_container">#EAE2FF</color>
+    <color name="miyorare_modern_on_secondary_container">#2D136F</color>
+
+    <color name="miyorare_modern_tertiary">#12AFC7</color>
+    <color name="miyorare_modern_on_tertiary">#FFFFFFFF</color>
+
+    <color name="miyorare_modern_outline">#7A819A</color>
+    <color name="miyorare_modern_outline_variant">#D4D8E7</color>
+    <color name="miyorare_modern_divider">#E0E3ED</color>
+    <color name="miyorare_modern_selected_surface">#E8EBFF</color>
+
+    <color name="miyorare_modern_gradient_start">#536DFE</color>
+    <color name="miyorare_modern_gradient_middle">#7569FF</color>
+    <color name="miyorare_modern_gradient_end">#8C5CFF</color>
+    <color name="miyorare_modern_glow">#4D6677FF</color>
+    <color name="miyorare_modern_scrim">#8F000000</color>
+    <color name="miyorare_modern_backdrop_scrim_top">#14070A14</color>
+    <color name="miyorare_modern_backdrop_scrim_bottom">#D9070A14</color>
+
+    <color name="miyorare_modern_success">#2E7D5A</color>
+    <color name="miyorare_modern_warning">#AD6800</color>
+    <color name="miyorare_modern_error">#BA1A1A</color>
+</resources>
