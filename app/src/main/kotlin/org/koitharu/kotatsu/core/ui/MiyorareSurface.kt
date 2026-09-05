@@ -32,7 +32,11 @@ fun Modifier.miyorareSurface(
 	return result
 }
 
-/** Static accent gradient for selected controls and primary actions. */
+/**
+ * Static accent gradient for selected controls and primary actions. The effect-level glow token is
+ * rendered as a cheap highlight ring rather than a continuous blur/shader, keeping list performance
+ * predictable while still making Light/Balanced/Full visibly distinct.
+ */
 fun Modifier.miyorareAccentSurface(
 	palette: MiyorareVisualPalette,
 	shape: Shape,
@@ -47,6 +51,10 @@ fun Modifier.miyorareAccentSurface(
 				palette.activeGradientEnd.copy(alpha = safeAlpha),
 			),
 		),
+		shape = shape,
+	).border(
+		width = 1.dp,
+		color = palette.glow.copy(alpha = palette.glow.alpha * safeAlpha),
 		shape = shape,
 	)
 }

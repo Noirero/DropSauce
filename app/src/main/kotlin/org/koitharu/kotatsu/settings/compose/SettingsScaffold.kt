@@ -2,6 +2,7 @@ package org.koitharu.kotatsu.settings.compose
 
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -25,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 import org.koitharu.kotatsu.settings.SettingsActivity
 
 /**
@@ -49,6 +52,7 @@ fun SettingsScaffold(
 ) {
 	val scope = SettingsListScope()
 	scope.content()
+	val visualPalette = LocalMiyorareVisualPalette.current
 
 	val scrollState = rememberScrollState()
 	val activity = LocalContext.current.findSettingsActivity()
@@ -80,6 +84,20 @@ fun SettingsScaffold(
 	Box(
 		modifier = modifier
 			.fillMaxSize()
+			.let {
+				if (visualPalette.isModern) {
+					it.background(
+						brush = Brush.verticalGradient(
+							listOf(
+								visualPalette.backgroundGradientStart,
+								visualPalette.backgroundGradientEnd,
+							),
+						),
+					)
+				} else {
+					it
+				}
+			}
 			.nestedScroll(rememberNestedScrollInteropConnection())
 			.onGloballyPositioned {
 				viewportTop.floatValue = it.positionInWindow().y
