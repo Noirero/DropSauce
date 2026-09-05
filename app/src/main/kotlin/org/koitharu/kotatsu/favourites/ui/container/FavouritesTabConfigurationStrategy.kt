@@ -169,10 +169,10 @@ class FavouritesTabConfigurationStrategy(
 		val accent = context.getThemeColor(style.accentAttr, container)
 		val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
 		val radiusDp = if (modern) MiyorareVisualTokens.RADIUS_CONTROL_DP * 0.86f else 20f
-		val selectedFill = if (modern) 0.66f else 0.96f
-		val idleFill = if (modern) 0.045f else 0.13f
-		val selectedStroke = if (modern) 0.42f else 0.95f
-		val idleStroke = if (modern) 0.07f else 0.18f
+		val selectedFill = if (modern) 0.56f else 0.96f
+		val idleFill = if (modern) 0.035f else 0.13f
+		val selectedStroke = if (modern) 0.50f else 0.95f
+		val idleStroke = if (modern) 0.06f else 0.18f
 		val shape = MaterialShapeDrawable(
 			ShapeAppearanceModel.builder().setAllCornerSizes(radiusDp * density).build(),
 		).apply {
@@ -184,7 +184,7 @@ class FavouritesTabConfigurationStrategy(
 				),
 			)
 			setStroke(
-				(if (modern) 0.6f else 1f) * density,
+				(if (modern) 0.55f else 1f) * density,
 				ColorStateList(
 					states,
 					intArrayOf(
@@ -217,7 +217,7 @@ class FavouritesTabConfigurationStrategy(
 			pill
 		}
 		return RippleDrawable(
-			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, if (modern) 24 else 48)),
+			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, if (modern) 20 else 48)),
 			content,
 			null,
 		)
