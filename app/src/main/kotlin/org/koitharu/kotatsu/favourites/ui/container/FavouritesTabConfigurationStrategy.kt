@@ -60,6 +60,7 @@ class FavouritesTabConfigurationStrategy(
 	override fun onConfigureTab(tab: TabLayout.Tab, position: Int) {
 		val item = adapter.getItem(position)
 		val view = tab.view
+		favouriteTabModernFlags[view] = modern
 		if (!baseBackgrounds.containsKey(view)) baseBackgrounds[view] = view.background
 		if (modern) {
 			applyModernHeaderDensity(view)
@@ -279,6 +280,7 @@ private data class FavouriteTabBasePadding(
 
 private val favouriteTabBasePaddings = WeakHashMap<View, FavouriteTabBasePadding>()
 private val favouriteTabBaseTitles = WeakHashMap<View, CharSequence>()
+private val favouriteTabModernFlags = WeakHashMap<View, Boolean>()
 
 /**
  * Modern renders the count as an inline mini-pill so it participates in tab measurement instead of
@@ -289,10 +291,12 @@ internal fun updateFavouriteTabBadge(tab: TabLayout.Tab, count: Int, isVisible: 
 	val shouldShowBadge = isVisible && safeCount > 0
 	val view = tab.view
 	val density = view.resources.displayMetrics.density
-	val modern = PreferenceManager.getDefaultSharedPreferences(view.context).getEnumValue(
-		MiyorareAppearance.KEY_DESIGN_STYLE,
-		MiyorareDesignStyle.CLASSIC,
-	) == MiyorareDesignStyle.MODERN
+	val modern = favouriteTabModernFlags[view] ?: (
+		PreferenceManager.getDefaultSharedPreferences(view.context).getEnumValue(
+			MiyorareAppearance.KEY_DESIGN_STYLE,
+			MiyorareDesignStyle.CLASSIC,
+		) == MiyorareDesignStyle.MODERN
+	)
 	val basePadding = favouriteTabBasePaddings.getOrPut(view) {
 		FavouriteTabBasePadding(
 			start = view.paddingStart,
