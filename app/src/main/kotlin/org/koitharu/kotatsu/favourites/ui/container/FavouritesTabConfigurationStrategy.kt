@@ -23,6 +23,7 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator.TabConfigurationStrategy
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.AppRouter
+import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 import org.koitharu.kotatsu.core.ui.util.PopupMenuMediator
 import org.koitharu.kotatsu.core.util.ext.getThemeColor
 import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
@@ -37,6 +38,7 @@ class FavouritesTabConfigurationStrategy(
 	private val adapter: FavouritesContainerAdapter,
 	private val viewModel: FavouritesContainerViewModel,
 	private val router: AppRouter,
+	private val modern: Boolean,
 ) : TabConfigurationStrategy {
 
 	private val baseBackgrounds = WeakHashMap<View, Drawable?>()
@@ -86,39 +88,45 @@ class FavouritesTabConfigurationStrategy(
 		val container = context.getThemeColor(style.containerAttr, surface)
 		val accent = context.getThemeColor(style.accentAttr, container)
 		val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
+		val radiusDp = if (modern) MiyorareVisualTokens.RADIUS_CONTROL_DP else 20f
+		val selectedFill = if (modern) 0.80f else 0.96f
+		val idleFill = if (modern) 0.085f else 0.13f
+		val selectedStroke = if (modern) 0.68f else 0.95f
+		val idleStroke = if (modern) 0.11f else 0.18f
 		val shape = MaterialShapeDrawable(
-			ShapeAppearanceModel.builder().setAllCornerSizes(20f * density).build(),
+			ShapeAppearanceModel.builder().setAllCornerSizes(radiusDp * density).build(),
 		).apply {
 			fillColor = ColorStateList(
 				states,
 				intArrayOf(
-					ColorUtils.blendARGB(surface, container, 0.96f),
-					ColorUtils.blendARGB(surface, container, 0.13f),
+					ColorUtils.blendARGB(surface, container, selectedFill),
+					ColorUtils.blendARGB(surface, container, idleFill),
 				),
 			)
 			setStroke(
-				1f * density,
+				(if (modern) 0.75f else 1f) * density,
 				ColorStateList(
 					states,
 					intArrayOf(
-						ColorUtils.blendARGB(surface, accent, 0.95f),
-						ColorUtils.blendARGB(surface, accent, 0.18f),
+						ColorUtils.blendARGB(surface, accent, selectedStroke),
+						ColorUtils.blendARGB(surface, accent, idleStroke),
 					),
 				),
 			)
 		}
-		val horizontal = (4f * density).roundToInt()
-		val vertical = (4f * density).roundToInt()
+		val horizontal = ((if (modern) 3f else 4f) * density).roundToInt()
+		val vertical = ((if (modern) 5f else 4f) * density).roundToInt()
+		val separatorSpace = ((if (modern) 8f else 10f) * density).roundToInt()
 		val pill = InsetDrawable(
 			shape,
 			horizontal,
 			vertical,
-			horizontal + if (separator) (10f * density).roundToInt() else 0,
+			horizontal + if (separator) separatorSpace else 0,
 			vertical,
 		)
 		val content = if (separator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 			val divider = GradientDrawable().apply {
-				setColor(ColorUtils.blendARGB(surface, accent, 0.34f))
+				setColor(ColorUtils.blendARGB(surface, accent, if (modern) 0.22f else 0.34f))
 			}
 			LayerDrawable(arrayOf(pill, divider)).apply {
 				setLayerSize(1, (1f * density).roundToInt().coerceAtLeast(1), (22f * density).roundToInt())
@@ -129,7 +137,7 @@ class FavouritesTabConfigurationStrategy(
 			pill
 		}
 		return RippleDrawable(
-			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, 48)),
+			ColorStateList.valueOf(ColorUtils.setAlphaComponent(accent, if (modern) 32 else 48)),
 			content,
 			null,
 		)
@@ -139,7 +147,7 @@ class FavouritesTabConfigurationStrategy(
 		val icon = ContextCompat.getDrawable(context, style.iconRes)?.let { drawable ->
 			DrawableCompat.wrap(drawable.mutate()).also {
 				DrawableCompat.setTint(it, context.getThemeColor(style.accentAttr, Color.GRAY))
-				val size = (16f * context.resources.displayMetrics.density).roundToInt()
+				val size = ((if (modern) 15f else 16f) * context.resources.displayMetrics.density).roundToInt()
 				it.setBounds(0, 0, size, size)
 			}
 		} ?: return title

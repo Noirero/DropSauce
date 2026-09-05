@@ -36,6 +36,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.nav.router
+import org.koitharu.kotatsu.core.prefs.AppSettings
+import org.koitharu.kotatsu.core.prefs.MiyorareDesignStyle
 import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 import org.koitharu.kotatsu.core.prefs.VisualEffectPreferences
 import org.koitharu.kotatsu.core.ui.BaseFragment
@@ -76,6 +78,7 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	@Inject lateinit var contentTypeStore: FavouriteContentTypeStore
 	@Inject lateinit var displayPreferences: FavouriteDisplayPreferences
 	@Inject lateinit var visualEffectPreferences: VisualEffectPreferences
+	@Inject lateinit var settings: AppSettings
 
 	private val viewModel: FavouritesContainerViewModel by viewModels()
 	private var inlineSearchEdit: AppCompatEditText? = null
@@ -130,7 +133,12 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		TabLayoutMediator(
 			binding.tabs,
 			binding.pager,
-			FavouritesTabConfigurationStrategy(adapter, viewModel, router),
+			FavouritesTabConfigurationStrategy(
+				adapter = adapter,
+				viewModel = viewModel,
+				router = router,
+				modern = settings.miyorareDesignStyle == MiyorareDesignStyle.MODERN,
+			),
 		).attach()
 		binding.buttonCategoryPicker.setOnClickListener { showCategoryPicker() }
 		binding.stubEmpty.setOnInflateListener(this)
@@ -369,6 +377,15 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 	}
 
 	private fun applyVisualFoundation(level: VisualEffectLevel) {
+		if (settings.miyorareDesignStyle == MiyorareDesignStyle.MODERN) {
+			applyModernVisualFoundation(level)
+		} else {
+			applyClassicVisualFoundation(level)
+		}
+	}
+
+	/** Preserve the exact pre-pass appearance for Classic while Modern evolves independently. */
+	private fun applyClassicVisualFoundation(level: VisualEffectLevel) {
 		val binding = viewBinding ?: return
 		val context = binding.root.context
 		val density = resources.displayMetrics.density
@@ -401,6 +418,123 @@ class FavouritesContainerFragment : BaseFragment<FragmentFavouritesContainerBind
 		binding.buttonCategoryPicker.strokeWidth = (1f * density).roundToInt().coerceAtLeast(1)
 		binding.buttonCategoryPicker.strokeColor = ColorStateList.valueOf(
 			ColorUtils.setAlphaComponent(outlineColor, level.outlineAlpha.coerceAtLeast(48)),
+		)
+		binding.buttonCategoryPicker.iconTint = ColorStateList.valueOf(primary)
+	}
+
+	private fun applyModernVisualFoundation(level: VisualEffectLevel) {
+		val binding = viewBinding ?: return
+		val context = binding.root.context
+		val density = resources.displayMetrics.density
+		fun dp(value: Float) = (value * density).roundToInt()
+
+		val surface = context.getThemeColor(materialR.attr.colorSurface, Color.TRANSPARENT)
+		val surfaceContainer = context.getThemeColor(materialR.attr.colorSurfaceContainer, surface)
+		val primary = context.getThemeColor(appcompatR.attr.colorPrimary, surface)
+		val primaryContainer = context.getThemeColor(materialR.attr.colorPrimaryContainer, primary)
+		val onPrimaryContainer = context.getThemeColor(materialR.attr.colorOnPrimaryContainer, Color.WHITE)
+		val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, Color.LTGRAY)
+		val tertiary = context.getThemeColor(materialR.attr.colorTertiary, primary)
+		val strength = when (level) {
+			VisualEffectLevel.LIGHT -> MiyorareVisualTokens.GRADIENT_STRENGTH_LIGHT
+			VisualEffectLevel.BALANCED -> MiyorareVisualTokens.GRADIENT_STRENGTH_BALANCED * 0.72f
+			VisualEffectLevel.FULL -> MiyorareVisualTokens.GRADIENT_STRENGTH_FULL * 0.72f
+		}
+		val surfaceRadius = MiyorareVisualTokens.RADIUS_SURFACE_DP * density
+		val outlineColor = ColorUtils.blendARGB(surface, primary, 0.52f)
+		val headerBackground = GradientDrawable(
+			GradientDrawable.Orientation.TL_BR,
+			intArrayOf(
+				ColorUtils.blendARGB(surface, primary, strength),
+				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.58f),
+				ColorUtils.blendARGB(surface, primary, strength * 0.34f),
+			),
+		).apply {
+			cornerRadii = floatArrayOf(
+				0f, 0f,
+				0f, 0f,
+				surfaceRadius, surfaceRadius,
+				surfaceRadius, surfaceRadius,
+			)
+			setStroke(
+				dp(0.75f).coerceAtLeast(1),
+				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.58f).roundToInt()),
+			)
+		}
+		binding.layoutCategoryHeader.background = headerBackground
+		binding.layoutCategoryHeader.elevation = when (level) {
+			VisualEffectLevel.LIGHT -> 0f
+			VisualEffectLevel.BALANCED -> 1.5f * density
+			VisualEffectLevel.FULL -> 2.5f * density
+		}
+		binding.layoutCategoryHeader.setPadding(0, dp(MiyorareVisualTokens.SPACING_S_DP), 0, dp(MiyorareVisualTokens.SPACING_S_DP))
+		binding.tabs.setSelectedTabIndicatorColor(Color.TRANSPARENT)
+		binding.tabs.setTabTextColors(onSurfaceVariant, primary)
+		binding.tabs.setTabRippleColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(primary, 32)))
+
+		(binding.toggleContentType.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+			params.marginStart = dp(MiyorareVisualTokens.SPACING_L_DP)
+			params.marginEnd = dp(MiyorareVisualTokens.SPACING_L_DP)
+			params.topMargin = dp(MiyorareVisualTokens.SPACING_S_DP)
+			params.bottomMargin = dp(MiyorareVisualTokens.SPACING_XS_DP)
+			binding.toggleContentType.layoutParams = params
+		}
+		(binding.tabs.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+			params.topMargin = dp(MiyorareVisualTokens.SPACING_XS_DP)
+			params.bottomMargin = 0
+			binding.tabs.layoutParams = params
+		}
+
+		val groupRadius = MiyorareVisualTokens.RADIUS_SURFACE_DP * density
+		binding.toggleContentType.background = GradientDrawable(
+			GradientDrawable.Orientation.LEFT_RIGHT,
+			intArrayOf(
+				ColorUtils.blendARGB(surfaceContainer, primary, strength * 0.34f),
+				ColorUtils.blendARGB(surfaceContainer, tertiary, strength * 0.22f),
+			),
+		).apply {
+			cornerRadius = groupRadius
+			setStroke(
+				dp(0.75f).coerceAtLeast(1),
+				ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.42f).roundToInt()),
+			)
+		}
+
+		val buttonStates = arrayOf(
+			intArrayOf(android.R.attr.state_checked, android.R.attr.state_enabled),
+			intArrayOf(-android.R.attr.state_enabled),
+			intArrayOf(),
+		)
+		val selectedFill = ColorUtils.blendARGB(surfaceContainer, primaryContainer, 0.84f)
+		val disabledFill = ColorUtils.blendARGB(surfaceContainer, onSurfaceVariant, 0.06f)
+		val buttonBackgrounds = ColorStateList(
+			buttonStates,
+			intArrayOf(selectedFill, disabledFill, Color.TRANSPARENT),
+		)
+		val buttonTextColors = ColorStateList(
+			buttonStates,
+			intArrayOf(
+				onPrimaryContainer,
+				ColorUtils.setAlphaComponent(onSurfaceVariant, 112),
+				onSurfaceVariant,
+			),
+		)
+		val controlRadius = dp(MiyorareVisualTokens.RADIUS_CONTROL_DP)
+		for (button in arrayOf(binding.buttonContentManga, binding.buttonContentNovel)) {
+			button.backgroundTintList = buttonBackgrounds
+			button.setTextColor(buttonTextColors)
+			button.cornerRadius = controlRadius
+			button.strokeWidth = 0
+			button.minimumHeight = dp(44f)
+		}
+
+		binding.buttonCategoryPicker.cornerRadius = controlRadius
+		binding.buttonCategoryPicker.strokeWidth = dp(0.75f).coerceAtLeast(1)
+		binding.buttonCategoryPicker.strokeColor = ColorStateList.valueOf(
+			ColorUtils.setAlphaComponent(outlineColor, (level.outlineAlpha * 0.60f).roundToInt().coerceAtLeast(32)),
+		)
+		binding.buttonCategoryPicker.backgroundTintList = ColorStateList.valueOf(
+			ColorUtils.blendARGB(surfaceContainer, primary, strength * 0.26f),
 		)
 		binding.buttonCategoryPicker.iconTint = ColorStateList.valueOf(primary)
 	}
