@@ -43,6 +43,7 @@ import org.koitharu.kotatsu.favourites.domain.DOWNLOADED_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.domain.LOCAL_FAVOURITES_CATEGORY_ID
 import org.koitharu.kotatsu.favourites.ui.list.FavouritesListFragment.Companion.NO_ID
 import java.text.NumberFormat
+import java.util.Locale
 import java.util.WeakHashMap
 import kotlin.math.roundToInt
 import androidx.appcompat.R as appcompatR
@@ -281,7 +282,8 @@ private data class FavouriteTabBasePadding(
 private val favouriteTabBasePaddings = WeakHashMap<View, FavouriteTabBasePadding>()
 private val favouriteTabBaseTitles = WeakHashMap<View, CharSequence>()
 private val favouriteTabModernFlags = WeakHashMap<View, Boolean>()
-private val favouriteCountFormatter = NumberFormat.getIntegerInstance()
+private var favouriteCountFormatterLocale: Locale? = null
+private var favouriteCountFormatter: NumberFormat? = null
 
 /**
  * Modern renders the count as an inline mini-pill so it participates in tab measurement instead of
@@ -353,7 +355,7 @@ private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int,
 	val surface = view.context.getThemeColor(materialR.attr.colorSurfaceContainerHighest, Color.DKGRAY)
 	val primary = view.context.getThemeColor(appcompatR.attr.colorPrimary, Color.WHITE)
 	val onSurface = view.context.getThemeColor(materialR.attr.colorOnSurface, Color.WHITE)
-	val countText = formatFavouriteCount(count)
+	val countText = formatFavouriteCount(count, view)
 	return SpannableStringBuilder(baseTitle).apply {
 		append(' ')
 		val start = length
@@ -374,11 +376,28 @@ private fun createInlineFavouriteCountTitle(baseTitle: CharSequence, count: Int,
 	}
 }
 
-private fun formatFavouriteCount(count: Int): String {
-	return if (count > MAX_CATEGORY_BADGE_COUNT) {
-		"${favouriteCountFormatter.format(MAX_CATEGORY_BADGE_COUNT)}+"
+private fun formatFavouriteCount(count: Int, view: View): String {
+	val configuration = view.resources.configuration
+	val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+		configuration.locales[0]
 	} else {
-		favouriteCountFormatter.format(count)
+		@Suppress("DEPRECATION")
+		configuration.locale
+	}
+	val formatter = if (favouriteCountFormatterLocale == locale) {
+		favouriteCountFormatter ?: NumberFormat.getIntegerInstance(locale).also {
+			favouriteCountFormatter = it
+		}
+	} else {
+		NumberFormat.getIntegerInstance(locale).also {
+			favouriteCountFormatterLocale = locale
+			favouriteCountFormatter = it
+		}
+	}
+	return if (count > MAX_CATEGORY_BADGE_COUNT) {
+		"${formatter.format(MAX_CATEGORY_BADGE_COUNT)}+"
+	} else {
+		formatter.format(count)
 	}
 }
 
