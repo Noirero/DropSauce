@@ -67,12 +67,12 @@ fun mangaGridItemAD(
 	val onSurfaceVariant = context.getThemeColor(materialR.attr.colorOnSurfaceVariant, onSurface)
 	val accent = ColorUtils.blendARGB(primary, tertiary, 0.30f)
 	val darkAccent = ColorUtils.blendARGB(primary, Color.BLACK, 0.78f)
-	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.78f)
+	val modernScrimBase = ColorUtils.blendARGB(accent, Color.BLACK, 0.80f)
 	val modernIndicator = ColorUtils.blendARGB(surfaceHigh, accent, 0.16f)
 	val modernBadge = ColorUtils.blendARGB(surfaceHigh, accent, 0.30f)
 	val modernBorder = ColorUtils.setAlphaComponent(
 		accent,
-		((MiyorareVisualTokens.BORDER_ALPHA_LIGHT + MiyorareVisualTokens.GLOW_ALPHA_LIGHT) * 255f)
+		((MiyorareVisualTokens.BORDER_ALPHA_LIGHT + MiyorareVisualTokens.GLOW_ALPHA_LIGHT) * 0.78f * 255f)
 			.toInt()
 			.coerceIn(0, 255),
 	)
@@ -110,9 +110,9 @@ fun mangaGridItemAD(
 	val modernScrim = GradientDrawable(
 		GradientDrawable.Orientation.BOTTOM_TOP,
 		intArrayOf(
-			ColorUtils.setAlphaComponent(modernScrimBase, 0xE8),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0xA8),
-			ColorUtils.setAlphaComponent(modernScrimBase, 0x24),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0xD6),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0x88),
+			ColorUtils.setAlphaComponent(modernScrimBase, 0x18),
 			Color.TRANSPARENT,
 		),
 	).apply {
@@ -139,13 +139,15 @@ fun mangaGridItemAD(
 		if (isModern) {
 			binding.imageViewCover.shapeAppearanceModel = modernCoverShape
 			binding.imageViewCover.strokeColor = ColorStateList.valueOf(modernBorder)
-			binding.imageViewCover.strokeWidth = 0.75f * density
+			binding.imageViewCover.strokeWidth = 0.55f * density
 			binding.viewScrim.background = modernScrim
 			binding.textViewTitle.setTextColor(onSurface)
-			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+			binding.textViewTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
 			binding.textViewTitle.includeFontPadding = false
 			binding.textViewTitleOverlay.includeFontPadding = false
+			binding.textViewTitle.setLineSpacing(0f, 0.96f)
+			binding.textViewTitleOverlay.setLineSpacing(0f, 0.96f)
 			binding.badge.setTextColor(onSurface)
 			binding.textViewLanguage.setTextColor(onSurfaceVariant)
 			ViewCompat.setBackgroundTintList(binding.badge, ColorStateList.valueOf(modernBadge))
@@ -165,6 +167,8 @@ fun mangaGridItemAD(
 			binding.textViewTitleOverlay.setTextSize(TypedValue.COMPLEX_UNIT_PX, defaultOverlayTextSizePx)
 			binding.textViewTitle.includeFontPadding = defaultTitleIncludeFontPadding
 			binding.textViewTitleOverlay.includeFontPadding = defaultOverlayIncludeFontPadding
+			binding.textViewTitle.setLineSpacing(0f, 1f)
+			binding.textViewTitleOverlay.setLineSpacing(0f, 1f)
 			binding.badge.setTextColor(defaultBadgeColors)
 			binding.textViewLanguage.setTextColor(defaultLanguageColors)
 			ViewCompat.setBackgroundTintList(binding.badge, defaultBadgeBackgroundTint)
@@ -204,7 +208,7 @@ fun mangaGridItemAD(
 		applyGridAppearance(isModernFavouritesGrid)
 		val baseMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
 		val styledBaseMargin = if (isModernFavouritesGrid) {
-			baseMargin + density.roundToInt().coerceAtLeast(1)
+			baseMargin + (1.5f * density).roundToInt().coerceAtLeast(1)
 		} else {
 			baseMargin
 		}
