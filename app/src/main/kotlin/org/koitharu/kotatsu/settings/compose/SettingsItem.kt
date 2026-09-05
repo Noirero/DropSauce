@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
 
 /**
  * Generic row in a [SettingsGroup]. Lays out a circular tinted icon, a 1- or 2-line text
@@ -67,6 +68,8 @@ fun SettingsItem(
 	hapticEffect: HapticEffect? = null,
 	trailing: @Composable (() -> Unit)? = null,
 ) {
+	val visualPalette = LocalMiyorareVisualPalette.current
+	val modern = visualPalette.isModern
 	val haptic = rememberHapticEffect()
 	// One-shot search highlight: scroll this row comfortably into view and flash its background
 	// once when it is the navigation target (matched by title).
@@ -107,7 +110,7 @@ fun SettingsItem(
 	) {
 		Row(
 			modifier = Modifier
-				.heightIn(min = 72.dp)
+				.heightIn(min = if (modern) 64.dp else 72.dp)
 				.let {
 					if (onClick != null && enabled) {
 						it.clickable {
@@ -133,8 +136,9 @@ fun SettingsItem(
 					SettingsIconPlain(
 						iconRes = icon,
 						enabled = enabled,
-						tintOverride = accentColor,
+						tintOverride = accentColor ?: visualPalette.primary.takeIf { modern },
 						tintIcon = tintIcon,
+						modern = modern,
 					)
 				}
 				Spacer(Modifier.width(14.dp))
@@ -234,16 +238,17 @@ private fun SettingsIconPlain(
 	enabled: Boolean,
 	tintOverride: Color? = null,
 	tintIcon: Boolean = true,
+	modern: Boolean = false,
 ) {
 	val tint = (tintOverride ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = if (enabled) 1f else 0.4f)
 	Box(
-		modifier = Modifier.size(44.dp),
+		modifier = Modifier.size(if (modern) 40.dp else 44.dp),
 		contentAlignment = Alignment.Center,
 	) {
 		androidx.compose.foundation.Image(
 			painter = rememberAnyDrawablePainter(iconRes),
 			contentDescription = null,
-			modifier = Modifier.size(24.dp),
+			modifier = Modifier.size(if (modern) 22.dp else 24.dp),
 			// a bitmap logo would collapse to a flat silhouette if tinted
 			colorFilter = if (tintIcon) ColorFilter.tint(tint) else null,
 			alpha = if (enabled) 1f else 0.4f,

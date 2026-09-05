@@ -13,6 +13,8 @@ import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
 
 /** Reusable semantic colors for Modern components; screens never derive their own palette. */
 data class MiyorareVisualPalette(
+	val isModern: Boolean,
+	val effectLevel: VisualEffectLevel,
 	val primary: Color,
 	val secondary: Color,
 	val accent: Color,
@@ -31,6 +33,8 @@ data class MiyorareThemeColors(
 
 val LocalMiyorareVisualPalette = staticCompositionLocalOf {
 	MiyorareVisualPalette(
+		isModern = false,
+		effectLevel = VisualEffectLevel.BALANCED,
 		primary = Color.Unspecified,
 		secondary = Color.Unspecified,
 		accent = Color.Unspecified,
@@ -142,6 +146,8 @@ fun miyorareThemeColors(
 	return MiyorareThemeColors(
 		colorScheme = colorScheme,
 		visualPalette = MiyorareVisualPalette(
+			isModern = true,
+			effectLevel = effectLevel,
 			primary = primary,
 			secondary = secondary,
 			accent = accent,
@@ -159,6 +165,8 @@ fun classicMiyorareVisualPalette(
 	colorScheme: ColorScheme,
 	effectLevel: VisualEffectLevel,
 ): MiyorareVisualPalette = MiyorareVisualPalette(
+	isModern = false,
+	effectLevel = effectLevel,
 	primary = colorScheme.primary,
 	secondary = colorScheme.secondary,
 	accent = colorScheme.tertiary,

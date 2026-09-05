@@ -4,7 +4,10 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,12 +27,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.koitharu.kotatsu.core.prefs.VisualEffectLevel
+import org.koitharu.kotatsu.core.ui.LocalMiyorareVisualPalette
+import org.koitharu.kotatsu.core.ui.MiyorareVisualTokens
 import org.koitharu.kotatsu.core.util.ext.HapticEffect
 import org.koitharu.kotatsu.core.util.ext.rememberHapticEffect
 import org.koitharu.kotatsu.main.ui.nav.rememberAnyDrawablePainter
@@ -53,23 +60,34 @@ fun SegmentedSettingsItem(
 	shape: Shape = MaterialTheme.shapes.medium,
 	enabled: Boolean = true,
 ) {
+	val visualPalette = LocalMiyorareVisualPalette.current
+	val iconColor = if (visualPalette.isModern) {
+		visualPalette.primary
+	} else {
+		MaterialTheme.colorScheme.onSurfaceVariant
+	}
 	Surface(
 		modifier = modifier,
 		shape = shape,
 		color = MaterialTheme.colorScheme.surfaceContainer,
+		border = if (visualPalette.isModern) {
+			BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+		} else null,
 		contentColor = MaterialTheme.colorScheme.onSurface,
 	) {
 		Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
 			Row(verticalAlignment = Alignment.CenterVertically) {
 				if (icon != null) {
-					Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+					Box(
+						modifier = Modifier.size(if (visualPalette.isModern) 40.dp else 44.dp),
+						contentAlignment = Alignment.Center,
+					) {
 						androidx.compose.foundation.Image(
 							painter = rememberAnyDrawablePainter(icon),
 							contentDescription = null,
-							modifier = Modifier.size(24.dp),
+							modifier = Modifier.size(if (visualPalette.isModern) 22.dp else 24.dp),
 							colorFilter = ColorFilter.tint(
-								MaterialTheme.colorScheme.onSurfaceVariant
-									.copy(alpha = if (enabled) 1f else 0.4f),
+								iconColor.copy(alpha = if (enabled) 1f else 0.4f),
 							),
 						)
 					}
@@ -117,6 +135,12 @@ private fun SegmentedRow(
 	enabled: Boolean,
 ) {
 	val haptic = rememberHapticEffect()
+	val visualPalette = LocalMiyorareVisualPalette.current
+	val colorAnimation = when (visualPalette.effectLevel) {
+		VisualEffectLevel.LIGHT -> snap<Color>()
+		VisualEffectLevel.BALANCED -> tween<Color>(MiyorareVisualTokens.MOTION_QUICK_MS)
+		VisualEffectLevel.FULL -> tween<Color>(MiyorareVisualTokens.MOTION_STANDARD_MS)
+	}
 	Row(
 		modifier = Modifier.fillMaxWidth(),
 		horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -132,28 +156,56 @@ private fun SegmentedRow(
 				bottomEnd = if (isLast) 50.dp else 8.dp,
 			)
 			val alpha = if (enabled) 1f else 0.38f
-			val background by animateColorAsState(
-				targetValue = if (isSelected) {
-					MaterialTheme.colorScheme.primary.copy(alpha = alpha)
-				} else {
-					MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
-				},
-				label = "segment_bg_$index",
-			)
-			val foreground by animateColorAsState(
-				targetValue = if (isSelected) {
-					MaterialTheme.colorScheme.onPrimary.copy(alpha = alpha)
-				} else {
-					MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
-				},
-				label = "segment_fg_$index",
-			)
+			val targetBackground = if (isSelected) {
+				MaterialTheme.colorScheme.primary.copy(alpha = alpha)
+			} else {
+				MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
+			}
+			val targetForeground = if (isSelected) {
+				MaterialTheme.colorScheme.onPrimary.copy(alpha = alpha)
+			} else {
+				MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+			}
+			val background by if (visualPalette.isModern) {
+				animateColorAsState(
+					targetValue = targetBackground,
+					animationSpec = colorAnimation,
+					label = "segment_bg_$index",
+				)
+			} else {
+				animateColorAsState(targetValue = targetBackground, label = "segment_bg_$index")
+			}
+			val foreground by if (visualPalette.isModern) {
+				animateColorAsState(
+					targetValue = targetForeground,
+					animationSpec = colorAnimation,
+					label = "segment_fg_$index",
+				)
+			} else {
+				animateColorAsState(targetValue = targetForeground, label = "segment_fg_$index")
+			}
 			val scale by animateFloatAsState(
-				targetValue = if (isSelected) 1f else 0.94f,
-				animationSpec = spring(
-					dampingRatio = Spring.DampingRatioMediumBouncy,
-					stiffness = Spring.StiffnessMediumLow,
-				),
+				targetValue = when {
+					isSelected -> 1f
+					!visualPalette.isModern -> 0.94f
+					visualPalette.effectLevel == VisualEffectLevel.LIGHT -> 1f
+					else -> 0.96f
+				},
+				animationSpec = if (!visualPalette.isModern) {
+					spring(
+						dampingRatio = Spring.DampingRatioMediumBouncy,
+						stiffness = Spring.StiffnessMediumLow,
+					)
+				} else {
+					when (visualPalette.effectLevel) {
+						VisualEffectLevel.LIGHT -> snap<Float>()
+						VisualEffectLevel.BALANCED -> tween(MiyorareVisualTokens.MOTION_QUICK_MS)
+						VisualEffectLevel.FULL -> spring(
+							dampingRatio = Spring.DampingRatioMediumBouncy,
+							stiffness = Spring.StiffnessMediumLow,
+						)
+					}
+				},
 				label = "segment_scale_$index",
 			)
 			Surface(

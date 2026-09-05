@@ -60,6 +60,7 @@ import org.koitharu.kotatsu.settings.compose.ConfirmDialog
 import org.koitharu.kotatsu.settings.compose.DropSauceTheme
 import org.koitharu.kotatsu.settings.compose.EditTextSettingsItem
 import org.koitharu.kotatsu.settings.compose.ListSettingsItem
+import org.koitharu.kotatsu.settings.compose.MiyorareChoiceSettingsItem
 import org.koitharu.kotatsu.settings.compose.MultiSelectSettingsItem
 import org.koitharu.kotatsu.settings.compose.NavigationSettingsItem
 import org.koitharu.kotatsu.settings.compose.SettingsGroup
@@ -362,7 +363,7 @@ private fun AppearanceScreen(
 		item {
 			SettingsGroup(title = stringResource(R.string.miyorare_appearance_group)) {
 				item { pos ->
-					ListSettingsItem(
+					MiyorareChoiceSettingsItem(
 						title = stringResource(R.string.miyorare_design_style),
 						entries = designStyleEntries,
 						entryValues = designStyleValues,
@@ -373,7 +374,7 @@ private fun AppearanceScreen(
 					)
 				}
 				item { pos ->
-					ListSettingsItem(
+					MiyorareChoiceSettingsItem(
 						title = stringResource(R.string.miyorare_display_mode),
 						entries = themeEntries,
 						entryValues = themeValues,
@@ -436,7 +437,7 @@ private fun AppearanceScreen(
 					)
 				}
 				item { pos ->
-					ListSettingsItem(
+					MiyorareChoiceSettingsItem(
 						title = stringResource(R.string.visual_effects),
 						entries = visualEffectEntries,
 						entryValues = visualEffectValues,
