@@ -67,6 +67,7 @@ class FavouritesListFragment : MangaListFragment() {
 	private var coverPrefetchJob: Job? = null
 	private var pendingScrollPosition: PendingScroll? = null
 	private var modernSurfaceDecoration: ModernLibrarySurfaceDecoration? = null
+	private var modernChildAttachListener: RecyclerView.OnChildAttachStateChangeListener? = null
 
 	val categoryId
 		get() = viewModel.categoryId
@@ -78,13 +79,11 @@ class FavouritesListFragment : MangaListFragment() {
 			modernSurfaceDecoration = ModernLibrarySurfaceDecoration().also { decoration ->
 				binding.recyclerView.addItemDecoration(decoration, 0)
 			}
-			binding.recyclerView.addOnChildAttachStateChangeListener(
-				object : RecyclerView.OnChildAttachStateChangeListener {
-					override fun onChildViewAttachedToWindow(view: View) = compactModernEmptyState(view)
+			modernChildAttachListener = object : RecyclerView.OnChildAttachStateChangeListener {
+				override fun onChildViewAttachedToWindow(view: View) = compactModernEmptyState(view)
 
-					override fun onChildViewDetachedFromWindow(view: View) = Unit
-				},
-			)
+				override fun onChildViewDetachedFromWindow(view: View) = Unit
+			}.also(binding.recyclerView::addOnChildAttachStateChangeListener)
 			visualEffectPreferences.level.observe(viewLifecycleOwner) { level ->
 				applyModernLibraryVisuals(binding, level)
 			}
@@ -115,6 +114,11 @@ class FavouritesListFragment : MangaListFragment() {
 	}
 
 	override fun onDestroyView() {
+		viewBinding?.recyclerView?.let { recyclerView ->
+			modernChildAttachListener?.let(recyclerView::removeOnChildAttachStateChangeListener)
+			modernSurfaceDecoration?.let(recyclerView::removeItemDecoration)
+		}
+		modernChildAttachListener = null
 		modernSurfaceDecoration = null
 		super.onDestroyView()
 	}
@@ -297,14 +301,17 @@ class FavouritesListFragment : MangaListFragment() {
 	}
 
 	private inner class ModernLibrarySurfaceDecoration : RecyclerView.ItemDecoration() {
+		private val density = resources.displayMetrics.density
+		private val fillInset = density
+		private val strokeInset = density * 1.5f
+		private val minCardHeight = MIN_CARD_HEIGHT_DP * density
 		private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 		private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 		private val bounds = RectF()
-		private var radius = MiyorareVisualTokens.RADIUS_CARD_DP * resources.displayMetrics.density
+		private var radius = MiyorareVisualTokens.RADIUS_CARD_DP * density
 		private var shouldDrawStroke = true
 
 		fun update(level: VisualEffectLevel, surface: Int, primary: Int, tertiary: Int) {
-			val density = resources.displayMetrics.density
 			val fillFraction = when (level) {
 				VisualEffectLevel.LIGHT -> 0.035f
 				VisualEffectLevel.BALANCED -> 0.10f
@@ -326,16 +333,14 @@ class FavouritesListFragment : MangaListFragment() {
 		}
 
 		override fun onDraw(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
-			val inset = resources.displayMetrics.density
-			val minHeight = MIN_CARD_HEIGHT_DP * resources.displayMetrics.density
 			for (index in 0 until parent.childCount) {
 				val child = parent.getChildAt(index)
-				if (child.id == R.id.empty_view || child.height < minHeight) continue
+				if (child.id == R.id.empty_view || child.height < minCardHeight) continue
 				bounds.set(
-					child.left + inset + child.translationX,
-					child.top + inset + child.translationY,
-					child.right - inset + child.translationX,
-					child.bottom - inset + child.translationY,
+					child.left + fillInset + child.translationX,
+					child.top + fillInset + child.translationY,
+					child.right - fillInset + child.translationX,
+					child.bottom - fillInset + child.translationY,
 				)
 				canvas.drawRoundRect(bounds, radius, radius, fillPaint)
 			}
@@ -343,16 +348,14 @@ class FavouritesListFragment : MangaListFragment() {
 
 		override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
 			if (!shouldDrawStroke) return
-			val inset = resources.displayMetrics.density * 1.5f
-			val minHeight = MIN_CARD_HEIGHT_DP * resources.displayMetrics.density
 			for (index in 0 until parent.childCount) {
 				val child = parent.getChildAt(index)
-				if (child.id == R.id.empty_view || child.height < minHeight) continue
+				if (child.id == R.id.empty_view || child.height < minCardHeight) continue
 				bounds.set(
-					child.left + inset + child.translationX,
-					child.top + inset + child.translationY,
-					child.right - inset + child.translationX,
-					child.bottom - inset + child.translationY,
+					child.left + strokeInset + child.translationX,
+					child.top + strokeInset + child.translationY,
+					child.right - strokeInset + child.translationX,
+					child.bottom - strokeInset + child.translationY,
 				)
 				canvas.drawRoundRect(bounds, radius, radius, strokePaint)
 			}
