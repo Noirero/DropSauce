@@ -204,6 +204,7 @@ private fun SegmentedRow(
 					} else {
 						it
 					}
+				}
 			Surface(
 				onClick = {
 					haptic(HapticEffect.TOGGLE_ON)
