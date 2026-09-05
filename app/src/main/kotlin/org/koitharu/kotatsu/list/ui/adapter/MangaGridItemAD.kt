@@ -77,6 +77,15 @@ fun mangaGridItemAD(
 			.coerceIn(0, 255),
 	)
 	val modernCoverRadius = MiyorareVisualTokens.RADIUS_COVER_DP * density
+	val isModernFavouritesGrid = gridVisualScaleProvider != null && appearancePreferences.getEnumValue(
+		MiyorareAppearance.KEY_DESIGN_STYLE,
+		MiyorareDesignStyle.CLASSIC,
+	) == MiyorareDesignStyle.MODERN
+	val modernBorderTint = ColorStateList.valueOf(modernBorder)
+	val modernBadgeTint = ColorStateList.valueOf(modernBadge)
+	val modernIndicatorTint = ColorStateList.valueOf(modernIndicator)
+	val onSurfaceVariantTint = ColorStateList.valueOf(onSurfaceVariant)
+	val primaryTint = ColorStateList.valueOf(primary)
 
 	val defaultCoverShape = binding.imageViewCover.shapeAppearanceModel
 	val defaultCoverStrokeColor = binding.imageViewCover.strokeColor
@@ -127,18 +136,10 @@ fun mangaGridItemAD(
 		.setAllCornerSizes(modernCoverRadius)
 		.build()
 
-	fun isMiyorareModernFavouritesGrid(): Boolean {
-		if (gridVisualScaleProvider == null) return false
-		return appearancePreferences.getEnumValue(
-			MiyorareAppearance.KEY_DESIGN_STYLE,
-			MiyorareDesignStyle.CLASSIC,
-		) == MiyorareDesignStyle.MODERN
-	}
-
 	fun applyGridAppearance(isModern: Boolean) {
 		if (isModern) {
 			binding.imageViewCover.shapeAppearanceModel = modernCoverShape
-			binding.imageViewCover.strokeColor = ColorStateList.valueOf(modernBorder)
+			binding.imageViewCover.strokeColor = modernBorderTint
 			binding.imageViewCover.strokeWidth = 0.5f * density
 			binding.viewScrim.background = modernScrim
 			binding.textViewTitle.setTextColor(onSurface)
@@ -150,13 +151,13 @@ fun mangaGridItemAD(
 			binding.textViewTitleOverlay.setLineSpacing(0f, 0.96f)
 			binding.badge.setTextColor(onSurface)
 			binding.textViewLanguage.setTextColor(onSurfaceVariant)
-			ViewCompat.setBackgroundTintList(binding.badge, ColorStateList.valueOf(modernBadge))
-			ViewCompat.setBackgroundTintList(binding.textViewLanguage, ColorStateList.valueOf(modernIndicator))
-			ViewCompat.setBackgroundTintList(binding.imageViewPin, ColorStateList.valueOf(modernIndicator))
-			ViewCompat.setBackgroundTintList(binding.imageViewContinue, ColorStateList.valueOf(modernBadge))
-			ViewCompat.setBackgroundTintList(binding.iconsView, ColorStateList.valueOf(modernIndicator))
-			ImageViewCompat.setImageTintList(binding.imageViewPin, ColorStateList.valueOf(onSurfaceVariant))
-			ImageViewCompat.setImageTintList(binding.imageViewContinue, ColorStateList.valueOf(primary))
+			ViewCompat.setBackgroundTintList(binding.badge, modernBadgeTint)
+			ViewCompat.setBackgroundTintList(binding.textViewLanguage, modernIndicatorTint)
+			ViewCompat.setBackgroundTintList(binding.imageViewPin, modernIndicatorTint)
+			ViewCompat.setBackgroundTintList(binding.imageViewContinue, modernBadgeTint)
+			ViewCompat.setBackgroundTintList(binding.iconsView, modernIndicatorTint)
+			ImageViewCompat.setImageTintList(binding.imageViewPin, onSurfaceVariantTint)
+			ImageViewCompat.setImageTintList(binding.imageViewContinue, primaryTint)
 		} else {
 			binding.imageViewCover.shapeAppearanceModel = defaultCoverShape
 			binding.imageViewCover.strokeColor = defaultCoverStrokeColor
@@ -204,7 +205,6 @@ fun mangaGridItemAD(
 
 	bind { payloads ->
 		itemView.setTooltipCompat(item.getSummary(context))
-		val isModernFavouritesGrid = isMiyorareModernFavouritesGrid()
 		applyGridAppearance(isModernFavouritesGrid)
 		val baseMargin = if (item.isGridSpacingIncreased) gridMarginIncreased else gridMargin
 		val styledBaseMargin = if (isModernFavouritesGrid) {
